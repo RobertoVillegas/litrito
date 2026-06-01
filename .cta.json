@@ -1,0 +1,26 @@
+{
+  "projectName": "litrito",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "bun",
+  "includeExamples": false,
+  "tailwind": true,
+  "addOnOptions": {},
+  "envVarValues": {
+    "CONVEX_DEPLOYMENT": "dev:cheerful-terrier-356",
+    "VITE_CONVEX_URL": "https://cheerful-terrier-356.convex.cloud"
+  },
+  "git": true,
+  "install": true,
+  "routerOnly": false,
+  "version": 1,
+  "framework": "react",
+  "chosenAddOns": [
+    "nitro",
+    "convex",
+    "shadcn",
+    "better-auth",
+    "store",
+    "tanstack-query"
+  ]
+}
