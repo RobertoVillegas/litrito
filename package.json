@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@convex-dev/better-auth": "^0.12.2",
     "@convex-dev/react-query": "0.1.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "latest",

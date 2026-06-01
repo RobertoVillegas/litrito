@@ -1,16 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { handler } from '#/lib/auth-server'
 
 export const Route = createFileRoute('/api/auth/$')({
   server: {
     handlers: {
-      GET: () =>
-        new Response('Auth is not enabled for the Litrito MVP yet.', {
-          status: 501,
-        }),
-      POST: () =>
-        new Response('Auth is not enabled for the Litrito MVP yet.', {
-          status: 501,
-        }),
+      GET: ({ request }) => handler(request),
+      POST: ({ request }) => handler(request),
     },
   },
 })
