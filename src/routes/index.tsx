@@ -1,16 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAction, useMutation, useQuery } from 'convex/react'
+import { useAction, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 import {
-  ArrowDownUp,
   BadgeCent,
   DatabaseZap,
   Fuel,
-  LocateFixed,
   LogOut,
-  MapPin,
-  Navigation,
   RefreshCw,
-  Search,
   Star,
   UserCircle,
 } from 'lucide-react'
@@ -19,6 +14,10 @@ import { lazy, Suspense } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
+import { useUserLocation } from '#/lib/useUserLocation'
+import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
+import { StationTable, type StationRow } from '../components/StationTable'
+import type { MapBounds } from '../components/StationMap'
 
 export const Route = createFileRoute('/')({ component: Home })
 
@@ -26,72 +25,64 @@ const StationMap = lazy(() =>
   import('../components/StationMap').then((m) => ({ default: m.StationMap })),
 )
 
-const FUEL_OPTIONS = [
-  { value: 'regular', label: 'Regular' },
-  { value: 'premium', label: 'Premium' },
-  { value: 'diesel', label: 'Diesel' },
-  { value: 'duba', label: 'Diesel DUBA' },
-] as const
+function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return <>{fallback ?? null}</>
+  return <>{children}</>
+}
+
+const PAGE_SIZE = 50
 
 const LOCAL_FAVORITES_KEY = 'litrito:favorites:v1'
 
-type FuelType = (typeof FUEL_OPTIONS)[number]['value']
-
-type StateOption = {
-  externalId: string
-  name: string
-}
-
-type MunicipalityOption = {
-  externalId: string
-  name: string
-}
-
-type StationRow = {
+type StationFromQuery = {
   station: {
+    _id: string
+    _creationTime: number
+    placeId?: string
     permitNumber: string
     name: string
     address: string
-    municipalityName?: string
+    stateExternalId: string
+    municipalityExternalId: string
     stateName?: string
+    municipalityName?: string
     latitude?: number
     longitude?: number
+    source: 'CNE'
+    firstSeenAt: string
+    lastSeenAt: string
   }
-  prices: Partial<Record<FuelType | 'unknown', { price: number }>>
+  prices: Record<string, { price: number } | undefined>
   highlightedPrice: number | null
 }
 
-type UserLocation = {
-  latitude: number
-  longitude: number
+type FilterOption = {
+  externalId: string
+  name: string
+  count: number
+}
+
+type FilterOptionsResult = {
+  states: FilterOption[]
+  municipalities: (FilterOption & { stateExternalId: string })[]
 }
 
 function readLocalFavoritePermitNumbers(): string[] {
-  if (typeof window === 'undefined') {
-    return []
-  }
-
+  if (typeof window === 'undefined') return []
   try {
-    const rawFavorites = window.localStorage.getItem(LOCAL_FAVORITES_KEY)
-    const favorites = rawFavorites ? JSON.parse(rawFavorites) : []
-
-    if (!Array.isArray(favorites)) {
-      return []
-    }
-
-    return favorites.filter((favorite): favorite is string => {
-      return typeof favorite === 'string' && favorite.trim().length > 0
-    })
+    const raw = window.localStorage.getItem(LOCAL_FAVORITES_KEY)
+    const favorites = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(favorites)) return []
+    return favorites.filter((f): f is string => typeof f === 'string' && f.trim().length > 0)
   } catch {
     return []
   }
 }
 
 function writeLocalFavoritePermitNumbers(favorites: string[]) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
+  if (typeof window === 'undefined') return
   window.localStorage.setItem(
     LOCAL_FAVORITES_KEY,
     JSON.stringify(Array.from(new Set(favorites))),
@@ -103,238 +94,230 @@ function updateFavoriteList(
   permitNumber: string,
   favorited: boolean,
 ): string[] {
-  const favoriteSet = new Set(favorites)
+  const set = new Set(favorites)
+  if (favorited) set.add(permitNumber)
+  else set.delete(permitNumber)
+  return Array.from(set)
+}
 
-  if (favorited) {
-    favoriteSet.add(permitNumber)
-  } else {
-    favoriteSet.delete(permitNumber)
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+function formatDate(value: string | undefined): string {
+  if (!value) return 'Sin datos'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Sin datos'
+  return new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+const toRad = (d: number) => (d * Math.PI) / 180
+function distanceKm(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number {
+  const R = 6371
+  const dLat = toRad(b.latitude - a.latitude)
+  const dLon = toRad(b.longitude - a.longitude)
+  const sinDLat = Math.sin(dLat / 2)
+  const sinDLon = Math.sin(dLon / 2)
+  const aa =
+    sinDLat * sinDLat +
+    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * sinDLon * sinDLon
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(aa)))
+}
+
+function defaultFilters(): FilterState {
+  return {
+    fuelTypes: ['regular', 'premium', 'diesel', 'duba'],
+    primaryFuel: 'regular',
+    stateIds: [],
+    municipalityIds: [],
+    search: '',
+    sortMode: 'price',
   }
-
-  return Array.from(favoriteSet)
 }
 
 function Home() {
-  const [stateExternalId, setStateExternalId] = useState('09')
-  const [municipalityExternalId, setMunicipalityExternalId] = useState('')
-  const [fuelType, setFuelType] = useState<FuelType>('regular')
-  const [searchTerm, setSearchTerm] = useState('')
+  const [filters, setFilters] = useState<FilterState>(defaultFilters)
+  const [mapBounds, setMapBounds] = useState<MapBounds | null>(null)
   const [localFavoritePermitNumbers, setLocalFavoritePermitNumbers] = useState(
     readLocalFavoritePermitNumbers,
   )
-  const [syncedFavoriteUserId, setSyncedFavoriteUserId] = useState<
-    string | null
-  >(null)
+  const [syncedFavoriteUserId, setSyncedFavoriteUserId] = useState<string | null>(null)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
-  const [sortMode, setSortMode] = useState<'price' | 'distance'>('price')
-  const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [catalogRefreshing, setCatalogRefreshing] = useState(false)
-  const [bootstrapQueued, setBootstrapQueued] = useState(false)
   const [notice, setNotice] = useState('')
   const session = authClient.useSession()
-
-  const states = (useQuery(api.catalog.states) ?? []) as StateOption[]
-  const municipalities =
-    (useQuery(api.catalog.municipalities, {
-      stateExternalId,
-    }) ?? []) as MunicipalityOption[]
-  const latestRun = useQuery(api.prices.latestRun)
-  const favoritePermitNumbers =
-    (useQuery(api.favorites.list, session.data?.user ? {} : 'skip') ??
-      []) as string[]
-  const rows =
-    (useQuery(api.prices.search, {
-      stateExternalId,
-      municipalityExternalId: municipalityExternalId || undefined,
-      fuelType,
-      q: searchTerm || undefined,
-      limit: 80,
-    }) ?? []) as StationRow[]
-
-  const refreshCatalog = useAction(api.ingestion.refreshCatalog)
-  const refreshMunicipality = useAction(api.ingestion.refreshMunicipality)
-  const bootstrapNationalRefresh = useAction(api.ingestion.bootstrapNationalRefresh)
-  const setFavorite = useMutation(api.favorites.set)
-
-  useEffect(() => {
-    if (!states.length && !catalogRefreshing) {
-      setCatalogRefreshing(true)
-      refreshCatalog({})
-        .then(() => setNotice('Catalogo CNE listo para buscar.'))
-        .catch(() =>
-          setNotice('No se pudo cargar el catalogo CNE. Intenta otra vez.'),
-        )
-        .finally(() => setCatalogRefreshing(false))
-    }
-  }, [catalogRefreshing, refreshCatalog, states.length])
-
-  useEffect(() => {
-    if (!municipalityExternalId && municipalities[0]) {
-      setMunicipalityExternalId(municipalities[0].externalId)
-    }
-  }, [municipalities, municipalityExternalId])
-
-  useEffect(() => {
-    if (bootstrapQueued || latestRun !== null || rows.length > 0) {
-      return
-    }
-
-    setBootstrapQueued(true)
-    bootstrapNationalRefresh({})
-      .then((result) => {
-        if (result.skipped) {
-          setNotice(result.message ?? 'Ya hay una carga nacional en proceso.')
-          return
-        }
-
-        setNotice(
-          `No habia datos todavia. Encole carga nacional para ${result.queuedMunicipalities} municipios.`,
-        )
-      })
-      .catch(() => {
-        setNotice('No pude encolar la carga nacional. Intenta actualizar el municipio.')
-      })
-  }, [bootstrapNationalRefresh, bootstrapQueued, latestRun, rows.length])
+  const userLoc = useUserLocation()
 
   useEffect(() => {
     writeLocalFavoritePermitNumbers(localFavoritePermitNumbers)
   }, [localFavoritePermitNumbers])
 
-  useEffect(() => {
-    const userId = session.data?.user?.id ?? null
+  const filterOptions =
+    (useQuery(api.stations.listFilterOptions, {}) as FilterOptionsResult | undefined) ?? {
+      states: [],
+      municipalities: [],
+    }
 
+  const listStationsArgs = {
+    fuelTypes: filters.fuelTypes.length > 0 ? filters.fuelTypes : undefined,
+    search: filters.search.length >= 2 ? filters.search : undefined,
+    stateExternalIds: filters.stateIds.length > 0 ? filters.stateIds : undefined,
+    municipalityExternalIds:
+      filters.municipalityIds.length > 0 ? filters.municipalityIds : undefined,
+    sortMode: filters.sortMode,
+    userLocation:
+      filters.sortMode === 'distance' && userLoc.location
+        ? {
+            latitude: userLoc.location.latitude,
+            longitude: userLoc.location.longitude,
+          }
+        : undefined,
+  }
+
+  const paginated = usePaginatedQuery(
+    api.stations.listStations,
+    listStationsArgs,
+    { initialNumItems: PAGE_SIZE },
+  ) as {
+    results: StationFromQuery[] | undefined
+    status: 'LoadingFirstPage' | 'CanLoadMore' | 'LoadingMore' | 'Exhausted'
+    loadMore: (n: number) => void
+  }
+
+  const boundsArgs = mapBounds
+    ? {
+        fuelTypes: filters.fuelTypes.length > 0 ? filters.fuelTypes : undefined,
+        swLat: mapBounds.swLat,
+        swLon: mapBounds.swLon,
+        neLat: mapBounds.neLat,
+        neLon: mapBounds.neLon,
+        limit: 800,
+      }
+    : 'skip' as const
+  const boundsResult = useQuery(
+    api.stations.listStationsInBounds,
+    boundsArgs,
+  ) as
+    | {
+        stations: StationFromQuery[]
+        truncated: boolean
+      }
+    | undefined
+
+  const latestRun = useQuery(api.prices.latestRun)
+  const sessionUser = session?.data?.user ?? null
+  const favoritePermitNumbers =
+    (useQuery(api.favorites.list, sessionUser ? {} : 'skip') ?? []) as string[]
+  const setFavorite = useMutation(api.favorites.set)
+  const refreshCatalog = useAction(api.ingestion.refreshCatalog)
+  const refreshMunicipality = useAction(api.ingestion.refreshMunicipality)
+
+  const visibleRows = useMemo<StationRow[]>(() => {
+    if (!paginated.results) return []
+    return paginated.results.map((row) => ({
+      station: {
+        permitNumber: row.station.permitNumber,
+        name: row.station.name,
+        address: row.station.address,
+        municipalityName: row.station.municipalityName,
+        stateName: row.station.stateName,
+        latitude: row.station.latitude,
+        longitude: row.station.longitude,
+      },
+      prices: row.prices as Partial<Record<FuelType, { price: number }>>,
+      highlightedPrice: row.highlightedPrice,
+    }))
+  }, [paginated.results])
+
+  const mapRows = useMemo<StationRow[]>(() => {
+    if (!boundsResult) return []
+    return boundsResult.stations.map((row) => ({
+      station: {
+        permitNumber: row.station.permitNumber,
+        name: row.station.name,
+        address: row.station.address,
+        municipalityName: row.station.municipalityName,
+        stateName: row.station.stateName,
+        latitude: row.station.latitude,
+        longitude: row.station.longitude,
+      },
+      prices: row.prices as Partial<Record<FuelType, { price: number }>>,
+      highlightedPrice: row.highlightedPrice,
+    }))
+  }, [boundsResult])
+
+  const favoriteSet = useMemo(
+    () => new Set([...favoritePermitNumbers, ...localFavoritePermitNumbers]),
+    [favoritePermitNumbers, localFavoritePermitNumbers],
+  )
+
+  useEffect(() => {
+    const userId = sessionUser?.id ?? null
     if (!userId) {
       setSyncedFavoriteUserId(null)
       return
     }
-
-    if (syncedFavoriteUserId === userId) {
-      return
-    }
+    if (syncedFavoriteUserId === userId) return
 
     const remoteFavorites = new Set(favoritePermitNumbers)
     const unsyncedFavorites = localFavoritePermitNumbers.filter(
-      (permitNumber) => !remoteFavorites.has(permitNumber),
+      (p) => !remoteFavorites.has(p),
     )
-
     if (!unsyncedFavorites.length) {
       setSyncedFavoriteUserId(userId)
       return
     }
 
     Promise.all(
-      unsyncedFavorites.map((stationPermitNumber) =>
-        setFavorite({ stationPermitNumber, favorited: true }),
-      ),
+      unsyncedFavorites.map((p) => setFavorite({ stationPermitNumber: p, favorited: true })),
     )
-      .then(() => {
-        setSyncedFavoriteUserId(userId)
-        setNotice('Favoritas locales sincronizadas con tu cuenta.')
-      })
-      .catch(() => {
-        setNotice('Tus favoritas locales siguen guardadas en este navegador.')
-      })
+      .then(() => setSyncedFavoriteUserId(userId))
+      .catch(() => undefined)
   }, [
     favoritePermitNumbers,
     localFavoritePermitNumbers,
-    session.data?.user?.id,
+    sessionUser?.id,
     setFavorite,
     syncedFavoriteUserId,
   ])
 
-  const selectedState = useMemo(
-    () => states.find((state) => state.externalId === stateExternalId),
-    [stateExternalId, states],
-  )
+  const tableRows = useMemo(() => {
+    if (!showFavoritesOnly) return visibleRows
+    return visibleRows.filter((r) => favoriteSet.has(r.station.permitNumber))
+  }, [visibleRows, showFavoritesOnly, favoriteSet])
 
-  const selectedMunicipality = useMemo(
-    () =>
-      municipalities.find(
-        (municipality) => municipality.externalId === municipalityExternalId,
-      ),
-    [municipalities, municipalityExternalId],
-  )
-
-  const bestPrice = rows[0]?.highlightedPrice
-  const updatedAt = latestRun?.finishedAt ?? latestRun?.startedAt
-  const favoriteSet = useMemo(
-    () => new Set([...favoritePermitNumbers, ...localFavoritePermitNumbers]),
-    [favoritePermitNumbers, localFavoritePermitNumbers],
-  )
-  const visibleRows = useMemo(() => {
-    const filteredRows = showFavoritesOnly
-      ? rows.filter((row) => favoriteSet.has(row.station.permitNumber))
-      : rows
-
-    if (sortMode !== 'distance' || !userLocation) {
-      return filteredRows
+  const distanceByPermit = useMemo(() => {
+    if (filters.sortMode !== 'distance' || !userLoc.location) return undefined
+    const ul = userLoc.location
+    const map = new Map<string, number>()
+    for (const row of visibleRows) {
+      const lat = row.station.latitude
+      const lon = row.station.longitude
+      if (typeof lat === 'number' && typeof lon === 'number') {
+        map.set(row.station.permitNumber, distanceKm(ul, { latitude: lat, longitude: lon }))
+      }
     }
-
-    return [...filteredRows].sort((a, b) => {
-      const aDistance = distanceForStation(a, userLocation)
-      const bDistance = distanceForStation(b, userLocation)
-      return (
-        (aDistance ?? Number.POSITIVE_INFINITY) -
-          (bDistance ?? Number.POSITIVE_INFINITY) ||
-        (a.highlightedPrice ?? Number.POSITIVE_INFINITY) -
-          (b.highlightedPrice ?? Number.POSITIVE_INFINITY)
-      )
-    })
-  }, [favoriteSet, rows, showFavoritesOnly, sortMode, userLocation])
-
-  async function handleRefreshMunicipality() {
-    if (!stateExternalId || !municipalityExternalId) {
-      setNotice('Elige entidad y municipio para actualizar precios.')
-      return
-    }
-
-    setRefreshing(true)
-    setNotice('')
-
-    try {
-      const result = await refreshMunicipality({
-        stateExternalId,
-        municipalityExternalId,
-      })
-      setNotice(`Listo: ${result.recordsWritten} precios actualizados.`)
-    } catch {
-      setNotice('La fuente CNE no respondio. Conservamos los ultimos datos.')
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-  function handleUseLocation() {
-    if (!navigator.geolocation) {
-      setNotice('Tu navegador no tiene geolocalizacion disponible.')
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        })
-        setSortMode('distance')
-        setNotice('Ordenando por estaciones cercanas a tu ubicacion.')
-      },
-      () => {
-        setNotice('No pude obtener tu ubicacion. Puedes seguir comparando por precio.')
-      },
-      { enableHighAccuracy: true, maximumAge: 300000, timeout: 10000 },
-    )
-  }
+    return map
+  }, [visibleRows, filters.sortMode, userLoc.location])
 
   async function handleToggleFavorite(permitNumber: string) {
     const favorited = !favoriteSet.has(permitNumber)
-
-    setLocalFavoritePermitNumbers((currentFavorites) =>
-      updateFavoriteList(currentFavorites, permitNumber, favorited),
+    setLocalFavoritePermitNumbers((current) =>
+      updateFavoriteList(current, permitNumber, favorited),
     )
-
-    if (!session.data?.user) {
+    if (!sessionUser) {
       setNotice(
         favorited
           ? 'Guardada en este navegador. Inicia sesion para sincronizarla.'
@@ -342,16 +325,64 @@ function Home() {
       )
       return
     }
-
     try {
       await setFavorite({ stationPermitNumber: permitNumber, favorited })
     } catch {
       setNotice('No se pudo sincronizar con tu cuenta, pero quedo local.')
       return
     }
-
     setNotice(favorited ? 'Favorita guardada.' : 'Favorita removida.')
   }
+
+  async function handleRefreshCatalog() {
+    setNotice('')
+    try {
+      await refreshCatalog({})
+      setNotice('Catalogo CNE actualizado.')
+    } catch {
+      setNotice('No se pudo actualizar el catalogo CNE.')
+    }
+  }
+
+  async function handleRefreshMunicipality() {
+    if (filters.stateIds.length !== 1) {
+      setNotice('Elige un solo estado y municipio para forzar la actualizacion.')
+      return
+    }
+    const muni = filters.municipalityIds[0]
+    const [stateExternalId, municipalityExternalId] = (muni ?? '').split('|')
+    if (!stateExternalId || !municipalityExternalId) {
+      setNotice('Selecciona un municipio especifico para actualizar.')
+      return
+    }
+    setNotice('')
+    try {
+      const result = await refreshMunicipality({ stateExternalId, municipalityExternalId })
+      setNotice(`Listo: ${result.recordsWritten} precios actualizados.`)
+    } catch {
+      setNotice('La fuente CNE no respondio. Conservamos los ultimos datos.')
+    }
+  }
+
+  const bestPrice = useMemo(() => {
+    let min: number | null = null
+    for (const row of visibleRows) {
+      const p = row.highlightedPrice
+      if (p == null) continue
+      if (min == null || p < min) min = p
+    }
+    return min
+  }, [visibleRows])
+  const updatedAt = latestRun?.finishedAt ?? latestRun?.startedAt
+
+  const statesForFilter = useMemo(
+    () => filterOptions.states.filter((s) => s.count > 0),
+    [filterOptions.states],
+  )
+  const munisForFilter = useMemo(
+    () => filterOptions.municipalities.filter((m) => m.count > 0),
+    [filterOptions.municipalities],
+  )
 
   return (
     <main className="min-h-screen">
@@ -368,8 +399,8 @@ function Home() {
               </h1>
               <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
                 Encuentra donde cargar gasolina y diesel en Mexico con precios
-                reportados por estacion. Filtra por zona, compara por
-                combustible y ordena del mas barato al mas caro.
+                reportados por estacion. Filtra por zona, busca por nombre y
+                compara por combustible.
               </p>
             </div>
 
@@ -393,283 +424,193 @@ function Home() {
           </div>
 
           <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center gap-2 text-sm font-bold uppercase text-slate-500">
-              <MapPin className="h-4 w-4" />
-              Buscar por ubicacion
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="text-sm font-semibold text-slate-700">
-                  Entidad
-                </span>
-                <select
-                  className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none ring-emerald-500 transition focus:ring-2"
-                  value={stateExternalId}
-                  onChange={(event) => {
-                    setStateExternalId(event.target.value)
-                    setMunicipalityExternalId('')
-                  }}
-                >
-                  {states.map((state) => (
-                    <option key={state.externalId} value={state.externalId}>
-                      {state.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-semibold text-slate-700">
-                  Municipio
-                </span>
-                <select
-                  className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none ring-emerald-500 transition focus:ring-2"
-                  value={municipalityExternalId}
-                  onChange={(event) =>
-                    setMunicipalityExternalId(event.target.value)
-                  }
-                >
-                  {municipalities.map((municipality) => (
-                    <option
-                      key={municipality.externalId}
-                      value={municipality.externalId}
-                    >
-                      {municipality.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
+            <div className="flex items-center justify-between gap-2 text-sm font-bold uppercase text-slate-500">
+              <span>Datos</span>
               <button
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                 type="button"
-                onClick={handleRefreshMunicipality}
-                disabled={refreshing || !municipalityExternalId}
+                onClick={() => void handleRefreshCatalog()}
+                className="inline-flex items-center gap-1 text-[10px] font-bold normal-case text-emerald-700 hover:underline"
               >
-                <RefreshCw
-                  className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`}
-                />
-                {refreshing ? 'Actualizando...' : 'Actualizar municipio'}
+                <RefreshCw className="h-3 w-3" />
+                Reimportar catalogo
               </button>
             </div>
 
-            <p className="mt-4 text-sm leading-6 text-slate-600">
+            <p className="mt-3 text-sm leading-6 text-slate-600">
               Fuente: Comision Nacional de Energia, precios reportados por
               permisionarios. Son informativos y pueden cambiar en estacion.
             </p>
+
+            <div className="mt-4 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600">
+              {userLoc.location ? (
+                userLoc.location.source === 'precise' ? (
+                  <span>
+                    <strong className="text-emerald-800">Ubicacion precisa</strong>
+                    {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
+                  </span>
+                ) : userLoc.location.source === 'ip' ? (
+                  <span>
+                    <strong className="text-slate-700">Ubicacion aproximada</strong>
+                    {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
+                    {' '}
+                    <button
+                      type="button"
+                      onClick={userLoc.requestPrecise}
+                      className="ml-1 font-bold text-emerald-700 hover:underline"
+                    >
+                      precisar
+                    </button>
+                  </span>
+                ) : (
+                  <span>Ubicacion por defecto · CDMX</span>
+                )
+              ) : (
+                <span>Detectando tu ubicacion…</span>
+              )}
+            </div>
           </aside>
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+      <section className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
         <AuthPanel />
 
-        <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h2 className="text-2xl font-black text-slate-950">
-              {selectedMunicipality?.name ?? 'Municipio'}{' '}
-              {selectedState ? `, ${selectedState.name}` : ''}
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              {visibleRows.length} estaciones{' '}
-              {sortMode === 'distance' ? 'cercanas' : 'ordenadas por precio'}{' '}
-              de {FUEL_OPTIONS.find((option) => option.value === fuelType)?.label}.
-            </p>
+        <StationFilters
+          state={filters}
+          states={statesForFilter}
+          municipalities={munisForFilter}
+          onChange={setFilters}
+          hasPreciseLocation={userLoc.hasPreciseLocation}
+          onRequestPreciseLocation={userLoc.requestPrecise}
+        />
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs text-slate-600">
+            {paginated.results
+              ? `${visibleRows.length} ${
+                  paginated.status === 'Exhausted' ? 'resultados' : 'cargados'
+                }${paginated.status === 'CanLoadMore' ? ' — hay más' : ''}`
+              : 'Cargando…'}
+            {showFavoritesOnly && (
+              <span className="ml-2 text-amber-700">· solo favoritas</span>
+            )}
           </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="relative block sm:w-72">
-              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <input
-                className="h-10 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none ring-emerald-500 transition placeholder:text-slate-400 focus:ring-2"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Estacion, permiso o direccion"
-              />
-            </label>
-
-            <div className="grid grid-cols-2 gap-2 sm:flex">
-              {FUEL_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  className={`h-10 rounded-md border px-3 text-sm font-bold transition ${
-                    fuelType === option.value
-                      ? 'border-slate-950 bg-slate-950 text-white'
-                      : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500'
-                  }`}
-                  type="button"
-                  onClick={() => setFuelType(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFavoritesOnly((v) => !v)}
+              className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-bold transition ${
+                showFavoritesOnly
+                  ? 'border-amber-500 bg-amber-50 text-amber-950'
+                  : 'border-slate-300 bg-white text-slate-700 hover:border-amber-400'
+              }`}
+            >
+              <Star className="h-3.5 w-3.5" />
+              {showFavoritesOnly ? 'Mostrar todo' : 'Solo favoritas'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRefreshMunicipality()}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:border-emerald-400"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refrescar municipio
+            </button>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
-              showFavoritesOnly
-                ? 'border-amber-500 bg-amber-50 text-amber-950'
-                : 'border-slate-300 bg-white text-slate-700 hover:border-amber-400'
-            }`}
-            type="button"
-            onClick={() => setShowFavoritesOnly((value) => !value)}
-          >
-            <Star className="h-4 w-4" />
-            Favoritas
-          </button>
-          <button
-            className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
-              sortMode === 'distance'
-                ? 'border-emerald-600 bg-emerald-50 text-emerald-950'
-                : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500'
-            }`}
-            type="button"
-            onClick={handleUseLocation}
-          >
-            <LocateFixed className="h-4 w-4" />
-            Cerca de mi
-          </button>
-          <button
-            className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
-              sortMode === 'price'
-                ? 'border-slate-950 bg-slate-950 text-white'
-                : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500'
-            }`}
-            type="button"
-            onClick={() => setSortMode('price')}
-          >
-            <ArrowDownUp className="h-4 w-4" />
-            Precio
-          </button>
-        </div>
-
-        {notice ? (
-          <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+        {notice && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
             {notice}
           </div>
-        ) : null}
+        )}
 
-        <div className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="border-b border-slate-200 bg-slate-50 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-black text-slate-950">Mapa</h3>
-                <p className="mt-1 text-xs font-semibold text-slate-500">
-                  Estaciones con coordenadas en México
-                </p>
-              </div>
-              <MapPin className="h-5 w-5 text-emerald-700" />
-            </div>
+            <h3 className="text-sm font-black text-slate-950">Mapa</h3>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              {boundsResult
+                ? `${boundsResult.stations.length} estaciones visibles${boundsResult.truncated ? ' (acercate para mas)' : ''}`
+                : 'Cargando marcadores…'}
+            </p>
           </div>
-          <Suspense
+          <ClientOnly
             fallback={
-              <div className="flex h-72 items-center justify-center text-sm text-slate-500">
+              <div className="m-3 flex h-[55vh] min-h-[320px] items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-500">
                 Cargando mapa…
               </div>
             }
           >
-            <StationMap
-              rows={visibleRows}
-              fuelType={fuelType}
-              userLocation={userLocation}
-            />
-          </Suspense>
-
-          <div className="grid grid-cols-[1fr_120px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase text-slate-500 sm:grid-cols-[1.2fr_1fr_120px_120px_120px]">
-            <div>Estacion</div>
-            <div className="hidden sm:block">Ubicacion</div>
-            <div className="flex items-center justify-end gap-1">
-              <ArrowDownUp className="h-3.5 w-3.5" />
-              Regular
-            </div>
-            <div className="hidden text-right sm:block">Premium</div>
-            <div className="hidden text-right sm:block">Diesel</div>
-          </div>
-
-          {visibleRows.length ? (
-            visibleRows.map((row) => (
-              <article
-                key={row.station.permitNumber}
-                className="grid grid-cols-[1fr_120px] gap-3 border-b border-slate-100 px-4 py-4 last:border-b-0 sm:grid-cols-[1.2fr_1fr_120px_120px_120px]"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <button
-                      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition ${
-                        favoriteSet.has(row.station.permitNumber)
-                          ? 'border-amber-300 bg-amber-50 text-amber-600'
-                          : 'border-slate-200 bg-white text-slate-400 hover:text-amber-500'
-                      }`}
-                      type="button"
-                      title="Guardar favorita"
-                      onClick={() => {
-                        void handleToggleFavorite(row.station.permitNumber)
-                      }}
-                    >
-                      <Star
-                        className="h-4 w-4"
-                        fill={
-                          favoriteSet.has(row.station.permitNumber)
-                            ? 'currentColor'
-                            : 'none'
-                        }
-                      />
-                    </button>
-                    <h3 className="truncate text-sm font-black text-slate-950">
-                      {row.station.name}
-                    </h3>
-                  </div>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    {row.station.permitNumber}
-                  </p>
+            <Suspense
+              fallback={
+                <div className="m-3 flex h-[55vh] min-h-[320px] items-center justify-center text-sm text-slate-500">
+                  Cargando mapa…
                 </div>
-                <div className="hidden min-w-0 sm:block">
-                  <p className="truncate text-sm text-slate-700">
-                    {row.station.address}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {row.station.municipalityName}, {row.station.stateName}
-                  </p>
-                  {userLocation ? (
-                    <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
-                      <Navigation className="h-3 w-3" />
-                      {formatDistance(distanceForStation(row, userLocation))}
-                    </p>
-                  ) : null}
-                </div>
-                <PriceCell active={fuelType === 'regular'} value={row.prices.regular?.price} />
-                <PriceCell active={fuelType === 'premium'} value={row.prices.premium?.price} />
-                <PriceCell
-                  active={fuelType === 'diesel' || fuelType === 'duba'}
-                  value={row.prices.diesel?.price ?? row.prices.duba?.price}
-                  className="hidden sm:flex"
+              }
+            >
+              <div className="p-3">
+                <StationMap
+                  rows={mapRows}
+                  primaryFuel={filters.primaryFuel}
+                  fuelTypes={filters.fuelTypes}
+                  userLocation={userLoc.location}
+                  truncated={boundsResult?.truncated}
+                  initialBounds={mapBounds}
+                  onMoveEnd={setMapBounds}
+                  onLocateClick={() => {
+                    setFilters((prev) =>
+                      prev.sortMode === 'distance'
+                        ? prev
+                        : { ...prev, sortMode: 'distance' },
+                    )
+                  }}
                 />
-              </article>
-            ))
-          ) : (
-            <div className="px-4 py-12 text-center">
-              <Fuel className="mx-auto h-8 w-8 text-slate-400" />
-              <h3 className="mt-3 text-base font-black text-slate-950">
-                Todavia no hay precios para esta busqueda
-              </h3>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-                Actualiza el municipio seleccionado para traer datos desde CNE y
-                guardarlos en Convex.
-              </p>
-            </div>
-          )}
+              </div>
+            </Suspense>
+          </ClientOnly>
         </div>
+
+        <StationTable
+          rows={tableRows}
+          fuelTypes={filters.fuelTypes}
+          sortMode={filters.sortMode}
+          isLoading={!paginated.results}
+          canLoadMore={paginated.status === 'CanLoadMore'}
+          isLoadingMore={paginated.status === 'LoadingMore'}
+          onLoadMore={() => paginated.loadMore(PAGE_SIZE)}
+          onToggleFavorite={handleToggleFavorite}
+          favoriteSet={favoriteSet}
+          userLocation={
+            userLoc.location
+              ? {
+                  latitude: userLoc.location.latitude,
+                  longitude: userLoc.location.longitude,
+                }
+              : null
+          }
+          distanceByPermit={distanceByPermit}
+        />
       </section>
     </main>
   )
 }
 
+function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+        {icon}
+        {label}
+      </div>
+      <div className="mt-1 text-base font-black text-slate-950">{value}</div>
+    </div>
+  )
+}
+
 function AuthPanel() {
-  const { data: session, isPending } = authClient.useSession()
+  const session = authClient.useSession()
+  const sessionUser = session?.data?.user ?? null
+  const isPending = session?.isPending ?? false
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -681,7 +622,6 @@ function AuthPanel() {
     event.preventDefault()
     setSubmitting(true)
     setMessage('')
-
     try {
       if (mode === 'signin') {
         await authClient.signIn.email({ email, password })
@@ -700,37 +640,32 @@ function AuthPanel() {
     }
   }
 
+  async function handleSignOut() {
+    await authClient.signOut()
+  }
+
   if (isPending) {
     return (
-      <div className="mb-5 h-16 animate-pulse rounded-lg border border-slate-200 bg-white" />
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+        Cargando sesion…
+      </div>
     )
   }
 
-  if (session?.user) {
+  if (sessionUser) {
     return (
-      <div className="mb-5 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
-            <UserCircle className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-black text-slate-950">
-              {session.user.name || session.user.email}
-            </p>
-            <p className="text-sm text-slate-600">
-              Tus favoritas se guardan con tu cuenta.
-            </p>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+        <div className="flex items-center gap-2 font-semibold text-slate-700">
+          <UserCircle className="h-5 w-5 text-emerald-700" />
+          Hola, {sessionUser.name ?? sessionUser.email}
         </div>
         <button
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-500"
           type="button"
-          onClick={() => {
-            void authClient.signOut()
-          }}
+          onClick={handleSignOut}
+          className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 hover:text-slate-950"
         >
-          <LogOut className="h-4 w-4" />
-          Salir
+          <LogOut className="h-3.5 w-3.5" />
+          Cerrar sesion
         </button>
       </div>
     )
@@ -738,184 +673,69 @@ function AuthPanel() {
 
   return (
     <form
-      className="mb-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr_1fr_auto]"
       onSubmit={handleSubmit}
+      className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
     >
-      <div className="lg:col-span-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-sm font-black text-slate-950">
-              Guarda tus estaciones favoritas
-            </h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Crea una cuenta para seguir precios de estaciones concretas.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1">
-            <button
-              className={`rounded px-3 py-2 text-sm font-bold ${
-                mode === 'signin' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'
-              }`}
-              type="button"
-              onClick={() => setMode('signin')}
-            >
-              Entrar
-            </button>
-            <button
-              className={`rounded px-3 py-2 text-sm font-bold ${
-                mode === 'signup' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'
-              }`}
-              type="button"
-              onClick={() => setMode('signup')}
-            >
-              Crear
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {mode === 'signup' ? (
+      <label className="block">
+        <span className="text-xs font-bold uppercase text-slate-500">Email</span>
         <input
-          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none ring-emerald-500 transition placeholder:text-slate-400 focus:ring-2"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Nombre"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
         />
-      ) : null}
-      <input
-        className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none ring-emerald-500 transition placeholder:text-slate-400 focus:ring-2"
-        type="email"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-        placeholder="correo@ejemplo.com"
-        required
-      />
-      <input
-        className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none ring-emerald-500 transition placeholder:text-slate-400 focus:ring-2"
-        type="password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        placeholder="Contrasena"
-        required
-      />
+      </label>
+      <label className="block">
+        <span className="text-xs font-bold uppercase text-slate-500">
+          {mode === 'signup' ? 'Nombre (opcional)' : 'Contrasena'}
+        </span>
+        {mode === 'signup' ? (
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+          />
+        ) : (
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+          />
+        )}
+      </label>
+      {mode === 'signup' && (
+        <label className="block">
+          <span className="text-xs font-bold uppercase text-slate-500">Contrasena</span>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+          />
+        </label>
+      )}
       <button
-        className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-400"
         type="submit"
         disabled={submitting}
+        className="inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:opacity-50"
       >
-        <UserCircle className="h-4 w-4" />
-        {submitting ? 'Enviando...' : mode === 'signin' ? 'Entrar' : 'Crear cuenta'}
+        {submitting ? 'Enviando…' : mode === 'signin' ? 'Entrar' : 'Crear cuenta'}
       </button>
-      {message ? (
-        <p className="text-sm font-semibold text-red-700 lg:col-span-4">
-          {message}
-        </p>
-      ) : null}
+      <button
+        type="button"
+        onClick={() => setMode((m) => (m === 'signin' ? 'signup' : 'signin'))}
+        className="text-xs font-bold text-emerald-700 hover:underline sm:col-span-4 sm:text-right"
+      >
+        {mode === 'signin' ? 'Crear cuenta' : 'Ya tengo cuenta'}
+      </button>
+      {message && (
+        <p className="text-sm font-semibold text-rose-700 sm:col-span-4">{message}</p>
+      )}
     </form>
   )
-}
-
-function Metric({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="flex items-center gap-2 text-slate-500">
-        {icon}
-        <span className="text-xs font-black uppercase">{label}</span>
-      </div>
-      <div className="mt-2 text-lg font-black text-slate-950">{value}</div>
-    </div>
-  )
-}
-
-function PriceCell({
-  active,
-  value,
-  className = '',
-}: {
-  active: boolean
-  value?: number
-  className?: string
-}) {
-  return (
-    <div
-      className={`items-center justify-end text-right text-sm font-black ${
-        active ? 'text-emerald-700' : 'text-slate-800'
-      } ${className || 'flex'}`}
-    >
-      {value ? formatCurrency(value) : '-'}
-    </div>
-  )
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-  }).format(value)
-}
-
-function formatDate(value?: string) {
-  if (!value) {
-    return 'Pendiente'
-  }
-
-  return new Intl.DateTimeFormat('es-MX', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
-}
-
-function distanceForStation(row: StationRow, location: UserLocation) {
-  if (
-    typeof row.station.latitude !== 'number' ||
-    typeof row.station.longitude !== 'number'
-  ) {
-    return null
-  }
-
-  return distanceInKm(location, {
-    latitude: row.station.latitude,
-    longitude: row.station.longitude,
-  })
-}
-
-function distanceInKm(a: UserLocation, b: UserLocation) {
-  const earthRadiusKm = 6371
-  const latDelta = toRadians(b.latitude - a.latitude)
-  const lonDelta = toRadians(b.longitude - a.longitude)
-  const latA = toRadians(a.latitude)
-  const latB = toRadians(b.latitude)
-  const haversine =
-    Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
-    Math.cos(latA) *
-      Math.cos(latB) *
-      Math.sin(lonDelta / 2) *
-      Math.sin(lonDelta / 2)
-
-  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
-}
-
-function toRadians(value: number) {
-  return (value * Math.PI) / 180
-}
-
-function formatDistance(value: number | null) {
-  if (value === null) {
-    return 'Sin coordenadas'
-  }
-
-  if (value < 1) {
-    return `${Math.round(value * 1000)} m`
-  }
-
-  return `${value.toFixed(1)} km`
 }

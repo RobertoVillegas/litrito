@@ -32,6 +32,9 @@ export default defineSchema({
   })
     .index('by_permit', ['permitNumber'])
     .index('by_location', ['stateExternalId', 'municipalityExternalId'])
+    .index('by_state', ['stateExternalId'])
+    .index('by_name', ['name'])
+    .index('by_lat', ['latitude'])
     .searchIndex('search_station', {
       searchField: 'name',
       filterFields: ['stateExternalId', 'municipalityExternalId'],

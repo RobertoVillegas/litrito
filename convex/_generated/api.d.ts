@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as ingestion from "../ingestion.js";
 import type * as normalization from "../normalization.js";
 import type * as prices from "../prices.js";
+import type * as stations from "../stations.js";
 
 import type {
   ApiFromModules,
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   ingestion: typeof ingestion;
   normalization: typeof normalization;
   prices: typeof prices;
+  stations: typeof stations;
 }>;
 
 /**

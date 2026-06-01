@@ -23,6 +23,8 @@
     "@tanstack/react-router-ssr-query": "latest",
     "@tanstack/react-start": "latest",
     "@tanstack/react-store": "latest",
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.26",
     "@tanstack/router-plugin": "^1.132.0",
     "@tanstack/store": "latest",
     "better-auth": "^1.5.3",
