@@ -125,6 +125,7 @@ function Home() {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [catalogRefreshing, setCatalogRefreshing] = useState(false)
+  const [bootstrapQueued, setBootstrapQueued] = useState(false)
   const [notice, setNotice] = useState('')
   const session = authClient.useSession()
 
@@ -148,6 +149,7 @@ function Home() {
 
   const refreshCatalog = useAction(api.ingestion.refreshCatalog)
   const refreshMunicipality = useAction(api.ingestion.refreshMunicipality)
+  const bootstrapNationalRefresh = useAction(api.ingestion.bootstrapNationalRefresh)
   const setFavorite = useMutation(api.favorites.set)
 
   useEffect(() => {
@@ -167,6 +169,28 @@ function Home() {
       setMunicipalityExternalId(municipalities[0].externalId)
     }
   }, [municipalities, municipalityExternalId])
+
+  useEffect(() => {
+    if (bootstrapQueued || latestRun !== null || rows.length > 0) {
+      return
+    }
+
+    setBootstrapQueued(true)
+    bootstrapNationalRefresh({})
+      .then((result) => {
+        if (result.skipped) {
+          setNotice(result.message ?? 'Ya hay una carga nacional en proceso.')
+          return
+        }
+
+        setNotice(
+          `No habia datos todavia. Encole carga nacional para ${result.queuedMunicipalities} municipios.`,
+        )
+      })
+      .catch(() => {
+        setNotice('No pude encolar la carga nacional. Intenta actualizar el municipio.')
+      })
+  }, [bootstrapNationalRefresh, bootstrapQueued, latestRun, rows.length])
 
   useEffect(() => {
     writeLocalFavoritePermitNumbers(localFavoritePermitNumbers)

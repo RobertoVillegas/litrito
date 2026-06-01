@@ -3,6 +3,7 @@ import {
   action,
   internalAction,
   internalMutation,
+  internalQuery,
   type ActionCtx,
 } from './_generated/server'
 import { internal } from './_generated/api'
@@ -82,6 +83,8 @@ type PlacesSnapshotResult = {
 
 type QueueDailyRefreshResult = {
   queuedMunicipalities: number
+  skipped?: boolean
+  message?: string
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -392,6 +395,39 @@ export const recordFailure = internalMutation({
   },
 })
 
+export const latestDailyQueueRun = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const runs = await ctx.db
+      .query('ingestionRuns')
+      .withIndex('by_kind_started', (q) => q.eq('kind', 'daily_queue'))
+      .order('desc')
+      .take(1)
+
+    return runs[0] ?? null
+  },
+})
+
+export const recordDailyQueue = internalMutation({
+  args: {
+    queuedMunicipalities: v.number(),
+    message: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString()
+
+    return await ctx.db.insert('ingestionRuns', {
+      kind: 'daily_queue',
+      status: args.queuedMunicipalities > 0 ? 'success' : 'skipped',
+      startedAt: now,
+      finishedAt: now,
+      recordsRead: args.queuedMunicipalities,
+      recordsWritten: args.queuedMunicipalities,
+      message: args.message,
+    })
+  },
+})
+
 export const recordXmlSnapshot = internalMutation({
   args: {
     kind: v.union(v.literal('cne_prices_xml'), v.literal('cne_places_xml')),
@@ -609,31 +645,30 @@ export const capturePlacesSnapshot = internalAction({
 export const queueDailyRefresh = internalAction({
   args: {},
   handler: async (ctx): Promise<QueueDailyRefreshResult> => {
-    try {
-      const catalog = await fetchCatalog()
-      await ctx.runMutation(internal.ingestion.applyCatalog, catalog)
-      await ctx.scheduler.runAfter(0, internal.ingestion.captureXmlSnapshot, {})
-      await ctx.scheduler.runAfter(0, internal.ingestion.capturePlacesSnapshot, {})
+    return await queueNationalRefresh(ctx)
+  },
+})
 
-      let delayMs = 0
-      for (const municipality of catalog.municipalities) {
-        await ctx.scheduler.runAfter(delayMs, internal.ingestion.refreshMunicipalityInternal, {
-          stateExternalId: stateId(municipality.EntidadFederativaId),
-          municipalityExternalId: municipalityId(municipality.MunicipioId),
-        })
-        delayMs += 750
-      }
+export const bootstrapNationalRefresh = action({
+  args: {},
+  handler: async (ctx): Promise<QueueDailyRefreshResult> => {
+    const latestQueueRun = await ctx.runQuery(internal.ingestion.latestDailyQueueRun, {})
+    const startedAt = latestQueueRun?.startedAt
+      ? Date.parse(latestQueueRun.startedAt)
+      : 0
+    const queuedRecently = Number.isFinite(startedAt)
+      ? Date.now() - startedAt < 30 * 60 * 1000
+      : false
 
+    if (queuedRecently) {
       return {
-        queuedMunicipalities: catalog.municipalities.length,
+        queuedMunicipalities: 0,
+        skipped: true,
+        message: 'Ya hay una carga nacional reciente en proceso.',
       }
-    } catch (error) {
-      await ctx.runMutation(internal.ingestion.recordFailure, {
-        kind: 'daily_queue',
-        message: error instanceof Error ? error.message : 'Daily refresh queue failed',
-      })
-      throw error
     }
+
+    return await queueNationalRefresh(ctx)
   },
 })
 
@@ -668,6 +703,39 @@ async function refreshMunicipalityData(
       stateExternalId,
       municipalityExternalId,
       message: error instanceof Error ? error.message : 'Municipality refresh failed',
+    })
+    throw error
+  }
+}
+
+async function queueNationalRefresh(ctx: ActionCtx): Promise<QueueDailyRefreshResult> {
+  try {
+    const catalog = await fetchCatalog()
+    await ctx.runMutation(internal.ingestion.applyCatalog, catalog)
+    await ctx.scheduler.runAfter(0, internal.ingestion.captureXmlSnapshot, {})
+    await ctx.scheduler.runAfter(0, internal.ingestion.capturePlacesSnapshot, {})
+
+    let delayMs = 0
+    for (const municipality of catalog.municipalities) {
+      await ctx.scheduler.runAfter(delayMs, internal.ingestion.refreshMunicipalityInternal, {
+        stateExternalId: stateId(municipality.EntidadFederativaId),
+        municipalityExternalId: municipalityId(municipality.MunicipioId),
+      })
+      delayMs += 750
+    }
+
+    await ctx.runMutation(internal.ingestion.recordDailyQueue, {
+      queuedMunicipalities: catalog.municipalities.length,
+      message: `Carga nacional encolada para ${catalog.municipalities.length} municipios.`,
+    })
+
+    return {
+      queuedMunicipalities: catalog.municipalities.length,
+    }
+  } catch (error) {
+    await ctx.runMutation(internal.ingestion.recordFailure, {
+      kind: 'daily_queue',
+      message: error instanceof Error ? error.message : 'Daily refresh queue failed',
     })
     throw error
   }

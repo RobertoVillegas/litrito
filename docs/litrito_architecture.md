@@ -69,6 +69,11 @@ Convex crons are scheduled at 00:15, 00:30, 01:00, and 02:00 UTC, matching
 Failures create `ingestionRuns` records and do not delete the last good current
 prices.
 
+On a fresh deployment, the UI can also call `bootstrapNationalRefresh` once when
+there are no price ingestion runs and no stations for the selected search. This
+queues all CNE municipalities in the background with a 30 minute throttle, so a
+new empty database starts filling without waiting for the 18:15 cron.
+
 The current implementation is aligned with the brief's main source decision:
 JSON by municipality is primary and XML is secondary. Remaining data hardening:
 
