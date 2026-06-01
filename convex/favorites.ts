@@ -59,3 +59,40 @@ export const toggle = mutation({
     return { favorited: true }
   },
 })
+
+export const set = mutation({
+  args: {
+    stationPermitNumber: v.string(),
+    favorited: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx)
+    const userId = String(user._id)
+    const existing = await ctx.db
+      .query('stationFavorites')
+      .withIndex('by_user_station', (q) =>
+        q
+          .eq('userId', userId)
+          .eq('stationPermitNumber', args.stationPermitNumber),
+      )
+      .unique()
+
+    if (args.favorited) {
+      if (!existing) {
+        await ctx.db.insert('stationFavorites', {
+          userId,
+          stationPermitNumber: args.stationPermitNumber,
+          createdAt: new Date().toISOString(),
+        })
+      }
+
+      return { favorited: true }
+    }
+
+    if (existing) {
+      await ctx.db.delete(existing._id)
+    }
+
+    return { favorited: false }
+  },
+})

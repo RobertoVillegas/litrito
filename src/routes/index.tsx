@@ -28,6 +28,8 @@ const FUEL_OPTIONS = [
   { value: 'duba', label: 'Diesel DUBA' },
 ] as const
 
+const LOCAL_FAVORITES_KEY = 'litrito:favorites:v1'
+
 type FuelType = (typeof FUEL_OPTIONS)[number]['value']
 
 type StateOption = {
@@ -59,11 +61,65 @@ type UserLocation = {
   longitude: number
 }
 
+function readLocalFavoritePermitNumbers(): string[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  try {
+    const rawFavorites = window.localStorage.getItem(LOCAL_FAVORITES_KEY)
+    const favorites = rawFavorites ? JSON.parse(rawFavorites) : []
+
+    if (!Array.isArray(favorites)) {
+      return []
+    }
+
+    return favorites.filter((favorite): favorite is string => {
+      return typeof favorite === 'string' && favorite.trim().length > 0
+    })
+  } catch {
+    return []
+  }
+}
+
+function writeLocalFavoritePermitNumbers(favorites: string[]) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(
+    LOCAL_FAVORITES_KEY,
+    JSON.stringify(Array.from(new Set(favorites))),
+  )
+}
+
+function updateFavoriteList(
+  favorites: string[],
+  permitNumber: string,
+  favorited: boolean,
+): string[] {
+  const favoriteSet = new Set(favorites)
+
+  if (favorited) {
+    favoriteSet.add(permitNumber)
+  } else {
+    favoriteSet.delete(permitNumber)
+  }
+
+  return Array.from(favoriteSet)
+}
+
 function Home() {
   const [stateExternalId, setStateExternalId] = useState('09')
   const [municipalityExternalId, setMunicipalityExternalId] = useState('')
   const [fuelType, setFuelType] = useState<FuelType>('regular')
   const [searchTerm, setSearchTerm] = useState('')
+  const [localFavoritePermitNumbers, setLocalFavoritePermitNumbers] = useState(
+    readLocalFavoritePermitNumbers,
+  )
+  const [syncedFavoriteUserId, setSyncedFavoriteUserId] = useState<
+    string | null
+  >(null)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [sortMode, setSortMode] = useState<'price' | 'distance'>('price')
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
@@ -92,7 +148,7 @@ function Home() {
 
   const refreshCatalog = useAction(api.ingestion.refreshCatalog)
   const refreshMunicipality = useAction(api.ingestion.refreshMunicipality)
-  const toggleFavorite = useMutation(api.favorites.toggle)
+  const setFavorite = useMutation(api.favorites.set)
 
   useEffect(() => {
     if (!states.length && !catalogRefreshing) {
@@ -112,6 +168,52 @@ function Home() {
     }
   }, [municipalities, municipalityExternalId])
 
+  useEffect(() => {
+    writeLocalFavoritePermitNumbers(localFavoritePermitNumbers)
+  }, [localFavoritePermitNumbers])
+
+  useEffect(() => {
+    const userId = session.data?.user?.id ?? null
+
+    if (!userId) {
+      setSyncedFavoriteUserId(null)
+      return
+    }
+
+    if (syncedFavoriteUserId === userId) {
+      return
+    }
+
+    const remoteFavorites = new Set(favoritePermitNumbers)
+    const unsyncedFavorites = localFavoritePermitNumbers.filter(
+      (permitNumber) => !remoteFavorites.has(permitNumber),
+    )
+
+    if (!unsyncedFavorites.length) {
+      setSyncedFavoriteUserId(userId)
+      return
+    }
+
+    Promise.all(
+      unsyncedFavorites.map((stationPermitNumber) =>
+        setFavorite({ stationPermitNumber, favorited: true }),
+      ),
+    )
+      .then(() => {
+        setSyncedFavoriteUserId(userId)
+        setNotice('Favoritas locales sincronizadas con tu cuenta.')
+      })
+      .catch(() => {
+        setNotice('Tus favoritas locales siguen guardadas en este navegador.')
+      })
+  }, [
+    favoritePermitNumbers,
+    localFavoritePermitNumbers,
+    session.data?.user?.id,
+    setFavorite,
+    syncedFavoriteUserId,
+  ])
+
   const selectedState = useMemo(
     () => states.find((state) => state.externalId === stateExternalId),
     [stateExternalId, states],
@@ -128,8 +230,8 @@ function Home() {
   const bestPrice = rows[0]?.highlightedPrice
   const updatedAt = latestRun?.finishedAt ?? latestRun?.startedAt
   const favoriteSet = useMemo(
-    () => new Set(favoritePermitNumbers),
-    [favoritePermitNumbers],
+    () => new Set([...favoritePermitNumbers, ...localFavoritePermitNumbers]),
+    [favoritePermitNumbers, localFavoritePermitNumbers],
   )
   const visibleRows = useMemo(() => {
     const filteredRows = showFavoritesOnly
@@ -197,12 +299,29 @@ function Home() {
   }
 
   async function handleToggleFavorite(permitNumber: string) {
+    const favorited = !favoriteSet.has(permitNumber)
+
+    setLocalFavoritePermitNumbers((currentFavorites) =>
+      updateFavoriteList(currentFavorites, permitNumber, favorited),
+    )
+
     if (!session.data?.user) {
-      setNotice('Inicia sesion para guardar estaciones favoritas.')
+      setNotice(
+        favorited
+          ? 'Guardada en este navegador. Inicia sesion para sincronizarla.'
+          : 'Quitada de tus favoritas locales.',
+      )
       return
     }
 
-    await toggleFavorite({ stationPermitNumber: permitNumber })
+    try {
+      await setFavorite({ stationPermitNumber: permitNumber, favorited })
+    } catch {
+      setNotice('No se pudo sincronizar con tu cuenta, pero quedo local.')
+      return
+    }
+
+    setNotice(favorited ? 'Favorita guardada.' : 'Favorita removida.')
   }
 
   return (

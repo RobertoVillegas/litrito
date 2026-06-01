@@ -14,8 +14,34 @@ does not include a separate Hono API or PostgreSQL service.
 
 The Reporte Diario API is the best source for the filterable list because it
 includes permit number, station name, address, product, subproduct, price,
-state id, and municipality id. The XML `places` file is used to enrich stations
-with coordinates through `cre_id`, which matches the permit number.
+state id, and municipality id. This JSON API is Litrito's primary source of
+truth.
+
+The official XML `prices` file only contains `place_id`, fuel type, and price.
+It is useful as a heartbeat, audit snapshot, or fallback comparison, but it is
+not enough to build Litrito's station search because it does not include permit
+number, name, address, state, municipality, or coordinates.
+
+The XML `places` file is optional enrichment. When available, it can add
+coordinates through `cre_id`, which appears to match the station permit number.
+Litrito must not rely on `place_id` as the station key.
+
+## CNE mini-spec
+
+Use these request rules for the internal CNE client:
+
+- Call municipality prices with `municipioId` padded to three digits, for
+  example `014`, while storing ids internally as strings to preserve padding.
+- Send conservative server-side headers: `Accept: application/json`,
+  `User-Agent: Litrito/1.0`, `Origin: https://www.cne.gob.mx`, and
+  `Referer: https://www.cne.gob.mx/`.
+- Treat the CNE envelope shape as `{ Success, Errors, Value }`.
+- Map `Numero` to `stations.permitNumber`.
+- Map `Nombre`, `Direccion`, `EntidadFederativaId`, and `MunicipioId` to the
+  station record.
+- Map `Producto`, `SubProducto`, and `PrecioVigente` to current and historical
+  fuel prices.
+- Normalize fuels to `regular`, `premium`, `diesel`, `duba`, or `unknown`.
 
 ## Convex model
 
@@ -26,6 +52,8 @@ with coordinates through `cre_id`, which matches the permit number.
 - `fuelPricesHistory`: append-only price history per ingestion run.
 - `ingestionRuns`: status, timing, source URL, and counts for every fetch.
 - `rawSnapshots`: metadata and sample payloads for official XML snapshots.
+- `stationFavorites`: authenticated user favorites. Anonymous favorites live in
+  browser `localStorage` and sync to this table after sign-in.
 
 ## Ingestion flow
 
@@ -41,6 +69,17 @@ Convex crons are scheduled at 00:15, 00:30, 01:00, and 02:00 UTC, matching
 Failures create `ingestionRuns` records and do not delete the last good current
 prices.
 
+The current implementation is aligned with the brief's main source decision:
+JSON by municipality is primary and XML is secondary. Remaining data hardening:
+
+- Add a dedicated `ingestionErrors` table for per-municipality failures.
+- Promote national daily runs from `running/success/failed/skipped` to include
+  a `partial_success` summary when some municipalities fail but valid data was
+  ingested.
+- Add explicit request retries with backoff per municipality.
+- Replace the current staggered Convex scheduling with a bounded worker queue if
+  we need true concurrency control around five active requests.
+
 ## UI flow
 
 The `/` route is the product screen:
@@ -50,11 +89,15 @@ The `/` route is the product screen:
 - fuel segmented control,
 - station search by name, permit, or address,
 - price-sorted station list,
-- coordinate map from CNE `places` data when available.
+- coordinate map from CNE `places` data when available,
+- local favorites for anonymous users and Convex-backed favorites for signed-in
+  users.
 
 The current map is dependency-free and projects points into the selected result
 bounds. A later production map should use MapLibre or another tile renderer once
-we decide on tile provider, marker clustering, and geolocation permissions.
+we decide on tile provider, marker clustering, and geolocation permissions. The
+map is not required for the data MVP; search by state, municipality, station,
+fuel, and price should continue working without coordinates.
 
 ## Notes from the guides
 
