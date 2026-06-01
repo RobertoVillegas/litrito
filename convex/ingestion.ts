@@ -61,6 +61,29 @@ type CnePlace = {
   longitude: number
 }
 
+type CatalogRefreshResult = {
+  states: number
+  municipalities: number
+}
+
+type MunicipalityRefreshResult = {
+  runId: unknown
+  recordsWritten: number
+}
+
+type SnapshotResult = {
+  runId: unknown
+}
+
+type PlacesSnapshotResult = {
+  runId: unknown
+  places: number
+}
+
+type QueueDailyRefreshResult = {
+  queuedMunicipalities: number
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     headers: {
@@ -477,7 +500,7 @@ export const applyPlaces = internalMutation({
 
 export const refreshCatalog = action({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<CatalogRefreshResult> => {
     try {
       const catalog = await fetchCatalog()
       return await ctx.runMutation(internal.ingestion.applyCatalog, catalog)
@@ -496,7 +519,7 @@ export const refreshMunicipality = action({
     stateExternalId: v.string(),
     municipalityExternalId: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<MunicipalityRefreshResult> => {
     return await refreshMunicipalityData(ctx, args.stateExternalId, args.municipalityExternalId)
   },
 })
@@ -506,14 +529,14 @@ export const refreshMunicipalityInternal = internalAction({
     stateExternalId: v.string(),
     municipalityExternalId: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<MunicipalityRefreshResult> => {
     return await refreshMunicipalityData(ctx, args.stateExternalId, args.municipalityExternalId)
   },
 })
 
 export const captureXmlSnapshot = internalAction({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<SnapshotResult> => {
     try {
       const response = await fetch(CNE_XML_URL, {
         headers: {
@@ -551,7 +574,7 @@ export const captureXmlSnapshot = internalAction({
 
 export const capturePlacesSnapshot = internalAction({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<PlacesSnapshotResult> => {
     try {
       const response = await fetch(CNE_PLACES_URL, {
         headers: {
@@ -585,7 +608,7 @@ export const capturePlacesSnapshot = internalAction({
 
 export const queueDailyRefresh = internalAction({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<QueueDailyRefreshResult> => {
     try {
       const catalog = await fetchCatalog()
       await ctx.runMutation(internal.ingestion.applyCatalog, catalog)
@@ -618,7 +641,7 @@ async function refreshMunicipalityData(
   ctx: ActionCtx,
   rawStateExternalId: string,
   rawMunicipalityExternalId: string,
-) {
+): Promise<MunicipalityRefreshResult> {
   const stateExternalId = stateId(rawStateExternalId)
   const municipalityExternalId = municipalityId(rawMunicipalityExternalId)
   const sourceUrl = `${CNE_REPORT_URL}?entidadId=${stateExternalId}&municipioId=${municipalityExternalId}`

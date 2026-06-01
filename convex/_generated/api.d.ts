@@ -8,29 +8,50 @@
  * @module
  */
 
+import type * as catalog from "../catalog.js";
+import type * as crons from "../crons.js";
+import type * as ingestion from "../ingestion.js";
+import type * as normalization from "../normalization.js";
+import type * as prices from "../prices.js";
+
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
-} from 'convex/server'
-import type * as todos from '../todos.js'
+} from "convex/server";
+
+declare const fullApi: ApiFromModules<{
+  catalog: typeof catalog;
+  crons: typeof crons;
+  ingestion: typeof ingestion;
+  normalization: typeof normalization;
+  prices: typeof prices;
+}>;
 
 /**
- * A utility for referencing Convex functions in your app's API.
+ * A utility for referencing Convex functions in your app's public API.
  *
  * Usage:
  * ```js
  * const myFunctionReference = api.myModule.myFunction;
  * ```
  */
-declare const fullApi: ApiFromModules<{
-  todos: typeof todos
-}>
 export declare const api: FilterApi<
   typeof fullApi,
-  FunctionReference<any, 'public'>
->
+  FunctionReference<any, "public">
+>;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
 export declare const internal: FilterApi<
   typeof fullApi,
-  FunctionReference<any, 'internal'>
->
+  FunctionReference<any, "internal">
+>;
+
+export declare const components: {};
