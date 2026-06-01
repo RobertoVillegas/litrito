@@ -45,10 +45,35 @@ This project uses Nitro as a generic server adapter, so it can run on any Node-c
 
 ```bash
 npm run build
-node dist/server/index.mjs
+node .output/server/index.mjs
 ```
 
-The build output is a self-contained Node server. To deploy, push the `dist/` directory to your host (Render, Fly.io, your own VPS, etc.) and run the server command above.
+The build output is a self-contained Node server. To deploy, push the project to
+your host (Render, Fly.io, your own VPS, etc.), run the build command there, and
+start `.output/server/index.mjs`.
+
+Production environment variables:
+
+```txt
+VITE_CONVEX_URL=https://<prod-deployment>.convex.cloud
+VITE_CONVEX_SITE_URL=https://<prod-deployment>.convex.site
+BETTER_AUTH_URL=https://<your-app-domain>
+BETTER_AUTH_SECRET=<generated-secret>
+SITE_URL=https://<your-app-domain>
+```
+
+Set `BETTER_AUTH_SECRET` and `SITE_URL` in the Convex deployment too:
+
+```bash
+bunx --bun convex env set BETTER_AUTH_SECRET <generated-secret>
+bunx --bun convex env set SITE_URL https://<your-app-domain>
+```
+
+Deploy Convex functions and crons with:
+
+```bash
+bunx --bun convex deploy
+```
 
 For host-specific presets (Vercel, Netlify, Cloudflare, AWS Lambda, etc.) and tuning, see https://v3.nitro.build/deploy.
 
