@@ -16,6 +16,7 @@ export default defineSchema({
     .index('by_external_id', ['stateExternalId', 'externalId'])
     .index('by_state', ['stateExternalId']),
   stations: defineTable({
+    placeId: v.optional(v.string()),
     permitNumber: v.string(),
     name: v.string(),
     address: v.string(),
@@ -23,6 +24,8 @@ export default defineSchema({
     municipalityExternalId: v.string(),
     stateName: v.optional(v.string()),
     municipalityName: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
     source: v.literal('CNE'),
     firstSeenAt: v.string(),
     lastSeenAt: v.string(),
@@ -108,7 +111,7 @@ export default defineSchema({
     .index('by_kind_started', ['kind', 'startedAt'])
     .index('by_location', ['stateExternalId', 'municipalityExternalId']),
   rawSnapshots: defineTable({
-    kind: v.literal('cne_prices_xml'),
+    kind: v.union(v.literal('cne_prices_xml'), v.literal('cne_places_xml')),
     sourceUrl: v.string(),
     fetchedAt: v.string(),
     contentLength: v.number(),

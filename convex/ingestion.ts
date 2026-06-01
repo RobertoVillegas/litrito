@@ -17,6 +17,7 @@ import {
 const CNE_CATALOG_URL = 'https://api-catalogo.cne.gob.mx/api/utiles'
 const CNE_REPORT_URL = 'https://api-reportediario.cne.gob.mx/api/EstacionServicio/Petroliferos'
 const CNE_XML_URL = 'https://publicacionexterna.azurewebsites.net/publicaciones/prices'
+const CNE_PLACES_URL = 'https://publicacionexterna.azurewebsites.net/publicaciones/places'
 
 type CneState = {
   EntidadFederativaId: string | number
@@ -50,6 +51,14 @@ type MunicipalityPrice = {
   price: number
   stateExternalId: string
   municipalityExternalId: string
+}
+
+type CnePlace = {
+  placeId: string
+  permitNumber: string
+  name: string
+  latitude: number
+  longitude: number
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -115,6 +124,33 @@ function normalizePriceRows(rows: CnePrice[]): MunicipalityPrice[] {
   }
 
   return validRows
+}
+
+function parsePlaceRows(xml: string): CnePlace[] {
+  const places: CnePlace[] = []
+  const placeMatches = xml.matchAll(/<place\s+place_id="([^"]+)">([\s\S]*?)<\/place>/g)
+
+  for (const match of placeMatches) {
+    const body = match[2] ?? ''
+    const permitNumber = normalizeText(body.match(/<cre_id>([\s\S]*?)<\/cre_id>/)?.[1])
+    const name = normalizeText(body.match(/<name>([\s\S]*?)<\/name>/)?.[1])
+    const longitude = Number(body.match(/<x>([\s\S]*?)<\/x>/)?.[1])
+    const latitude = Number(body.match(/<y>([\s\S]*?)<\/y>/)?.[1])
+
+    if (!permitNumber || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      continue
+    }
+
+    places.push({
+      placeId: match[1] ?? '',
+      permitNumber,
+      name,
+      latitude,
+      longitude,
+    })
+  }
+
+  return places
 }
 
 export const applyCatalog = internalMutation({
@@ -335,6 +371,7 @@ export const recordFailure = internalMutation({
 
 export const recordXmlSnapshot = internalMutation({
   args: {
+    kind: v.union(v.literal('cne_prices_xml'), v.literal('cne_places_xml')),
     sourceUrl: v.string(),
     contentLength: v.number(),
     placeCount: v.number(),
@@ -359,7 +396,7 @@ export const recordXmlSnapshot = internalMutation({
 
     if (args.placeCount > 0 && args.priceCount > 0) {
       await ctx.db.insert('rawSnapshots', {
-        kind: 'cne_prices_xml',
+        kind: args.kind,
         sourceUrl: args.sourceUrl,
         fetchedAt: now,
         contentLength: args.contentLength,
@@ -371,6 +408,70 @@ export const recordXmlSnapshot = internalMutation({
     }
 
     return { runId }
+  },
+})
+
+export const applyPlaces = internalMutation({
+  args: {
+    sourceUrl: v.string(),
+    contentLength: v.number(),
+    sample: v.string(),
+    places: v.array(
+      v.object({
+        placeId: v.string(),
+        permitNumber: v.string(),
+        name: v.string(),
+        latitude: v.number(),
+        longitude: v.number(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString()
+    const runId = await ctx.db.insert('ingestionRuns', {
+      kind: 'xml_snapshot',
+      status: args.places.length > 0 ? 'success' : 'skipped',
+      startedAt: now,
+      finishedAt: now,
+      sourceUrl: args.sourceUrl,
+      recordsRead: args.places.length,
+      recordsWritten: args.places.length,
+      message:
+        args.places.length > 0
+          ? `Se validaron ${args.places.length} ubicaciones.`
+          : 'El XML de ubicaciones no contiene places validos.',
+    })
+
+    if (args.places.length > 0) {
+      await ctx.db.insert('rawSnapshots', {
+        kind: 'cne_places_xml',
+        sourceUrl: args.sourceUrl,
+        fetchedAt: now,
+        contentLength: args.contentLength,
+        placeCount: args.places.length,
+        priceCount: 0,
+        sample: args.sample,
+        runId,
+      })
+    }
+
+    for (const place of args.places) {
+      const station = await ctx.db
+        .query('stations')
+        .withIndex('by_permit', (q) => q.eq('permitNumber', place.permitNumber))
+        .unique()
+
+      if (station) {
+        await ctx.db.patch(station._id, {
+          placeId: place.placeId,
+          latitude: place.latitude,
+          longitude: place.longitude,
+          name: station.name || place.name,
+        })
+      }
+    }
+
+    return { runId, places: args.places.length }
   },
 })
 
@@ -431,6 +532,7 @@ export const captureXmlSnapshot = internalAction({
 
       return await ctx.runMutation(internal.ingestion.recordXmlSnapshot, {
         sourceUrl: CNE_XML_URL,
+        kind: 'cne_prices_xml',
         contentLength: xml.length,
         placeCount,
         priceCount,
@@ -447,6 +549,40 @@ export const captureXmlSnapshot = internalAction({
   },
 })
 
+export const capturePlacesSnapshot = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      const response = await fetch(CNE_PLACES_URL, {
+        headers: {
+          accept: 'application/xml,text/xml,*/*',
+          'user-agent': 'Litrito/0.1 (+https://cne.gob.mx)',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Places request failed: ${response.status} ${response.statusText}`)
+      }
+
+      const xml = await response.text()
+
+      return await ctx.runMutation(internal.ingestion.applyPlaces, {
+        sourceUrl: CNE_PLACES_URL,
+        contentLength: xml.length,
+        sample: xml.slice(0, 1800),
+        places: parsePlaceRows(xml),
+      })
+    } catch (error) {
+      await ctx.runMutation(internal.ingestion.recordFailure, {
+        kind: 'xml_snapshot',
+        sourceUrl: CNE_PLACES_URL,
+        message: error instanceof Error ? error.message : 'Places snapshot failed',
+      })
+      throw error
+    }
+  },
+})
+
 export const queueDailyRefresh = internalAction({
   args: {},
   handler: async (ctx) => {
@@ -454,6 +590,7 @@ export const queueDailyRefresh = internalAction({
       const catalog = await fetchCatalog()
       await ctx.runMutation(internal.ingestion.applyCatalog, catalog)
       await ctx.scheduler.runAfter(0, internal.ingestion.captureXmlSnapshot, {})
+      await ctx.scheduler.runAfter(0, internal.ingestion.capturePlacesSnapshot, {})
 
       let delayMs = 0
       for (const municipality of catalog.municipalities) {

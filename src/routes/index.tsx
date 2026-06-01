@@ -41,6 +41,8 @@ type StationRow = {
     address: string
     municipalityName?: string
     stateName?: string
+    latitude?: number
+    longitude?: number
   }
   prices: Partial<Record<FuelType | 'unknown', { price: number }>>
   highlightedPrice: number | null
@@ -288,6 +290,8 @@ function Home() {
         ) : null}
 
         <div className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <StationMap rows={rows} fuelType={fuelType} />
+
           <div className="grid grid-cols-[1fr_120px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase text-slate-500 sm:grid-cols-[1.2fr_1fr_120px_120px_120px]">
             <div>Estacion</div>
             <div className="hidden sm:block">Ubicacion</div>
@@ -345,6 +349,83 @@ function Home() {
         </div>
       </section>
     </main>
+  )
+}
+
+function StationMap({
+  rows,
+  fuelType,
+}: {
+  rows: StationRow[]
+  fuelType: FuelType
+}) {
+  const points = rows
+    .filter(
+      (row) =>
+        typeof row.station.latitude === 'number' &&
+        typeof row.station.longitude === 'number',
+    )
+    .slice(0, 80)
+
+  if (!points.length) {
+    return (
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-black text-slate-950">Mapa</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Actualiza ubicaciones con el XML `places` de CNE para ver
+              estaciones en mapa.
+            </p>
+          </div>
+          <MapPin className="h-5 w-5 text-slate-400" />
+        </div>
+      </div>
+    )
+  }
+
+  const latitudes = points.map((row) => row.station.latitude as number)
+  const longitudes = points.map((row) => row.station.longitude as number)
+  const minLat = Math.min(...latitudes)
+  const maxLat = Math.max(...latitudes)
+  const minLon = Math.min(...longitudes)
+  const maxLon = Math.max(...longitudes)
+  const latSpan = Math.max(maxLat - minLat, 0.04)
+  const lonSpan = Math.max(maxLon - minLon, 0.04)
+
+  return (
+    <div className="border-b border-slate-200 bg-slate-50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-black text-slate-950">Mapa</h3>
+          <p className="mt-1 text-xs font-semibold text-slate-500">
+            {points.length} estaciones con coordenadas CNE
+          </p>
+        </div>
+        <MapPin className="h-5 w-5 text-emerald-700" />
+      </div>
+      <div className="relative h-72 overflow-hidden rounded-md border border-slate-200 bg-[linear-gradient(90deg,#e2e8f0_1px,transparent_1px),linear-gradient(#e2e8f0_1px,transparent_1px)] bg-[size:36px_36px]">
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-white to-sky-50" />
+        {points.map((row) => {
+          const latitude = row.station.latitude as number
+          const longitude = row.station.longitude as number
+          const left = 8 + ((longitude - minLon) / lonSpan) * 84
+          const top = 8 + ((maxLat - latitude) / latSpan) * 84
+          const price = row.prices[fuelType]?.price ?? row.highlightedPrice
+
+          return (
+            <div
+              key={row.station.permitNumber}
+              className="group absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+              style={{ left: `${left}%`, top: `${top}%` }}
+              title={`${row.station.name} ${price ? formatCurrency(price) : ''}`}
+            >
+              <div className="h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-600 shadow-md shadow-slate-400/40 transition group-hover:scale-125" />
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
