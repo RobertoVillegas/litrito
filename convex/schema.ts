@@ -92,6 +92,7 @@ export default defineSchema({
       v.literal('municipality_prices'),
       v.literal('xml_snapshot'),
       v.literal('daily_queue'),
+      v.literal('geocoding'),
     ),
     status: v.union(
       v.literal('running'),

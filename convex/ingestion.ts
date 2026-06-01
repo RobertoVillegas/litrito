@@ -4,6 +4,7 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  query,
   type ActionCtx,
 } from './_generated/server'
 import { internal } from './_generated/api'
@@ -19,6 +20,9 @@ const CNE_CATALOG_URL = 'https://api-catalogo.cne.gob.mx/api/utiles'
 const CNE_REPORT_URL = 'https://api-reportediario.cne.gob.mx/api/EstacionServicio/Petroliferos'
 const CNE_XML_URL = 'https://publicacionexterna.azurewebsites.net/publicaciones/prices'
 const CNE_PLACES_URL = 'https://publicacionexterna.azurewebsites.net/publicaciones/places'
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
+const NOMINATIM_MIN_INTERVAL_MS = 1100
+const GEOCODE_BATCH_SIZE = 300
 
 type CneState = {
   EntidadFederativaId: string | number
@@ -29,6 +33,7 @@ type CneMunicipality = {
   MunicipioId: string | number
   EntidadFederativaId: string | number
   Nombre: string
+  EntidadFederativa?: { EntidadFederativaId: string | number; Nombre: string }
 }
 
 type CnePrice = {
@@ -91,7 +96,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     headers: {
       accept: 'application/json',
-      'user-agent': 'Litrito/0.1 (+https://cne.gob.mx)',
+      'user-agent': 'Litrito/1.0 (+https://litrito.mx)',
     },
   })
 
@@ -102,24 +107,56 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await response.json()) as T
 }
 
+type CneEnvelope<T> = { Success: boolean; Errors: unknown; Value: T }
+
+function isCneEnvelope<T>(body: unknown): body is CneEnvelope<T> {
+  return typeof body === 'object' && body !== null && 'Success' in body && 'Value' in body
+}
+
+function unwrapEnvelope<T>(body: unknown, context: string): T {
+  if (Array.isArray(body)) {
+    return body as T
+  }
+  if (isCneEnvelope<T>(body)) {
+    if (!body.Success) {
+      throw new Error(`CNE reportó error (${context}): ${String(body.Errors ?? 'desconocido')}`)
+    }
+    return body.Value
+  }
+  throw new Error(`CNE envelope inválido (${context})`)
+}
+
 async function fetchCatalog() {
-  const states = await fetchJson<CneState[]>(`${CNE_CATALOG_URL}/entidadesfederativas`)
+  const statesBody = await fetchJson<unknown>(
+    `${CNE_CATALOG_URL}/entidadesfederativas`,
+  )
+  const states = unwrapEnvelope<CneState[]>(statesBody, 'entidadesfederativas')
   const municipalities: CneMunicipality[] = []
 
   for (const state of states) {
     const stateExternalId = stateId(state.EntidadFederativaId)
-    const stateMunicipalities = await fetchJson<CneMunicipality[]>(
+    const stateMunicipalitiesBody = await fetchJson<unknown>(
       `${CNE_CATALOG_URL}/municipios?EntidadFederativaId=${stateExternalId}`,
     )
-    municipalities.push(...stateMunicipalities)
+    const stateMunicipalities = unwrapEnvelope<CneMunicipality[]>(
+      stateMunicipalitiesBody,
+      `municipios?EntidadFederativaId=${stateExternalId}`,
+    )
+    for (const { EntidadFederativa: _ignored, ...municipality } of stateMunicipalities) {
+      municipalities.push(municipality)
+    }
   }
 
   return { states, municipalities }
 }
 
-function normalizePriceRows(rows: CnePrice[]): MunicipalityPrice[] {
+function normalizePriceRows(
+  rows: CnePrice[],
+  expected: { stateExternalId: string; municipalityExternalId: string },
+): { rows: MunicipalityPrice[]; mismatches: number } {
   const seen = new Set<string>()
   const validRows: MunicipalityPrice[] = []
+  let mismatches = 0
 
   for (const row of rows) {
     const price = Number(row.PrecioVigente)
@@ -130,6 +167,14 @@ function normalizePriceRows(rows: CnePrice[]): MunicipalityPrice[] {
     const municipalityExternalId = municipalityId(row.MunicipioId)
     const fuel = normalizeFuelType(product, subproduct)
     const duplicateKey = `${permitNumber}:${fuel}:${price}`
+
+    if (
+      stateExternalId !== expected.stateExternalId ||
+      municipalityExternalId !== expected.municipalityExternalId
+    ) {
+      mismatches += 1
+      continue
+    }
 
     if (!permitNumber || !Number.isFinite(price) || price <= 0 || seen.has(duplicateKey)) {
       continue
@@ -149,7 +194,7 @@ function normalizePriceRows(rows: CnePrice[]): MunicipalityPrice[] {
     })
   }
 
-  return validRows
+  return { rows: validRows, mismatches }
 }
 
 function parsePlaceRows(xml: string): CnePlace[] {
@@ -160,8 +205,9 @@ function parsePlaceRows(xml: string): CnePlace[] {
     const body = match[2] ?? ''
     const permitNumber = normalizeText(body.match(/<cre_id>([\s\S]*?)<\/cre_id>/)?.[1])
     const name = normalizeText(body.match(/<name>([\s\S]*?)<\/name>/)?.[1])
-    const longitude = Number(body.match(/<x>([\s\S]*?)<\/x>/)?.[1])
-    const latitude = Number(body.match(/<y>([\s\S]*?)<\/y>/)?.[1])
+    const locationBlock = body.match(/<location>([\s\S]*?)<\/location>/)?.[1] ?? body
+    const longitude = Number(locationBlock.match(/<x>([\s\S]*?)<\/x>/)?.[1])
+    const latitude = Number(locationBlock.match(/<y>([\s\S]*?)<\/y>/)?.[1])
 
     if (!permitNumber || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       continue
@@ -198,46 +244,50 @@ export const applyCatalog = internalMutation({
   handler: async (ctx, args) => {
     const updatedAt = new Date().toISOString()
 
+    const existingStates = await ctx.db.query('states').collect()
+    const stateIdByExternalId = new Map(existingStates.map((row) => [row.externalId, row._id]))
+
     for (const state of args.states) {
       const externalId = stateId(state.EntidadFederativaId)
-      const existing = await ctx.db
-        .query('states')
-        .withIndex('by_external_id', (q) => q.eq('externalId', externalId))
-        .unique()
-
       const value = { externalId, name: normalizeText(state.Nombre), updatedAt }
-      if (existing) {
-        await ctx.db.patch(existing._id, value)
+      const existingId = stateIdByExternalId.get(externalId)
+      if (existingId) {
+        await ctx.db.patch(existingId, value)
       } else {
-        await ctx.db.insert('states', value)
+        const newId = await ctx.db.insert('states', value)
+        stateIdByExternalId.set(externalId, newId)
       }
     }
 
+    const existingMunicipalities = await ctx.db.query('municipalities').collect()
+    const municipalityKey = (stateExternalId: string, externalId: string) =>
+      `${stateExternalId}|${externalId}`
+    const municipalityIdByKey = new Map(
+      existingMunicipalities.map((row) => [municipalityKey(row.stateExternalId, row.externalId), row._id]),
+    )
+
+    let written = 0
     for (const municipality of args.municipalities) {
       const externalId = municipalityId(municipality.MunicipioId)
       const stateExternalId = stateId(municipality.EntidadFederativaId)
-      const existing = await ctx.db
-        .query('municipalities')
-        .withIndex('by_external_id', (q) =>
-          q.eq('stateExternalId', stateExternalId).eq('externalId', externalId),
-        )
-        .unique()
-
       const value = {
         externalId,
         stateExternalId,
         name: normalizeText(municipality.Nombre),
         updatedAt,
       }
-
-      if (existing) {
-        await ctx.db.patch(existing._id, value)
+      const key = municipalityKey(stateExternalId, externalId)
+      const existingId = municipalityIdByKey.get(key)
+      if (existingId) {
+        await ctx.db.patch(existingId, value)
       } else {
-        await ctx.db.insert('municipalities', value)
+        const newId = await ctx.db.insert('municipalities', value)
+        municipalityIdByKey.set(key, newId)
       }
+      written += 1
     }
 
-    return { states: args.states.length, municipalities: args.municipalities.length }
+    return { states: args.states.length, municipalities: written }
   },
 })
 
@@ -514,23 +564,26 @@ export const applyPlaces = internalMutation({
       })
     }
 
-    for (const place of args.places) {
-      const station = await ctx.db
-        .query('stations')
-        .withIndex('by_permit', (q) => q.eq('permitNumber', place.permitNumber))
-        .unique()
+    const allStations = await ctx.db.query('stations').collect()
+    const stationIdByPermit = new Map(allStations.map((s) => [s.permitNumber, s._id]))
+    const stationById = new Map(allStations.map((s) => [s._id, s]))
+    let matched = 0
 
-      if (station) {
-        await ctx.db.patch(station._id, {
+    for (const place of args.places) {
+      const stationId = stationIdByPermit.get(place.permitNumber)
+      if (stationId) {
+        const existing = stationById.get(stationId)
+        await ctx.db.patch(stationId, {
           placeId: place.placeId,
           latitude: place.latitude,
           longitude: place.longitude,
-          name: station.name || place.name,
+          name: existing?.name || place.name,
         })
+        matched += 1
       }
     }
 
-    return { runId, places: args.places.length }
+    return { runId, places: matched }
   },
 })
 
@@ -615,7 +668,9 @@ export const capturePlacesSnapshot = internalAction({
       const response = await fetch(CNE_PLACES_URL, {
         headers: {
           accept: 'application/xml,text/xml,*/*',
-          'user-agent': 'Litrito/0.1 (+https://cne.gob.mx)',
+          'user-agent': 'Litrito/1.0 (+https://litrito.mx)',
+          origin: 'https://www.cne.gob.mx',
+          referer: 'https://www.cne.gob.mx/',
         },
       })
 
@@ -624,13 +679,22 @@ export const capturePlacesSnapshot = internalAction({
       }
 
       const xml = await response.text()
+      const allPlaces = parsePlaceRows(xml)
 
-      return await ctx.runMutation(internal.ingestion.applyPlaces, {
-        sourceUrl: CNE_PLACES_URL,
-        contentLength: xml.length,
-        sample: xml.slice(0, 1800),
-        places: parsePlaceRows(xml),
-      })
+      let firstRunId: unknown = null
+      const CHUNK = 5000
+      for (let i = 0; i < allPlaces.length; i += CHUNK) {
+        const slice = allPlaces.slice(i, i + CHUNK)
+        const result = await ctx.runMutation(internal.ingestion.applyPlaces, {
+          sourceUrl: CNE_PLACES_URL,
+          contentLength: xml.length,
+          sample: xml.slice(0, 1800),
+          places: slice,
+        })
+        if (firstRunId === null) firstRunId = result.runId
+      }
+
+      return { runId: firstRunId, places: allPlaces.length }
     } catch (error) {
       await ctx.runMutation(internal.ingestion.recordFailure, {
         kind: 'xml_snapshot',
@@ -639,6 +703,13 @@ export const capturePlacesSnapshot = internalAction({
       })
       throw error
     }
+  },
+})
+
+export const refreshPlaces = action({
+  args: {},
+  handler: async (ctx): Promise<PlacesSnapshotResult> => {
+    return await ctx.runAction(internal.ingestion.capturePlacesSnapshot, {})
   },
 })
 
@@ -682,19 +753,24 @@ async function refreshMunicipalityData(
   const sourceUrl = `${CNE_REPORT_URL}?entidadId=${stateExternalId}&municipioId=${municipalityExternalId}`
 
   try {
-    const response = await fetchJson<{ Success: boolean; Errors: unknown; Value: CnePrice[] }>(
-      sourceUrl,
-    )
+    const response = await fetchJson<unknown>(sourceUrl)
+    const value = unwrapEnvelope<CnePrice[]>(response, sourceUrl)
+    const { rows, mismatches } = normalizePriceRows(value ?? [], {
+      stateExternalId,
+      municipalityExternalId,
+    })
 
-    if (!response.Success) {
-      throw new Error(`CNE report error: ${String(response.Errors ?? 'unknown error')}`)
+    if (mismatches > 0) {
+      console.warn(
+        `[ingestion] ${mismatches} filas con EntidadFederativaId/MunicipioId no coincidente en ${sourceUrl}`,
+      )
     }
 
     return await ctx.runMutation(internal.ingestion.applyMunicipalityPrices, {
       stateExternalId,
       municipalityExternalId,
       sourceUrl,
-      records: normalizePriceRows(response.Value ?? []),
+      records: rows,
     })
   } catch (error) {
     await ctx.runMutation(internal.ingestion.recordFailure, {
@@ -740,3 +816,221 @@ async function queueNationalRefresh(ctx: ActionCtx): Promise<QueueDailyRefreshRe
     throw error
   }
 }
+
+type GeocodeResult = {
+  processed: number
+  geocoded: number
+  failed: number
+  remaining: number
+  done: boolean
+}
+
+type NominatimHit = { lat: string; lon: string; display_name?: string }
+
+async function geocodeWithNominatim(query: string): Promise<NominatimHit | null> {
+  const url = new URL(NOMINATIM_URL)
+  url.searchParams.set('q', query)
+  url.searchParams.set('format', 'jsonv2')
+  url.searchParams.set('limit', '1')
+  url.searchParams.set('countrycodes', 'mx')
+
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Litrito/1.0 (+https://litrito.mx; geocoding)',
+      referer: 'https://litrito.mx/',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Nominatim request failed: ${response.status} ${response.statusText}`)
+  }
+
+  const hits = (await response.json()) as NominatimHit[]
+  return hits[0] ?? null
+}
+
+function buildGeocodeQuery(input: {
+  address?: string | null
+  municipalityName?: string | null
+  stateName?: string | null
+}): string | null {
+  const parts = [input.address, input.municipalityName, input.stateName, 'México']
+    .map((part) => normalizeText(part ?? ''))
+    .filter(Boolean)
+  if (parts.length <= 1) return null
+  return parts.join(', ')
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export const listStationsNeedingGeocode = internalQuery({
+  args: { limit: v.number() },
+  handler: async (ctx, args) => {
+    const candidates = await ctx.db
+      .query('stations')
+      .filter((q) => q.eq(q.field('latitude'), undefined))
+      .take(args.limit)
+    return candidates.map((station) => ({
+      _id: station._id,
+      permitNumber: station.permitNumber,
+      address: station.address,
+      stateName: station.stateName ?? null,
+      municipalityName: station.municipalityName ?? null,
+    }))
+  },
+})
+
+export const patchStationCoordinates = internalMutation({
+  args: {
+    stationId: v.id('stations'),
+    latitude: v.number(),
+    longitude: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.stationId, {
+      latitude: args.latitude,
+      longitude: args.longitude,
+    })
+  },
+})
+
+export const recordGeocodingRun = internalMutation({
+  args: {
+    status: v.union(v.literal('running'), v.literal('success'), v.literal('failed'), v.literal('skipped')),
+    processed: v.number(),
+    geocoded: v.number(),
+    failed: v.number(),
+    message: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = new Date().toISOString()
+    return await ctx.db.insert('ingestionRuns', {
+      kind: 'geocoding',
+      status: args.status,
+      startedAt: now,
+      finishedAt: args.status === 'running' ? undefined : now,
+      recordsRead: args.processed,
+      recordsWritten: args.geocoded,
+      message:
+        args.message ??
+        `Geocoding: ${args.geocoded}/${args.processed} exitosos, ${args.failed} fallidos.`,
+    })
+  },
+})
+
+export const geocodeStationsInternal = internalAction({
+  args: {},
+  handler: async (ctx): Promise<GeocodeResult> => {
+    const candidates = await ctx.runQuery(
+      internal.ingestion.listStationsNeedingGeocode,
+      { limit: GEOCODE_BATCH_SIZE },
+    )
+
+    if (candidates.length === 0) {
+      await ctx.runMutation(internal.ingestion.recordGeocodingRun, {
+        status: 'success',
+        processed: 0,
+        geocoded: 0,
+        failed: 0,
+        message: 'No hay estaciones pendientes de geocodificar.',
+      })
+      return { processed: 0, geocoded: 0, failed: 0, remaining: 0, done: true }
+    }
+
+    let geocoded = 0
+    let failed = 0
+
+    for (const station of candidates) {
+      const query = buildGeocodeQuery(station)
+      if (!query) {
+        failed += 1
+        await sleep(NOMINATIM_MIN_INTERVAL_MS)
+        continue
+      }
+
+      try {
+        const hit = await geocodeWithNominatim(query)
+        if (hit) {
+          const latitude = Number(hit.lat)
+          const longitude = Number(hit.lon)
+          if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+            await ctx.runMutation(internal.ingestion.patchStationCoordinates, {
+              stationId: station._id,
+              latitude,
+              longitude,
+            })
+            geocoded += 1
+          } else {
+            failed += 1
+          }
+        } else {
+          failed += 1
+        }
+      } catch (error) {
+        console.warn(`[ingestion] geocode failed for ${station.permitNumber}:`, error)
+        failed += 1
+      }
+
+      await sleep(NOMINATIM_MIN_INTERVAL_MS)
+    }
+
+    const done = candidates.length < GEOCODE_BATCH_SIZE
+
+    await ctx.runMutation(internal.ingestion.recordGeocodingRun, {
+      status: done ? 'success' : 'running',
+      processed: candidates.length,
+      geocoded,
+      failed,
+      message: done
+        ? `Lote final: ${geocoded}/${candidates.length} geocodificadas, ${failed} fallidas.`
+        : `Lote parcial: ${geocoded}/${candidates.length} geocodificadas, ${failed} fallidas. Continúa en próximo cron.`,
+    })
+
+    if (!done) {
+      await ctx.scheduler.runAfter(60_000, internal.ingestion.geocodeStationsInternal, {})
+    }
+
+    return {
+      processed: candidates.length,
+      geocoded,
+      failed,
+      remaining: done ? 0 : -1,
+      done,
+    }
+  },
+})
+
+export const geocodeStations = action({
+  args: {},
+  handler: async (ctx): Promise<GeocodeResult> => {
+    return await ctx.runAction(internal.ingestion.geocodeStationsInternal, {})
+  },
+})
+
+export const runNationalBulkRefresh = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    await ctx.runAction(internal.ingestion.geocodeStationsInternal, {})
+    return { ok: true as const }
+  },
+})
+
+export const stationGeocodingStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query('stations').collect()
+    let withCoords = 0
+    let withoutCoords = 0
+    for (const station of all) {
+      if (typeof station.latitude === 'number' && typeof station.longitude === 'number') {
+        withCoords += 1
+      } else {
+        withoutCoords += 1
+      }
+    }
+    return { total: all.length, withCoords, withoutCoords }
+  },
+})

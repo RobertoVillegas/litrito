@@ -31,4 +31,11 @@ crons.daily(
   {},
 )
 
+crons.daily(
+  'geocode-stations-2100-mexico-city',
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.ingestion.runNationalBulkRefresh,
+  {},
+)
+
 export default crons
