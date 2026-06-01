@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
+import type * as favorites from "../favorites.js";
 import type * as http from "../http.js";
 import type * as ingestion from "../ingestion.js";
 import type * as normalization from "../normalization.js";
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   catalog: typeof catalog;
   crons: typeof crons;
+  favorites: typeof favorites;
   http: typeof http;
   ingestion: typeof ingestion;
   normalization: typeof normalization;

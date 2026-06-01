@@ -1,17 +1,23 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAction, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import {
   ArrowDownUp,
   BadgeCent,
   DatabaseZap,
   Fuel,
+  LocateFixed,
+  LogOut,
   MapPin,
+  Navigation,
   RefreshCw,
   Search,
+  Star,
+  UserCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
+import { authClient } from '#/lib/auth-client'
 
 export const Route = createFileRoute('/')({ component: Home })
 
@@ -48,14 +54,23 @@ type StationRow = {
   highlightedPrice: number | null
 }
 
+type UserLocation = {
+  latitude: number
+  longitude: number
+}
+
 function Home() {
   const [stateExternalId, setStateExternalId] = useState('09')
   const [municipalityExternalId, setMunicipalityExternalId] = useState('')
   const [fuelType, setFuelType] = useState<FuelType>('regular')
   const [searchTerm, setSearchTerm] = useState('')
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+  const [sortMode, setSortMode] = useState<'price' | 'distance'>('price')
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [catalogRefreshing, setCatalogRefreshing] = useState(false)
   const [notice, setNotice] = useState('')
+  const session = authClient.useSession()
 
   const states = (useQuery(api.catalog.states) ?? []) as StateOption[]
   const municipalities =
@@ -63,6 +78,9 @@ function Home() {
       stateExternalId,
     }) ?? []) as MunicipalityOption[]
   const latestRun = useQuery(api.prices.latestRun)
+  const favoritePermitNumbers =
+    (useQuery(api.favorites.list, session.data?.user ? {} : 'skip') ??
+      []) as string[]
   const rows =
     (useQuery(api.prices.search, {
       stateExternalId,
@@ -74,6 +92,7 @@ function Home() {
 
   const refreshCatalog = useAction(api.ingestion.refreshCatalog)
   const refreshMunicipality = useAction(api.ingestion.refreshMunicipality)
+  const toggleFavorite = useMutation(api.favorites.toggle)
 
   useEffect(() => {
     if (!states.length && !catalogRefreshing) {
@@ -108,6 +127,30 @@ function Home() {
 
   const bestPrice = rows[0]?.highlightedPrice
   const updatedAt = latestRun?.finishedAt ?? latestRun?.startedAt
+  const favoriteSet = useMemo(
+    () => new Set(favoritePermitNumbers),
+    [favoritePermitNumbers],
+  )
+  const visibleRows = useMemo(() => {
+    const filteredRows = showFavoritesOnly
+      ? rows.filter((row) => favoriteSet.has(row.station.permitNumber))
+      : rows
+
+    if (sortMode !== 'distance' || !userLocation) {
+      return filteredRows
+    }
+
+    return [...filteredRows].sort((a, b) => {
+      const aDistance = distanceForStation(a, userLocation)
+      const bDistance = distanceForStation(b, userLocation)
+      return (
+        (aDistance ?? Number.POSITIVE_INFINITY) -
+          (bDistance ?? Number.POSITIVE_INFINITY) ||
+        (a.highlightedPrice ?? Number.POSITIVE_INFINITY) -
+          (b.highlightedPrice ?? Number.POSITIVE_INFINITY)
+      )
+    })
+  }, [favoriteSet, rows, showFavoritesOnly, sortMode, userLocation])
 
   async function handleRefreshMunicipality() {
     if (!stateExternalId || !municipalityExternalId) {
@@ -129,6 +172,37 @@ function Home() {
     } finally {
       setRefreshing(false)
     }
+  }
+
+  function handleUseLocation() {
+    if (!navigator.geolocation) {
+      setNotice('Tu navegador no tiene geolocalizacion disponible.')
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        })
+        setSortMode('distance')
+        setNotice('Ordenando por estaciones cercanas a tu ubicacion.')
+      },
+      () => {
+        setNotice('No pude obtener tu ubicacion. Puedes seguir comparando por precio.')
+      },
+      { enableHighAccuracy: true, maximumAge: 300000, timeout: 10000 },
+    )
+  }
+
+  async function handleToggleFavorite(permitNumber: string) {
+    if (!session.data?.user) {
+      setNotice('Inicia sesion para guardar estaciones favoritas.')
+      return
+    }
+
+    await toggleFavorite({ stationPermitNumber: permitNumber })
   }
 
   return (
@@ -241,6 +315,8 @@ function Home() {
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <AuthPanel />
+
         <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-2xl font-black text-slate-950">
@@ -248,8 +324,9 @@ function Home() {
               {selectedState ? `, ${selectedState.name}` : ''}
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              {rows.length} estaciones ordenadas por precio de{' '}
-              {FUEL_OPTIONS.find((option) => option.value === fuelType)?.label}.
+              {visibleRows.length} estaciones{' '}
+              {sortMode === 'distance' ? 'cercanas' : 'ordenadas por precio'}{' '}
+              de {FUEL_OPTIONS.find((option) => option.value === fuelType)?.label}.
             </p>
           </div>
 
@@ -283,6 +360,45 @@ function Home() {
           </div>
         </div>
 
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
+              showFavoritesOnly
+                ? 'border-amber-500 bg-amber-50 text-amber-950'
+                : 'border-slate-300 bg-white text-slate-700 hover:border-amber-400'
+            }`}
+            type="button"
+            onClick={() => setShowFavoritesOnly((value) => !value)}
+          >
+            <Star className="h-4 w-4" />
+            Favoritas
+          </button>
+          <button
+            className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
+              sortMode === 'distance'
+                ? 'border-emerald-600 bg-emerald-50 text-emerald-950'
+                : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500'
+            }`}
+            type="button"
+            onClick={handleUseLocation}
+          >
+            <LocateFixed className="h-4 w-4" />
+            Cerca de mi
+          </button>
+          <button
+            className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-bold transition ${
+              sortMode === 'price'
+                ? 'border-slate-950 bg-slate-950 text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:border-slate-500'
+            }`}
+            type="button"
+            onClick={() => setSortMode('price')}
+          >
+            <ArrowDownUp className="h-4 w-4" />
+            Precio
+          </button>
+        </div>
+
         {notice ? (
           <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
             {notice}
@@ -290,7 +406,7 @@ function Home() {
         ) : null}
 
         <div className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <StationMap rows={rows} fuelType={fuelType} />
+          <StationMap rows={visibleRows} fuelType={fuelType} />
 
           <div className="grid grid-cols-[1fr_120px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase text-slate-500 sm:grid-cols-[1.2fr_1fr_120px_120px_120px]">
             <div>Estacion</div>
@@ -303,16 +419,39 @@ function Home() {
             <div className="hidden text-right sm:block">Diesel</div>
           </div>
 
-          {rows.length ? (
-            rows.map((row) => (
+          {visibleRows.length ? (
+            visibleRows.map((row) => (
               <article
                 key={row.station.permitNumber}
                 className="grid grid-cols-[1fr_120px] gap-3 border-b border-slate-100 px-4 py-4 last:border-b-0 sm:grid-cols-[1.2fr_1fr_120px_120px_120px]"
               >
                 <div className="min-w-0">
-                  <h3 className="truncate text-sm font-black text-slate-950">
-                    {row.station.name}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition ${
+                        favoriteSet.has(row.station.permitNumber)
+                          ? 'border-amber-300 bg-amber-50 text-amber-600'
+                          : 'border-slate-200 bg-white text-slate-400 hover:text-amber-500'
+                      }`}
+                      type="button"
+                      title="Guardar favorita"
+                      onClick={() => {
+                        void handleToggleFavorite(row.station.permitNumber)
+                      }}
+                    >
+                      <Star
+                        className="h-4 w-4"
+                        fill={
+                          favoriteSet.has(row.station.permitNumber)
+                            ? 'currentColor'
+                            : 'none'
+                        }
+                      />
+                    </button>
+                    <h3 className="truncate text-sm font-black text-slate-950">
+                      {row.station.name}
+                    </h3>
+                  </div>
                   <p className="mt-1 text-xs font-semibold text-slate-500">
                     {row.station.permitNumber}
                   </p>
@@ -324,6 +463,12 @@ function Home() {
                   <p className="mt-1 text-xs text-slate-500">
                     {row.station.municipalityName}, {row.station.stateName}
                   </p>
+                  {userLocation ? (
+                    <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                      <Navigation className="h-3 w-3" />
+                      {formatDistance(distanceForStation(row, userLocation))}
+                    </p>
+                  ) : null}
                 </div>
                 <PriceCell active={fuelType === 'regular'} value={row.prices.regular?.price} />
                 <PriceCell active={fuelType === 'premium'} value={row.prices.premium?.price} />
@@ -429,6 +574,153 @@ function StationMap({
   )
 }
 
+function AuthPanel() {
+  const { data: session, isPending } = authClient.useSession()
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [message, setMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    setMessage('')
+
+    try {
+      if (mode === 'signin') {
+        await authClient.signIn.email({ email, password })
+      } else {
+        await authClient.signUp.email({
+          email,
+          password,
+          name: name || email.split('@')[0] || 'Litrito',
+        })
+      }
+      setPassword('')
+    } catch {
+      setMessage('No se pudo completar el acceso. Revisa tus datos.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (isPending) {
+    return (
+      <div className="mb-5 h-16 animate-pulse rounded-lg border border-slate-200 bg-white" />
+    )
+  }
+
+  if (session?.user) {
+    return (
+      <div className="mb-5 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+            <UserCircle className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-black text-slate-950">
+              {session.user.name || session.user.email}
+            </p>
+            <p className="text-sm text-slate-600">
+              Tus favoritas se guardan con tu cuenta.
+            </p>
+          </div>
+        </div>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-slate-500"
+          type="button"
+          onClick={() => {
+            void authClient.signOut()
+          }}
+        >
+          <LogOut className="h-4 w-4" />
+          Salir
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <form
+      className="mb-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr_1fr_auto]"
+      onSubmit={handleSubmit}
+    >
+      <div className="lg:col-span-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-black text-slate-950">
+              Guarda tus estaciones favoritas
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Crea una cuenta para seguir precios de estaciones concretas.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1">
+            <button
+              className={`rounded px-3 py-2 text-sm font-bold ${
+                mode === 'signin' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'
+              }`}
+              type="button"
+              onClick={() => setMode('signin')}
+            >
+              Entrar
+            </button>
+            <button
+              className={`rounded px-3 py-2 text-sm font-bold ${
+                mode === 'signup' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600'
+              }`}
+              type="button"
+              onClick={() => setMode('signup')}
+            >
+              Crear
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {mode === 'signup' ? (
+        <input
+          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none ring-emerald-500 transition placeholder:text-slate-400 focus:ring-2"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Nombre"
+        />
+      ) : null}
+      <input
+        className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none ring-emerald-500 transition placeholder:text-slate-400 focus:ring-2"
+        type="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        placeholder="correo@ejemplo.com"
+        required
+      />
+      <input
+        className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none ring-emerald-500 transition placeholder:text-slate-400 focus:ring-2"
+        type="password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        placeholder="Contrasena"
+        required
+      />
+      <button
+        className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+        type="submit"
+        disabled={submitting}
+      >
+        <UserCircle className="h-4 w-4" />
+        {submitting ? 'Enviando...' : mode === 'signin' ? 'Entrar' : 'Crear cuenta'}
+      </button>
+      {message ? (
+        <p className="text-sm font-semibold text-red-700 lg:col-span-4">
+          {message}
+        </p>
+      ) : null}
+    </form>
+  )
+}
+
 function Metric({
   icon,
   label,
@@ -486,4 +778,50 @@ function formatDate(value?: string) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+function distanceForStation(row: StationRow, location: UserLocation) {
+  if (
+    typeof row.station.latitude !== 'number' ||
+    typeof row.station.longitude !== 'number'
+  ) {
+    return null
+  }
+
+  return distanceInKm(location, {
+    latitude: row.station.latitude,
+    longitude: row.station.longitude,
+  })
+}
+
+function distanceInKm(a: UserLocation, b: UserLocation) {
+  const earthRadiusKm = 6371
+  const latDelta = toRadians(b.latitude - a.latitude)
+  const lonDelta = toRadians(b.longitude - a.longitude)
+  const latA = toRadians(a.latitude)
+  const latB = toRadians(b.latitude)
+  const haversine =
+    Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
+    Math.cos(latA) *
+      Math.cos(latB) *
+      Math.sin(lonDelta / 2) *
+      Math.sin(lonDelta / 2)
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180
+}
+
+function formatDistance(value: number | null) {
+  if (value === null) {
+    return 'Sin coordenadas'
+  }
+
+  if (value < 1) {
+    return `${Math.round(value * 1000)} m`
+  }
+
+  return `${value.toFixed(1)} km`
 }

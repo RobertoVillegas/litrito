@@ -120,4 +120,11 @@ export default defineSchema({
     sample: v.string(),
     runId: v.id('ingestionRuns'),
   }).index('by_fetched_at', ['fetchedAt']),
+  stationFavorites: defineTable({
+    userId: v.string(),
+    stationPermitNumber: v.string(),
+    createdAt: v.string(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_user_station', ['userId', 'stationPermitNumber']),
 })
