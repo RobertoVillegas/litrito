@@ -38,4 +38,11 @@ crons.daily(
   {},
 )
 
+crons.daily(
+  'rebuild-filter-options-cache-2130-mexico-city',
+  { hourUTC: 3, minuteUTC: 30 },
+  internal.stations.rebuildFilterOptionsCache,
+  {},
+)
+
 export default crons

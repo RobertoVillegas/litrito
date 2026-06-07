@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
-import { query } from './_generated/server'
+import { internalMutation, query } from './_generated/server'
+import type { QueryCtx, MutationCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 
 const fuelType = v.union(
@@ -346,43 +347,98 @@ export const getStationDetail = query({
   },
 })
 
+type FilterOptionsPayload = {
+  states: { externalId: string; name: string; count: number }[]
+  municipalities: {
+    externalId: string
+    stateExternalId: string
+    name: string
+    count: number
+  }[]
+}
+
+const FILTER_OPTIONS_CACHE_KEY = 'default'
+
+// Scans the full catalog to build the state/municipality filter lists with
+// station counts. Used both by the live query (fallback) and the cache builder.
+async function computeFilterOptions(
+  ctx: QueryCtx | MutationCtx,
+): Promise<FilterOptionsPayload> {
+  const [states, municipalities, stations] = await Promise.all([
+    ctx.db.query('states').collect(),
+    ctx.db.query('municipalities').collect(),
+    ctx.db.query('stations').collect(),
+  ])
+
+  const stationsByState = new Map<string, number>()
+  const stationsByMuni = new Map<string, number>()
+  for (const s of stations) {
+    stationsByState.set(
+      s.stateExternalId,
+      (stationsByState.get(s.stateExternalId) ?? 0) + 1,
+    )
+    const muniKey = `${s.stateExternalId}|${s.municipalityExternalId}`
+    stationsByMuni.set(muniKey, (stationsByMuni.get(muniKey) ?? 0) + 1)
+  }
+
+  return {
+    states: states
+      .map((s) => ({
+        externalId: s.externalId,
+        name: s.name,
+        count: stationsByState.get(s.externalId) ?? 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    municipalities: municipalities
+      .map((m) => ({
+        externalId: m.externalId,
+        stateExternalId: m.stateExternalId,
+        name: m.name,
+        count: stationsByMuni.get(`${m.stateExternalId}|${m.externalId}`) ?? 0,
+      }))
+      .filter((m) => m.count > 0)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  }
+}
+
 export const listFilterOptions = query({
   args: {},
-  handler: async (ctx) => {
-    const [states, municipalities, stations] = await Promise.all([
-      ctx.db.query('states').collect(),
-      ctx.db.query('municipalities').collect(),
-      ctx.db.query('stations').collect(),
-    ])
-
-    const stationsByState = new Map<string, number>()
-    const stationsByMuni = new Map<string, number>()
-    for (const s of stations) {
-      stationsByState.set(
-        s.stateExternalId,
-        (stationsByState.get(s.stateExternalId) ?? 0) + 1,
-      )
-      const muniKey = `${s.stateExternalId}|${s.municipalityExternalId}`
-      stationsByMuni.set(muniKey, (stationsByMuni.get(muniKey) ?? 0) + 1)
+  handler: async (ctx): Promise<FilterOptionsPayload> => {
+    // Serve the precomputed snapshot when present; scanning the whole catalog
+    // on every page load is what burns read I/O. Fall back to a live compute
+    // until the cache has been built at least once.
+    const cached = await ctx.db
+      .query('filterOptionsCache')
+      .withIndex('by_key', (q) => q.eq('key', FILTER_OPTIONS_CACHE_KEY))
+      .unique()
+    if (cached) {
+      return JSON.parse(cached.data) as FilterOptionsPayload
     }
+    return await computeFilterOptions(ctx)
+  },
+})
 
+export const rebuildFilterOptionsCache = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const payload = await computeFilterOptions(ctx)
+    const value = {
+      key: FILTER_OPTIONS_CACHE_KEY,
+      data: JSON.stringify(payload),
+      updatedAt: new Date().toISOString(),
+    }
+    const existing = await ctx.db
+      .query('filterOptionsCache')
+      .withIndex('by_key', (q) => q.eq('key', FILTER_OPTIONS_CACHE_KEY))
+      .unique()
+    if (existing) {
+      await ctx.db.patch(existing._id, value)
+    } else {
+      await ctx.db.insert('filterOptionsCache', value)
+    }
     return {
-      states: states
-        .map((s) => ({
-          externalId: s.externalId,
-          name: s.name,
-          count: stationsByState.get(s.externalId) ?? 0,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-      municipalities: municipalities
-        .map((m) => ({
-          externalId: m.externalId,
-          stateExternalId: m.stateExternalId,
-          name: m.name,
-          count: stationsByMuni.get(`${m.stateExternalId}|${m.externalId}`) ?? 0,
-        }))
-        .filter((m) => m.count > 0)
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      states: payload.states.length,
+      municipalities: payload.municipalities.length,
     }
   },
 })

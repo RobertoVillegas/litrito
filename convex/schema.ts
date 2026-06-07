@@ -124,6 +124,11 @@ export default defineSchema({
     sample: v.string(),
     runId: v.id('ingestionRuns'),
   }).index('by_fetched_at', ['fetchedAt']),
+  filterOptionsCache: defineTable({
+    key: v.string(),
+    data: v.string(),
+    updatedAt: v.string(),
+  }).index('by_key', ['key']),
   stationFavorites: defineTable({
     userId: v.string(),
     stationPermitNumber: v.string(),
