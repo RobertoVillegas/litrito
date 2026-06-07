@@ -1,0 +1,15 @@
+node_modules
+.output
+.nitro
+.vinxi
+.git
+.github
+dist
+dist-ssr
+data
+*.log
+.env
+.env.local
+.env.selfhost
+Dockerfile
+docker-compose.yml
