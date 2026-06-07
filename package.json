@@ -9,7 +9,9 @@
     "dev": "vite dev --port 3000",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dump:stations": "node scripts/dump-stations.mjs",
+    "dump:stations:csv": "node scripts/dump-stations.mjs csv"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.2",
