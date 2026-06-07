@@ -105,7 +105,7 @@ const USER_ICON = L.divIcon({
 
 function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useMapEvents({
+  const map = useMapEvents({
     moveend(e) {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
@@ -119,6 +119,23 @@ function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
       }, 250)
     },
   })
+
+  // Emit the initial viewport once on mount so the bounds-driven query can run
+  // immediately — otherwise the map waits for a manual pan that never comes.
+  useEffect(() => {
+    const b = map.getBounds()
+    onMoveEnd({
+      swLat: b.getSouth(),
+      swLon: b.getWest(),
+      neLat: b.getNorth(),
+      neLon: b.getEast(),
+    })
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return null
 }
 
@@ -262,14 +279,6 @@ export function StationMap({
     ? [userLocation.latitude, userLocation.longitude]
     : null
 
-  if (rows.length === 0 && !initialBounds) {
-    return (
-      <div className="flex h-[55vh] min-h-[320px] max-h-[640px] items-center justify-center rounded-md border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">
-        Sin coordenadas para mostrar en el mapa.
-      </div>
-    )
-  }
-
   return (
     <div className="relative">
       <div className="h-[55vh] min-h-[320px] max-h-[640px] overflow-hidden rounded-md border border-slate-200">
@@ -359,6 +368,11 @@ export function StationMap({
       {truncated && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-xs font-bold text-amber-800 shadow">
           Mostrando 800 · acércate para ver más
+        </div>
+      )}
+      {points.length === 0 && (
+        <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-xs font-bold text-slate-500 shadow">
+          No hay estaciones en esta zona
         </div>
       )}
     </div>
