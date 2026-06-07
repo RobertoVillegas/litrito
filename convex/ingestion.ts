@@ -341,7 +341,8 @@ export const applyMunicipalityPrices = internalMutation({
       )
       .unique()
 
-    let recordsWritten = 0
+    let processed = 0
+    let changed = 0
     const ingestedAt = new Date().toISOString()
 
     for (const record of args.records) {
@@ -380,8 +381,10 @@ export const applyMunicipalityPrices = internalMutation({
         )
         .collect()
 
-      for (const currentPrice of currentPrices) {
-        await ctx.db.delete(currentPrice._id)
+      const [primary, ...duplicates] = currentPrices
+      // Clean up any accidental duplicate current rows for this station+fuel.
+      for (const dup of duplicates) {
+        await ctx.db.delete(dup._id)
       }
 
       const priceValue = {
@@ -398,22 +401,33 @@ export const applyMunicipalityPrices = internalMutation({
         source: 'CNE' as const,
       }
 
-      await ctx.db.insert('fuelPricesCurrent', priceValue)
-      await ctx.db.insert('fuelPricesHistory', { ...priceValue, runId })
-      recordsWritten += 1
+      processed += 1
+
+      // Only touch the current row and append history when the price actually
+      // changed. Most stations report the same price for days, so this avoids
+      // storing an identical snapshot on every run.
+      if (!primary) {
+        await ctx.db.insert('fuelPricesCurrent', priceValue)
+        await ctx.db.insert('fuelPricesHistory', { ...priceValue, runId })
+        changed += 1
+      } else if (primary.price !== record.price) {
+        await ctx.db.patch(primary._id, priceValue)
+        await ctx.db.insert('fuelPricesHistory', { ...priceValue, runId })
+        changed += 1
+      }
     }
 
     await ctx.db.patch(runId, {
-      status: recordsWritten > 0 ? 'success' : 'skipped',
+      status: processed > 0 ? 'success' : 'skipped',
       finishedAt: new Date().toISOString(),
-      recordsWritten,
+      recordsWritten: changed,
       message:
-        recordsWritten > 0
-          ? `Se actualizaron ${recordsWritten} precios.`
+        processed > 0
+          ? `Procesados ${processed} precios, ${changed} con cambios.`
           : 'La fuente no regreso precios validos para este municipio.',
     })
 
-    return { runId, recordsWritten }
+    return { runId, recordsWritten: changed }
   },
 })
 
@@ -728,9 +742,34 @@ export const refreshPlaces = action({
   },
 })
 
+function isSameUtcDay(iso: string, now: Date): boolean {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return false
+  return (
+    d.getUTCFullYear() === now.getUTCFullYear() &&
+    d.getUTCMonth() === now.getUTCMonth() &&
+    d.getUTCDate() === now.getUTCDate()
+  )
+}
+
 export const queueDailyRefresh = internalAction({
   args: {},
   handler: async (ctx): Promise<QueueDailyRefreshResult> => {
+    // The cron fires a primary run plus several retries. Only do real work if
+    // today's national queue hasn't already succeeded, so retries are no-ops
+    // unless the primary run failed.
+    const latest = await ctx.runQuery(internal.ingestion.latestDailyQueueRun, {})
+    if (
+      latest &&
+      latest.status === 'success' &&
+      isSameUtcDay(latest.startedAt, new Date())
+    ) {
+      return {
+        queuedMunicipalities: 0,
+        skipped: true,
+        message: 'La carga nacional ya se encoló hoy; retry omitido.',
+      }
+    }
     return await queueNationalRefresh(ctx)
   },
 })
