@@ -43,9 +43,21 @@ export const listStations = query({
     const muniIds = args.municipalityExternalIds ?? []
     const fuelTypes = args.fuelTypes ?? []
 
+    // The UI sends municipality ids as "stateExternalId|municipalityExternalId"
+    // because municipality ids are only unique within a state. Accept a bare id
+    // too for backward compatibility.
+    const parsedMunis = muniIds.map((id) => {
+      const sep = id.indexOf('|')
+      return sep >= 0
+        ? { state: id.slice(0, sep), muni: id.slice(sep + 1) }
+        : { state: null as string | null, muni: id }
+    })
+
     const useSearch = term.length >= 2
-    const singleState = stateIds.length === 1 ? stateIds[0] : null
-    const singleMuni = muniIds.length === 1 ? muniIds[0] : null
+    const singleStateFromState = stateIds.length === 1 ? stateIds[0] : null
+    const singleMuni = parsedMunis.length === 1 ? parsedMunis[0] : null
+    // For a single selected municipality, take the state from its composite key.
+    const singleState = singleStateFromState ?? singleMuni?.state ?? null
 
     function parseOffset(cursor: string | null | undefined): number {
       if (!cursor) return 0
@@ -66,7 +78,7 @@ export const listStations = query({
           if (singleState && singleMuni) {
             return search
               .eq('stateExternalId', singleState)
-              .eq('municipalityExternalId', singleMuni)
+              .eq('municipalityExternalId', singleMuni.muni)
           }
           if (singleState) {
             return search.eq('stateExternalId', singleState)
@@ -84,15 +96,26 @@ export const listStations = query({
         isDone: result.isDone,
         continueCursor: result.continueCursor,
       }
-    } else if (muniIds.length > 0) {
-      const allowedMunis = new Set(muniIds)
+    } else if (parsedMunis.length > 0) {
+      const muniKeys = new Set(
+        parsedMunis
+          .filter((p) => p.state)
+          .map((p) => `${p.state}|${p.muni}`),
+      )
+      const rawMunis = new Set(
+        parsedMunis.filter((p) => !p.state).map((p) => p.muni),
+      )
       const allowedStates = stateIds.length > 0 ? new Set(stateIds) : null
       const allStations = await ctx.db.query('stations').collect()
-      const filtered = allStations.filter(
-        (s) =>
-          allowedMunis.has(s.municipalityExternalId) &&
-          (allowedStates === null || allowedStates.has(s.stateExternalId)),
-      )
+      const filtered = allStations.filter((s) => {
+        const matchesComposite = muniKeys.has(
+          `${s.stateExternalId}|${s.municipalityExternalId}`,
+        )
+        const matchesRaw =
+          rawMunis.has(s.municipalityExternalId) &&
+          (allowedStates === null || allowedStates.has(s.stateExternalId))
+        return matchesComposite || matchesRaw
+      })
       const start = parseOffset(args.paginationOpts.cursor)
       const end = start + args.paginationOpts.numItems
       const page = filtered.slice(start, end)
