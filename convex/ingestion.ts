@@ -520,11 +520,8 @@ export const recordXmlSnapshot = internalMutation({
   },
 })
 
-export const applyPlaces = internalMutation({
+export const matchPlacesChunk = internalMutation({
   args: {
-    sourceUrl: v.string(),
-    contentLength: v.number(),
-    sample: v.string(),
     places: v.array(
       v.object({
         placeId: v.string(),
@@ -536,54 +533,65 @@ export const applyPlaces = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
+    let matched = 0
+
+    for (const place of args.places) {
+      const existing = await ctx.db
+        .query('stations')
+        .withIndex('by_permit', (q) => q.eq('permitNumber', place.permitNumber))
+        .unique()
+      if (!existing) continue
+      await ctx.db.patch(existing._id, {
+        placeId: place.placeId,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        name: existing.name || place.name,
+      })
+      matched += 1
+    }
+
+    return { matched }
+  },
+})
+
+export const recordPlacesRun = internalMutation({
+  args: {
+    sourceUrl: v.string(),
+    contentLength: v.number(),
+    sample: v.string(),
+    placeCount: v.number(),
+    matched: v.number(),
+  },
+  handler: async (ctx, args) => {
     const now = new Date().toISOString()
     const runId = await ctx.db.insert('ingestionRuns', {
       kind: 'xml_snapshot',
-      status: args.places.length > 0 ? 'success' : 'skipped',
+      status: args.placeCount > 0 ? 'success' : 'skipped',
       startedAt: now,
       finishedAt: now,
       sourceUrl: args.sourceUrl,
-      recordsRead: args.places.length,
-      recordsWritten: args.places.length,
+      recordsRead: args.placeCount,
+      recordsWritten: args.matched,
       message:
-        args.places.length > 0
-          ? `Se validaron ${args.places.length} ubicaciones.`
+        args.placeCount > 0
+          ? `Se validaron ${args.placeCount} ubicaciones, ${args.matched} estaciones georreferenciadas.`
           : 'El XML de ubicaciones no contiene places validos.',
     })
 
-    if (args.places.length > 0) {
+    if (args.placeCount > 0) {
       await ctx.db.insert('rawSnapshots', {
         kind: 'cne_places_xml',
         sourceUrl: args.sourceUrl,
         fetchedAt: now,
         contentLength: args.contentLength,
-        placeCount: args.places.length,
+        placeCount: args.placeCount,
         priceCount: 0,
         sample: args.sample,
         runId,
       })
     }
 
-    const allStations = await ctx.db.query('stations').collect()
-    const stationIdByPermit = new Map(allStations.map((s) => [s.permitNumber, s._id]))
-    const stationById = new Map(allStations.map((s) => [s._id, s]))
-    let matched = 0
-
-    for (const place of args.places) {
-      const stationId = stationIdByPermit.get(place.permitNumber)
-      if (stationId) {
-        const existing = stationById.get(stationId)
-        await ctx.db.patch(stationId, {
-          placeId: place.placeId,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          name: existing?.name || place.name,
-        })
-        matched += 1
-      }
-    }
-
-    return { runId, places: matched }
+    return { runId }
   },
 })
 
@@ -681,20 +689,27 @@ export const capturePlacesSnapshot = internalAction({
       const xml = await response.text()
       const allPlaces = parsePlaceRows(xml)
 
-      let firstRunId: unknown = null
-      const CHUNK = 5000
+      // Each place is an indexed by_permit lookup + patch, so keep chunks well
+      // under Convex's per-mutation read/write limits.
+      let matched = 0
+      const CHUNK = 1000
       for (let i = 0; i < allPlaces.length; i += CHUNK) {
         const slice = allPlaces.slice(i, i + CHUNK)
-        const result = await ctx.runMutation(internal.ingestion.applyPlaces, {
-          sourceUrl: CNE_PLACES_URL,
-          contentLength: xml.length,
-          sample: xml.slice(0, 1800),
+        const result = await ctx.runMutation(internal.ingestion.matchPlacesChunk, {
           places: slice,
         })
-        if (firstRunId === null) firstRunId = result.runId
+        matched += result.matched
       }
 
-      return { runId: firstRunId, places: allPlaces.length }
+      const { runId } = await ctx.runMutation(internal.ingestion.recordPlacesRun, {
+        sourceUrl: CNE_PLACES_URL,
+        contentLength: xml.length,
+        sample: xml.slice(0, 1800),
+        placeCount: allPlaces.length,
+        matched,
+      })
+
+      return { runId, places: allPlaces.length }
     } catch (error) {
       await ctx.runMutation(internal.ingestion.recordFailure, {
         kind: 'xml_snapshot',
