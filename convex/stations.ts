@@ -152,7 +152,6 @@ export const listStations = query({
     const pricesByStation = new Map<string, Record<string, { price: number }>>()
     for (const arr of priceArrays) {
       for (const p of arr) {
-        if (fuelTypes.length > 0 && !fuelTypes.includes(p.fuelType)) continue
         const slot = pricesByStation.get(p.stationPermitNumber) ?? {}
         slot[p.fuelType] = { price: p.price }
         pricesByStation.set(p.stationPermitNumber, slot)
@@ -171,10 +170,15 @@ export const listStations = query({
       return { station, prices: priceMap, highlightedPrice }
     })
 
+    // Exclude a station from a fuel filter only when it reports prices but none
+    // match the selected fuels. Stations with no reported price yet stay visible
+    // so the catalog stays browsable while ingestion fills in.
     if (fuelTypes.length > 0) {
-      rows = rows.filter((r) =>
-        fuelTypes.some((ft) => r.prices[ft] != null),
-      )
+      rows = rows.filter((r) => {
+        const hasAnyPrice = Object.keys(r.prices).length > 0
+        if (!hasAnyPrice) return true
+        return fuelTypes.some((ft) => r.prices[ft] != null)
+      })
     }
 
     if (args.sortMode === 'price') {
@@ -253,8 +257,14 @@ export const listStationsInBounds = query({
       return true
     })
 
+    // Cap the result set before looking up prices: a national view can hold
+    // ~13k stations and one price query per station would blow past Convex's
+    // per-query read limit.
+    const truncated = inBounds.length > limit
+    const selected = truncated ? inBounds.slice(0, limit) : inBounds
+
     const prices = await Promise.all(
-      inBounds.map((s) =>
+      selected.map((s) =>
         ctx.db
           .query('fuelPricesCurrent')
           .withIndex('by_station_fuel', (q) =>
@@ -266,14 +276,13 @@ export const listStationsInBounds = query({
     const pricesByStation = new Map<string, Record<string, { price: number }>>()
     for (const arr of prices) {
       for (const p of arr) {
-        if (fuelTypes.length > 0 && !fuelTypes.includes(p.fuelType)) continue
         const slot = pricesByStation.get(p.stationPermitNumber) ?? {}
         slot[p.fuelType] = { price: p.price }
         pricesByStation.set(p.stationPermitNumber, slot)
       }
     }
 
-    const projected = inBounds
+    const projected = selected
       .map((station) => {
         const priceMap = pricesByStation.get(station.permitNumber) ?? {}
         const highlightedPrice =
@@ -287,13 +296,12 @@ export const listStationsInBounds = query({
       })
       .filter((r) => {
         if (fuelTypes.length === 0) return true
+        const hasAnyPrice = Object.keys(r.prices).length > 0
+        if (!hasAnyPrice) return true
         return fuelTypes.some((ft) => r.prices[ft] != null)
       })
 
-    const truncated = projected.length > limit
-    const sliced = truncated ? projected.slice(0, limit) : projected
-
-    return { stations: sliced, truncated }
+    return { stations: projected, truncated }
   },
 })
 
@@ -375,6 +383,58 @@ export const listFilterOptions = query({
         }))
         .filter((m) => m.count > 0)
         .sort((a, b) => a.name.localeCompare(b.name)),
+    }
+  },
+})
+
+// Paginated export: a single query can't read all ~13k stations plus their
+// prices without exceeding Convex's per-execution read limit, so callers page
+// through with the returned cursor (see http.ts /stations/export).
+export const exportStationsPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query('stations')
+      .withIndex('by_name', (q) => q)
+      .paginate(args.paginationOpts)
+
+    const priceArrays = await Promise.all(
+      result.page.map((s) =>
+        ctx.db
+          .query('fuelPricesCurrent')
+          .withIndex('by_station_fuel', (q) =>
+            q.eq('stationPermitNumber', s.permitNumber),
+          )
+          .collect(),
+      ),
+    )
+
+    const stations = result.page.map((s, i) => {
+      const priceMap: Record<string, { price: number; reportedAt: string | null }> = {}
+      for (const p of priceArrays[i]) {
+        priceMap[p.fuelType] = { price: p.price, reportedAt: p.reportedAt ?? null }
+      }
+      return {
+        permitNumber: s.permitNumber,
+        name: s.name,
+        address: s.address,
+        stateExternalId: s.stateExternalId,
+        municipalityExternalId: s.municipalityExternalId,
+        stateName: s.stateName,
+        municipalityName: s.municipalityName,
+        latitude: s.latitude ?? null,
+        longitude: s.longitude ?? null,
+        source: s.source,
+        firstSeenAt: s.firstSeenAt,
+        lastSeenAt: s.lastSeenAt,
+        prices: priceMap,
+      }
+    })
+
+    return {
+      stations,
+      isDone: result.isDone,
+      continueCursor: result.continueCursor,
     }
   },
 })
