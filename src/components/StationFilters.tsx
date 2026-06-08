@@ -93,7 +93,7 @@ export function StationFilters({
             value={state.search}
             onChange={(e) => update({ search: e.target.value })}
             placeholder="Buscar por nombre o dirección"
-            className="w-full rounded-md border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-full rounded-md border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           />
           {state.search && (
             <button
@@ -114,7 +114,7 @@ export function StationFilters({
               'inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-bold transition',
               hasPreciseLocation
                 ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-700',
+                : 'border-slate-200 bg-white text-slate-600 hover:border-brand hover:text-brand',
             )}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -186,7 +186,7 @@ export function StationFilters({
               <button
                 type="button"
                 onClick={() => update({ stateIds: [], municipalityIds: [] })}
-                className="ml-2 text-[10px] font-bold text-emerald-700 hover:underline"
+                className="ml-2 text-[10px] font-bold text-brand hover:text-brand-dark"
               >
                 Limpiar
               </button>
@@ -214,8 +214,8 @@ export function StationFilters({
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40',
                   checked
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-200',
+                    ? 'border-brand bg-[#fff0f0] text-brand'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-brand/40',
                 )}
               >
                 {s.name}
@@ -235,7 +235,7 @@ export function StationFilters({
                 <button
                   type="button"
                   onClick={() => update({ municipalityIds: [] })}
-                  className="ml-2 text-[10px] font-bold text-emerald-700 hover:underline"
+                  className="ml-2 text-[10px] font-bold text-brand hover:text-brand-dark"
                 >
                   Limpiar
                 </button>
@@ -254,8 +254,8 @@ export function StationFilters({
                   className={cn(
                     'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-bold transition',
                     checked
-                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-200',
+                      ? 'border-brand bg-[#fff0f0] text-brand'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-brand/40',
                   )}
                 >
                   {m.name}

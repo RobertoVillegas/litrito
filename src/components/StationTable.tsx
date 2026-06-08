@@ -7,6 +7,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table'
 import { ArrowDownUp, Loader2, Star } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { cn } from '../lib/utils'
 import type { FuelType, SortMode } from './StationFilters'
 
@@ -89,8 +90,8 @@ export function StationTable({
                   className={cn(
                     'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border transition',
                     favoriteSet?.has(s.permitNumber)
-                      ? 'border-amber-300 bg-amber-50 text-amber-600'
-                      : 'border-slate-200 bg-white text-slate-400 hover:text-amber-500',
+                      ? 'border-brand bg-[#fff0f0] text-brand'
+                      : 'border-slate-200 bg-white text-slate-400 hover:text-brand',
                   )}
                   title="Favorita"
                 >
@@ -101,10 +102,14 @@ export function StationTable({
                 </button>
               )}
               <div className="min-w-0">
-                <div className="truncate text-sm font-black text-slate-950">
+                <Link
+                  to="/estacion/$"
+                  params={{ _splat: s.permitNumber }}
+                  className="block truncate text-sm font-black text-ink hover:text-brand"
+                >
                   {s.name}
-                </div>
-                <div className="text-[10px] font-semibold text-slate-500">
+                </Link>
+                <div className="text-[10px] font-semibold text-body">
                   {s.permitNumber}
                 </div>
               </div>
@@ -164,7 +169,7 @@ export function StationTable({
         cell: ({ row }) => {
           const km = distanceByPermit?.get(row.original.station.permitNumber)
           return (
-            <div className="text-right text-sm font-bold text-emerald-700">
+            <div className="text-right text-sm font-bold text-brand">
               {km != null ? formatDistance(km) : '–'}
             </div>
           )
@@ -279,7 +284,7 @@ export function StationTable({
                     ref={(node) => {
                       if (node) rowVirtualizer.measureElement(node)
                     }}
-                    className="absolute left-0 flex w-full items-center border-b border-slate-100 bg-white hover:bg-emerald-50/30"
+                    className="absolute left-0 flex w-full items-center border-b border-slate-100 bg-white hover:bg-canvas-soft"
                     style={{
                       transform: `translateY(${vRow.start}px)`,
                       height: `${vRow.size}px`,
@@ -315,7 +320,7 @@ export function StationTable({
             type="button"
             disabled={isLoadingMore}
             onClick={onLoadMore}
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700 disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-ink/25 bg-white px-4 text-xs font-bold text-ink transition hover:border-brand hover:text-brand disabled:opacity-50"
           >
             {isLoadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Cargar 50 más

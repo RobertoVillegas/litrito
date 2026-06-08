@@ -386,18 +386,18 @@ function Home() {
 
   return (
     <main className="min-h-screen">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_340px] lg:px-8">
-          <div className="flex flex-col justify-between gap-8">
+      <section className="bg-ink text-on-dark">
+        <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_340px] lg:px-8">
+          <div className="flex flex-col justify-between gap-10">
             <div>
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-900">
+              <div className="eyebrow mb-6 inline-flex items-center gap-2 rounded-[32px] bg-brand px-3 py-1.5 text-white">
                 <Fuel className="h-4 w-4" />
                 Precios por litro, sin drama
               </div>
-              <h1 className="max-w-3xl text-5xl font-black tracking-normal text-slate-950 sm:text-6xl">
+              <h1 className="font-display text-7xl text-white sm:text-8xl">
                 Litrito
               </h1>
-              <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
+              <p className="mt-6 max-w-2xl text-lg font-light leading-8 text-white/70">
                 Encuentra donde cargar gasolina y diesel en Mexico con precios
                 reportados por estacion. Filtra por zona, busca por nombre y
                 compara por combustible.
@@ -423,35 +423,35 @@ function Home() {
             </div>
           </div>
 
-          <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-2 text-sm font-bold uppercase text-slate-500">
+          <aside className="rounded-[6px] border border-white/15 bg-white/[0.04] p-5">
+            <div className="eyebrow flex items-center justify-between gap-2 text-white/50">
               <span>Datos</span>
               <button
                 type="button"
                 onClick={() => void handleRefreshCatalog()}
-                className="inline-flex items-center gap-1 text-[10px] font-bold normal-case text-emerald-700 hover:underline"
+                className="inline-flex items-center gap-1 text-[10px] font-bold normal-case tracking-normal text-brand hover:text-white"
               >
                 <RefreshCw className="h-3 w-3" />
                 Reimportar catalogo
               </button>
             </div>
 
-            <p className="mt-3 text-sm leading-6 text-slate-600">
+            <p className="mt-3 text-sm leading-6 text-white/60">
               Fuente: Comision Nacional de Energia, precios reportados por
               permisionarios. Son informativos y pueden cambiar en estacion.
             </p>
 
-            <div className="mt-4 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600">
+            <div className="mt-4 rounded-[6px] border border-white/15 bg-white/[0.04] p-3 text-xs text-white/70">
               {userLoc.location ? (
                 <>
                   {userLoc.location.source === 'precise' ? (
                     <span>
-                      <strong className="text-emerald-800">Ubicacion precisa</strong>
+                      <strong className="font-bold text-white">Ubicacion precisa</strong>
                       {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
                     </span>
                   ) : (
                     <span>
-                      <strong className="text-slate-700">
+                      <strong className="font-bold text-white">
                         {userLoc.location.source === 'ip'
                           ? 'Ubicacion aproximada'
                           : 'Ubicacion por defecto'}
@@ -461,14 +461,14 @@ function Home() {
                       <button
                         type="button"
                         onClick={userLoc.requestPrecise}
-                        className="ml-1 font-bold text-emerald-700 hover:underline"
+                        className="ml-1 font-bold text-brand hover:text-white"
                       >
                         usar mi ubicacion
                       </button>
                     </span>
                   )}
                   {userLoc.preciseError && (
-                    <p className="mt-1 text-rose-600">{userLoc.preciseError}</p>
+                    <p className="mt-1 font-semibold text-brand">{userLoc.preciseError}</p>
                   )}
                 </>
               ) : (
@@ -492,24 +492,24 @@ function Home() {
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs text-slate-600">
+          <div className="text-xs font-semibold text-body">
             {paginated.results
               ? `${visibleRows.length} ${
                   paginated.status === 'Exhausted' ? 'resultados' : 'cargados'
                 }${paginated.status === 'CanLoadMore' ? ' — hay más' : ''}`
               : 'Cargando…'}
             {showFavoritesOnly && (
-              <span className="ml-2 text-amber-700">· solo favoritas</span>
+              <span className="ml-2 text-brand">· solo favoritas</span>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setShowFavoritesOnly((v) => !v)}
-              className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-bold transition ${
+              className={`inline-flex h-9 items-center gap-2 rounded-full border px-4 text-xs font-bold transition ${
                 showFavoritesOnly
-                  ? 'border-amber-500 bg-amber-50 text-amber-950'
-                  : 'border-slate-300 bg-white text-slate-700 hover:border-amber-400'
+                  ? 'border-ink bg-ink text-white'
+                  : 'border-ink/25 bg-white text-ink hover:border-ink'
               }`}
             >
               <Star className="h-3.5 w-3.5" />
@@ -518,7 +518,7 @@ function Home() {
             <button
               type="button"
               onClick={() => void handleRefreshMunicipality()}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:border-emerald-400"
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-ink/25 bg-white px-4 text-xs font-bold text-ink transition hover:border-ink"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Refrescar municipio
@@ -527,15 +527,15 @@ function Home() {
         </div>
 
         {notice && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+          <div className="rounded-[6px] border border-line border-l-4 border-l-brand bg-canvas-soft px-4 py-3 text-sm font-semibold text-ink">
             {notice}
           </div>
         )}
 
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 bg-slate-50 p-4">
-            <h3 className="text-sm font-black text-slate-950">Mapa</h3>
-            <p className="mt-1 text-xs font-semibold text-slate-500">
+        <div className="overflow-hidden rounded-[6px] border border-line bg-white">
+          <div className="border-b border-line bg-canvas-soft p-4">
+            <h3 className="font-display text-lg text-ink">Mapa</h3>
+            <p className="mt-1 text-xs font-semibold text-body">
               {boundsResult
                 ? `${boundsResult.stations.length} estaciones visibles${boundsResult.truncated ? ' (acercate para mas)' : ''}`
                 : 'Cargando marcadores…'}
@@ -598,18 +598,29 @@ function Home() {
           distanceByPermit={distanceByPermit}
         />
       </section>
+
+      <footer className="mt-6 bg-ink text-on-dark">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-10 sm:px-6 lg:px-8">
+          <div className="font-display text-3xl text-white">Litrito</div>
+          <p className="max-w-xl text-sm leading-6 text-white/60">
+            Precios informativos reportados por permisionarios a la Comision
+            Nacional de Energia. Pueden cambiar en estacion.
+          </p>
+          <p className="eyebrow mt-4 text-white/40">Hecho en Mexico · Fuente CNE</p>
+        </div>
+      </footer>
     </main>
   )
 }
 
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+    <div className="rounded-[6px] border border-white/15 bg-white/[0.04] p-3">
+      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/50">
         {icon}
         {label}
       </div>
-      <div className="mt-1 text-base font-black text-slate-950">{value}</div>
+      <div className="mt-1 text-base font-bold text-white">{value}</div>
     </div>
   )
 }
@@ -663,7 +674,7 @@ function AuthPanel() {
     return (
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
         <div className="flex items-center gap-2 font-semibold text-slate-700">
-          <UserCircle className="h-5 w-5 text-emerald-700" />
+          <UserCircle className="h-5 w-5 text-brand" />
           Hola, {sessionUser.name ?? sessionUser.email}
         </div>
         <button
@@ -729,19 +740,19 @@ function AuthPanel() {
       <button
         type="submit"
         disabled={submitting}
-        className="inline-flex h-10 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-emerald-800 disabled:opacity-50"
+        className="btn-pill btn-pill--primary h-10 text-sm disabled:opacity-50"
       >
         {submitting ? 'Enviando…' : mode === 'signin' ? 'Entrar' : 'Crear cuenta'}
       </button>
       <button
         type="button"
         onClick={() => setMode((m) => (m === 'signin' ? 'signup' : 'signin'))}
-        className="text-xs font-bold text-emerald-700 hover:underline sm:col-span-4 sm:text-right"
+        className="text-xs font-bold text-brand hover:text-brand-dark sm:col-span-4 sm:text-right"
       >
         {mode === 'signin' ? 'Crear cuenta' : 'Ya tengo cuenta'}
       </button>
       {message && (
-        <p className="text-sm font-semibold text-rose-700 sm:col-span-4">{message}</p>
+        <p className="text-sm font-semibold text-brand sm:col-span-4">{message}</p>
       )}
     </form>
   )
