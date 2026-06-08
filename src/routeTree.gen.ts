@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as MetricasRouteImport } from './routes/metricas'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EstacionSplatRouteImport } from './routes/estacion.$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
+const MetricasRoute = MetricasRouteImport.update({
+  id: '/metricas',
+  path: '/metricas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -31,36 +37,47 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/metricas': typeof MetricasRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/metricas': typeof MetricasRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/metricas': typeof MetricasRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/estacion/$' | '/api/auth/$'
+  fullPaths: '/' | '/metricas' | '/estacion/$' | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/estacion/$' | '/api/auth/$'
-  id: '__root__' | '/' | '/estacion/$' | '/api/auth/$'
+  to: '/' | '/metricas' | '/estacion/$' | '/api/auth/$'
+  id: '__root__' | '/' | '/metricas' | '/estacion/$' | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  MetricasRoute: typeof MetricasRoute
   EstacionSplatRoute: typeof EstacionSplatRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/metricas': {
+      id: '/metricas'
+      path: '/metricas'
+      fullPath: '/metricas'
+      preLoaderRoute: typeof MetricasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  MetricasRoute: MetricasRoute,
   EstacionSplatRoute: EstacionSplatRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }

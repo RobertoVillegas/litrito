@@ -14,6 +14,7 @@ import type * as crons from "../crons.js";
 import type * as favorites from "../favorites.js";
 import type * as http from "../http.js";
 import type * as ingestion from "../ingestion.js";
+import type * as metrics from "../metrics.js";
 import type * as normalization from "../normalization.js";
 import type * as prices from "../prices.js";
 import type * as stations from "../stations.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   favorites: typeof favorites;
   http: typeof http;
   ingestion: typeof ingestion;
+  metrics: typeof metrics;
   normalization: typeof normalization;
   prices: typeof prices;
   stations: typeof stations;

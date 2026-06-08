@@ -7,6 +7,8 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import ConvexProvider from '../integrations/convex/provider'
+import { PromoMarquee } from '../components/PromoMarquee'
+import { SiteNav } from '../components/SiteNav'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -54,6 +56,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <ConvexProvider>
+          <PromoMarquee />
+          <SiteNav />
           {children}
           <TanStackDevtools
             config={{

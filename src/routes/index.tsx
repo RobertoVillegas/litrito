@@ -1,20 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAction, useMutation, usePaginatedQuery, useQuery } from 'convex/react'
-import {
-  BadgeCent,
-  DatabaseZap,
-  Fuel,
-  LogOut,
-  RefreshCw,
-  Star,
-  UserCircle,
-} from 'lucide-react'
+import { useAction, usePaginatedQuery, useQuery } from 'convex/react'
+import { BadgeCent, DatabaseZap, Fuel, RefreshCw, Star } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
-import { authClient } from '#/lib/auth-client'
 import { useUserLocation } from '#/lib/useUserLocation'
+import { useFavorites } from '#/lib/useFavorites'
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
 import type { MapBounds } from '../components/StationMap'
@@ -33,8 +25,6 @@ function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: Re
 }
 
 const PAGE_SIZE = 50
-
-const LOCAL_FAVORITES_KEY = 'litrito:favorites:v1'
 
 type StationFromQuery = {
   station: {
@@ -67,37 +57,6 @@ type FilterOption = {
 type FilterOptionsResult = {
   states: FilterOption[]
   municipalities: (FilterOption & { stateExternalId: string })[]
-}
-
-function readLocalFavoritePermitNumbers(): string[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const raw = window.localStorage.getItem(LOCAL_FAVORITES_KEY)
-    const favorites = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(favorites)) return []
-    return favorites.filter((f): f is string => typeof f === 'string' && f.trim().length > 0)
-  } catch {
-    return []
-  }
-}
-
-function writeLocalFavoritePermitNumbers(favorites: string[]) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(
-    LOCAL_FAVORITES_KEY,
-    JSON.stringify(Array.from(new Set(favorites))),
-  )
-}
-
-function updateFavoriteList(
-  favorites: string[],
-  permitNumber: string,
-  favorited: boolean,
-): string[] {
-  const set = new Set(favorites)
-  if (favorited) set.add(permitNumber)
-  else set.delete(permitNumber)
-  return Array.from(set)
 }
 
 function formatCurrency(value: number): string {
@@ -151,18 +110,10 @@ function defaultFilters(): FilterState {
 function Home() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters)
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null)
-  const [localFavoritePermitNumbers, setLocalFavoritePermitNumbers] = useState(
-    readLocalFavoritePermitNumbers,
-  )
-  const [syncedFavoriteUserId, setSyncedFavoriteUserId] = useState<string | null>(null)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [notice, setNotice] = useState('')
-  const session = authClient.useSession()
   const userLoc = useUserLocation()
-
-  useEffect(() => {
-    writeLocalFavoritePermitNumbers(localFavoritePermitNumbers)
-  }, [localFavoritePermitNumbers])
+  const { favoriteSet, toggleFavorite } = useFavorites()
 
   const filterOptions =
     (useQuery(api.stations.listFilterOptions, {}) as FilterOptionsResult | undefined) ?? {
@@ -217,10 +168,6 @@ function Home() {
     | undefined
 
   const latestRun = useQuery(api.prices.latestRun)
-  const sessionUser = session?.data?.user ?? null
-  const favoritePermitNumbers =
-    (useQuery(api.favorites.list, sessionUser ? {} : 'skip') ?? []) as string[]
-  const setFavorite = useMutation(api.favorites.set)
   const refreshCatalog = useAction(api.ingestion.refreshCatalog)
   const refreshMunicipality = useAction(api.ingestion.refreshMunicipality)
 
@@ -258,41 +205,6 @@ function Home() {
     }))
   }, [boundsResult])
 
-  const favoriteSet = useMemo(
-    () => new Set([...favoritePermitNumbers, ...localFavoritePermitNumbers]),
-    [favoritePermitNumbers, localFavoritePermitNumbers],
-  )
-
-  useEffect(() => {
-    const userId = sessionUser?.id ?? null
-    if (!userId) {
-      setSyncedFavoriteUserId(null)
-      return
-    }
-    if (syncedFavoriteUserId === userId) return
-
-    const remoteFavorites = new Set(favoritePermitNumbers)
-    const unsyncedFavorites = localFavoritePermitNumbers.filter(
-      (p) => !remoteFavorites.has(p),
-    )
-    if (!unsyncedFavorites.length) {
-      setSyncedFavoriteUserId(userId)
-      return
-    }
-
-    Promise.all(
-      unsyncedFavorites.map((p) => setFavorite({ stationPermitNumber: p, favorited: true })),
-    )
-      .then(() => setSyncedFavoriteUserId(userId))
-      .catch(() => undefined)
-  }, [
-    favoritePermitNumbers,
-    localFavoritePermitNumbers,
-    sessionUser?.id,
-    setFavorite,
-    syncedFavoriteUserId,
-  ])
-
   const tableRows = useMemo(() => {
     if (!showFavoritesOnly) return visibleRows
     return visibleRows.filter((r) => favoriteSet.has(r.station.permitNumber))
@@ -313,25 +225,8 @@ function Home() {
   }, [visibleRows, filters.sortMode, userLoc.location])
 
   async function handleToggleFavorite(permitNumber: string) {
-    const favorited = !favoriteSet.has(permitNumber)
-    setLocalFavoritePermitNumbers((current) =>
-      updateFavoriteList(current, permitNumber, favorited),
-    )
-    if (!sessionUser) {
-      setNotice(
-        favorited
-          ? 'Guardada en este navegador. Inicia sesion para sincronizarla.'
-          : 'Quitada de tus favoritas locales.',
-      )
-      return
-    }
-    try {
-      await setFavorite({ stationPermitNumber: permitNumber, favorited })
-    } catch {
-      setNotice('No se pudo sincronizar con tu cuenta, pero quedo local.')
-      return
-    }
-    setNotice(favorited ? 'Favorita guardada.' : 'Favorita removida.')
+    const result = await toggleFavorite(permitNumber)
+    setNotice(result.message)
   }
 
   async function handleRefreshCatalog() {
@@ -441,47 +336,15 @@ function Home() {
               permisionarios. Son informativos y pueden cambiar en estacion.
             </p>
 
-            <div className="mt-4 rounded-[6px] border border-white/15 bg-white/[0.04] p-3 text-xs text-white/70">
-              {userLoc.location ? (
-                <>
-                  {userLoc.location.source === 'precise' ? (
-                    <span>
-                      <strong className="font-bold text-white">Ubicacion precisa</strong>
-                      {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
-                    </span>
-                  ) : (
-                    <span>
-                      <strong className="font-bold text-white">
-                        {userLoc.location.source === 'ip'
-                          ? 'Ubicacion aproximada'
-                          : 'Ubicacion por defecto'}
-                      </strong>
-                      {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
-                      {' '}
-                      <button
-                        type="button"
-                        onClick={userLoc.requestPrecise}
-                        className="ml-1 font-bold text-brand hover:text-white"
-                      >
-                        usar mi ubicacion
-                      </button>
-                    </span>
-                  )}
-                  {userLoc.preciseError && (
-                    <p className="mt-1 font-semibold text-brand">{userLoc.preciseError}</p>
-                  )}
-                </>
-              ) : (
-                <span>Detectando tu ubicacion…</span>
-              )}
-            </div>
+            <p className="mt-4 text-xs leading-5 text-white/40">
+              Tu ubicacion se detecta en automatico — actívala con precisión
+              desde la barra de arriba para ordenar por cercanía.
+            </p>
           </aside>
         </div>
       </section>
 
       <section className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-        <AuthPanel />
-
         <StationFilters
           state={filters}
           states={statesForFilter}
@@ -622,138 +485,5 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
       </div>
       <div className="mt-1 text-base font-bold text-white">{value}</div>
     </div>
-  )
-}
-
-function AuthPanel() {
-  const session = authClient.useSession()
-  const sessionUser = session?.data?.user ?? null
-  const isPending = session?.isPending ?? false
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSubmitting(true)
-    setMessage('')
-    try {
-      if (mode === 'signin') {
-        await authClient.signIn.email({ email, password })
-      } else {
-        await authClient.signUp.email({
-          email,
-          password,
-          name: name || email.split('@')[0] || 'Litrito',
-        })
-      }
-      setPassword('')
-    } catch {
-      setMessage('No se pudo completar el acceso. Revisa tus datos.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function handleSignOut() {
-    await authClient.signOut()
-  }
-
-  if (isPending) {
-    return (
-      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-        Cargando sesion…
-      </div>
-    )
-  }
-
-  if (sessionUser) {
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-        <div className="flex items-center gap-2 font-semibold text-slate-700">
-          <UserCircle className="h-5 w-5 text-brand" />
-          Hola, {sessionUser.name ?? sessionUser.email}
-        </div>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 hover:text-slate-950"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          Cerrar sesion
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
-    >
-      <label className="block">
-        <span className="text-xs font-bold uppercase text-slate-500">Email</span>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-        />
-      </label>
-      <label className="block">
-        <span className="text-xs font-bold uppercase text-slate-500">
-          {mode === 'signup' ? 'Nombre (opcional)' : 'Contrasena'}
-        </span>
-        {mode === 'signup' ? (
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-          />
-        ) : (
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-          />
-        )}
-      </label>
-      {mode === 'signup' && (
-        <label className="block">
-          <span className="text-xs font-bold uppercase text-slate-500">Contrasena</span>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-          />
-        </label>
-      )}
-      <button
-        type="submit"
-        disabled={submitting}
-        className="btn-pill btn-pill--primary h-10 text-sm disabled:opacity-50"
-      >
-        {submitting ? 'Enviando…' : mode === 'signin' ? 'Entrar' : 'Crear cuenta'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setMode((m) => (m === 'signin' ? 'signup' : 'signin'))}
-        className="text-xs font-bold text-brand hover:text-brand-dark sm:col-span-4 sm:text-right"
-      >
-        {mode === 'signin' ? 'Crear cuenta' : 'Ya tengo cuenta'}
-      </button>
-      {message && (
-        <p className="text-sm font-semibold text-brand sm:col-span-4">{message}</p>
-      )}
-    </form>
   )
 }

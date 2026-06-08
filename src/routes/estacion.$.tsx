@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { ArrowLeft, Fuel, MapPin, Navigation } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, Fuel, MapPin, Navigation, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
+import { useFavorites } from '#/lib/useFavorites'
 
 export const Route = createFileRoute('/estacion/$')({
   component: StationDetail,
@@ -65,6 +67,8 @@ type StationDetailData = {
 function StationDetail() {
   const { _splat } = Route.useParams()
   const permitNumber = _splat ?? ''
+  const { isFavorite, toggleFavorite } = useFavorites()
+  const [favMsg, setFavMsg] = useState('')
   const data = useQuery(api.stations.getStationDetail, { permitNumber }) as
     | StationDetailData
     | null
@@ -133,16 +137,39 @@ function StationDetail() {
             Permiso {station.permitNumber} · Actualizado{' '}
             {formatDate(station.lastSeenAt, true)}
           </p>
-          {directionsHref && (
-            <a
-              className="btn-pill btn-pill--primary mt-6"
-              href={directionsHref}
-              target="_blank"
-              rel="noopener noreferrer"
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            {directionsHref && (
+              <a
+                className="btn-pill btn-pill--primary"
+                href={directionsHref}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Navigation className="h-4 w-4" />
+                Cómo llegar
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={async () => {
+                const result = await toggleFavorite(permitNumber)
+                setFavMsg(result.message)
+              }}
+              className={
+                isFavorite(permitNumber)
+                  ? 'btn-pill btn-pill--primary'
+                  : 'btn-pill border border-white/40 text-white hover:bg-white/10'
+              }
             >
-              <Navigation className="h-4 w-4" />
-              Cómo llegar
-            </a>
+              <Star
+                className="h-4 w-4"
+                fill={isFavorite(permitNumber) ? 'currentColor' : 'none'}
+              />
+              {isFavorite(permitNumber) ? 'Favorita' : 'Guardar'}
+            </button>
+          </div>
+          {favMsg && (
+            <p className="mt-2 text-xs font-semibold text-white/60">{favMsg}</p>
           )}
         </div>
       </section>
