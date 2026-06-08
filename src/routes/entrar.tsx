@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { authClient } from '#/lib/auth-client'
+import { track } from '#/lib/analytics'
 import { AuthLayout, authInputClass } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/entrar')({ component: SignIn })
@@ -19,6 +20,7 @@ function SignIn() {
     setError('')
     try {
       await authClient.signIn.email({ email, password })
+      track('login')
       navigate({ to: '/perfil' })
     } catch {
       setError('Correo o contraseña incorrectos.')

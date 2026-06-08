@@ -110,11 +110,25 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
   shellComponent: RootDocument,
 })
 
+// Umami analytics. Configure per-environment so litrito reports under its own
+// website (do NOT reuse another site's id). Set VITE_UMAMI_WEBSITE_ID (and
+// optionally VITE_UMAMI_SRC) in the deploy env; when the id is absent the
+// script is skipped entirely, which keeps local dev out of the dashboard.
+const UMAMI_WEBSITE_ID = import.meta.env.VITE_UMAMI_WEBSITE_ID as
+  | string
+  | undefined
+const UMAMI_SRC =
+  (import.meta.env.VITE_UMAMI_SRC as string | undefined) ??
+  'https://umami.athas.mx/script.js'
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es-MX">
       <head>
         <HeadContent />
+        {UMAMI_WEBSITE_ID && (
+          <script defer src={UMAMI_SRC} data-website-id={UMAMI_WEBSITE_ID} />
+        )}
       </head>
       <body>
         <ConvexProvider>

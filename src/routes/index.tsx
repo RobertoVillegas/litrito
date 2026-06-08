@@ -8,6 +8,7 @@ import { api } from '../../convex/_generated/api'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { useFavorites } from '#/lib/useFavorites'
 import { RouteErrorFallback } from '../components/RouteError'
+import { track } from '#/lib/analytics'
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
 import type { MapBounds } from '../components/StationMap'
@@ -264,6 +265,30 @@ function inferStateIdFromLocation(
   )
 }
 
+// Emit one analytics event per filter dimension that actually changed. Search
+// is reported only when it crosses the "active" threshold so we don't fire on
+// every keystroke.
+function trackFilterChanges(prev: FilterState, next: FilterState) {
+  if (prev.sortMode !== next.sortMode) {
+    track('filter', { type: 'sort', value: next.sortMode })
+  }
+  if (prev.primaryFuel !== next.primaryFuel) {
+    track('filter', { type: 'fuel', value: next.primaryFuel })
+  }
+  if (prev.stateIds[0] !== next.stateIds[0]) {
+    track('filter', { type: 'state', value: next.stateIds[0] ?? 'all' })
+  }
+  if (prev.municipalityIds[0] !== next.municipalityIds[0]) {
+    track('filter', {
+      type: 'municipality',
+      value: next.municipalityIds[0] ?? 'all',
+    })
+  }
+  const prevActive = prev.search.trim().length >= 2
+  const nextActive = next.search.trim().length >= 2
+  if (!prevActive && nextActive) track('filter', { type: 'search' })
+}
+
 function Home() {
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -293,6 +318,7 @@ function Home() {
 
   const setFilters = (next: FilterState | ((prev: FilterState) => FilterState)) => {
     const resolved = typeof next === 'function' ? next(filters) : next
+    trackFilterChanges(filters, resolved)
     void navigate({
       search: filtersToSearch(resolved),
       replace: true,
@@ -402,6 +428,7 @@ function Home() {
 
   async function handleToggleFavorite(permitNumber: string) {
     const result = await toggleFavorite(permitNumber)
+    track('favorite', { on: result.favorited })
     setNotice(result.message)
   }
 

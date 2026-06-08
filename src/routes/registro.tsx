@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { authClient } from '#/lib/auth-client'
+import { track } from '#/lib/analytics'
 import { AuthLayout, authInputClass } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/registro')({ component: SignUp })
@@ -24,6 +25,7 @@ function SignUp() {
         password,
         name: name || email.split('@')[0] || 'Litrito',
       })
+      track('signup')
       navigate({ to: '/perfil' })
     } catch {
       setError('No se pudo crear la cuenta. ¿Ya existe ese correo?')

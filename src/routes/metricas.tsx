@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowLeft, TrendingDown, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Info, TrendingDown, TrendingUp } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
+import { track } from '#/lib/analytics'
 
 export const Route = createFileRoute('/metricas')({
   component: Metrics,
@@ -62,6 +63,16 @@ type MetricsData = {
   nationalAvgRegular: number | null
 }
 
+type MetricsBundle = {
+  curated: MetricsData
+  raw: MetricsData
+  priceBand: { min: number; max: number }
+  excludedPriceRows: number
+  generatedAt: string | null
+}
+
+type MetricsView = 'curated' | 'raw'
+
 function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -70,7 +81,14 @@ function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: Re
 }
 
 function Metrics() {
-  const data = useQuery(api.metrics.getMetrics, {}) as MetricsData | undefined
+  const bundle = useQuery(api.metrics.getMetrics, {}) as MetricsBundle | undefined
+  const [view, setView] = useState<MetricsView>('curated')
+  const data = bundle ? bundle[view] : undefined
+
+  const changeView = (next: MetricsView) => {
+    setView(next)
+    track('metrics_view', { view: next })
+  }
 
   return (
     <main className="min-h-screen">
@@ -93,6 +111,33 @@ function Metrics() {
             Precios extremos por combustible, promedios por estado y dónde está
             la gasolina más cara y más barata del país.
           </p>
+          {bundle && (
+            <div className="mt-6 flex items-center gap-2">
+              <div className="inline-flex rounded-full border border-white/15 bg-white/[0.04] p-1">
+                <ViewButton
+                  active={view === 'curated'}
+                  onClick={() => changeView('curated')}
+                >
+                  Curada
+                </ViewButton>
+                <ViewButton
+                  active={view === 'raw'}
+                  onClick={() => changeView('raw')}
+                >
+                  Sin filtrar
+                </ViewButton>
+              </div>
+              <InfoTooltip
+                text={`La vista curada excluye ${bundle.excludedPriceRows.toLocaleString(
+                  'es-MX',
+                )} precios fuera de ${formatCurrency(
+                  bundle.priceBand.min,
+                )}–${formatCurrency(
+                  bundle.priceBand.max,
+                )} por litro: montos que la fuente (CNE) reporta por error y que distorsionan los extremos y promedios. "Sin filtrar" muestra los datos tal cual llegan.`}
+              />
+            </div>
+          )}
           {data && (
             <div className="mt-6 flex flex-wrap gap-3">
               <Stat label="Estaciones" value={data.totalStations.toLocaleString('es-MX')} />
@@ -214,6 +259,48 @@ function Stat({ label, value }: { label: string; value: string }) {
       </div>
       <div className="mt-0.5 text-base font-bold text-white">{value}</div>
     </div>
+  )
+}
+
+function ViewButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+        active ? 'bg-white text-ink' : 'text-white/60 hover:text-white'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label="Por qué hay dos vistas"
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:text-white"
+      >
+        <Info className="h-3.5 w-3.5" />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-72 -translate-x-1/2 rounded-lg border border-line bg-white p-3 text-left text-xs font-medium leading-5 text-ink opacity-0 shadow-[0_12px_40px_rgba(37,40,43,0.16)] transition group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
   )
 }
 
