@@ -26,6 +26,7 @@ export type StationRow = {
   station: Station
   prices: Partial<Record<FuelType, { price: number }>>
   highlightedPrice: number | null
+  distanceKm?: number | null
 }
 
 type Props = {
@@ -41,7 +42,6 @@ type Props = {
   onToggleFavorite?: (permitNumber: string) => void
   favoriteSet?: Set<string>
   userLocation?: { latitude: number; longitude: number } | null
-  distanceByPermit?: Map<string, number>
 }
 
 function formatCurrency(value: number): string {
@@ -167,7 +167,6 @@ export function StationTable({
   onToggleFavorite,
   favoriteSet,
   userLocation,
-  distanceByPermit,
 }: Props) {
   const columns = useMemo<ColumnDef<StationRow>[]>(() => {
     const SortHeader = ({
@@ -303,7 +302,7 @@ export function StationTable({
           </SortHeader>
         ),
         cell: ({ row }) => {
-          const km = distanceByPermit?.get(row.original.station.permitNumber)
+          const km = row.original.distanceKm
           return (
             <div className="text-right text-sm font-bold text-brand">
               {km != null ? formatDistance(km) : '–'}
@@ -322,7 +321,6 @@ export function StationTable({
     onToggleFavorite,
     favoriteSet,
     userLocation,
-    distanceByPermit,
   ])
 
   const sorting = useMemo<SortingState>(() => {
@@ -380,9 +378,6 @@ export function StationTable({
               · {fuelTypes.length} combustibles activos
             </span>
           )}
-        </span>
-        <span className="hidden text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:inline">
-          Desliza para ver más →
         </span>
       </div>
 
@@ -475,9 +470,7 @@ export function StationTable({
                         isFavorite={
                           favoriteSet?.has(row.original.station.permitNumber) ?? false
                         }
-                        distanceKm={distanceByPermit?.get(
-                          row.original.station.permitNumber,
-                        )}
+                        distanceKm={row.original.distanceKm ?? undefined}
                       />
                     ) : (
                       row.getVisibleCells().map((cell) => (

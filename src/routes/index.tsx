@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { usePaginatedQuery, useQuery } from 'convex/react'
+import { usePaginatedQuery, useQuery as useConvexQuery } from 'convex/react'
 import { BadgeCent, DatabaseZap, Fuel, RefreshCw, Star } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
@@ -11,7 +11,56 @@ import { StationFilters, type FilterState, type FuelType } from '../components/S
 import { StationTable, type StationRow } from '../components/StationTable'
 import type { MapBounds } from '../components/StationMap'
 
-export const Route = createFileRoute('/')({ component: Home })
+const FUEL_VALUES = ['regular', 'premium', 'diesel', 'duba'] as const
+const SORT_VALUES = ['price', 'distance', 'name'] as const
+
+type HomeSearch = {
+  fuels?: string
+  primary?: FuelType
+  state?: string
+  municipality?: string
+  q?: string
+  sort?: 'price' | 'distance' | 'name'
+}
+
+export const Route = createFileRoute('/')({
+  validateSearch: (search: Record<string, unknown>): HomeSearch => {
+    const fuels = typeof search.fuels === 'string' ? search.fuels : undefined
+    const primary =
+      typeof search.primary === 'string' &&
+      FUEL_VALUES.includes(search.primary as FuelType)
+        ? (search.primary as FuelType)
+        : undefined
+    const sort =
+      typeof search.sort === 'string' &&
+      SORT_VALUES.includes(search.sort as FilterState['sortMode'])
+        ? (search.sort as FilterState['sortMode'])
+        : undefined
+    return {
+      fuels,
+      primary,
+      state: typeof search.state === 'string' ? search.state : undefined,
+      municipality:
+        typeof search.municipality === 'string'
+          ? search.municipality
+          : undefined,
+      q: typeof search.q === 'string' ? search.q : undefined,
+      sort,
+    }
+  },
+  loader: async ({ context }) => {
+    const [filterOptions, latestRun] = await Promise.all([
+      context.queryClient.ensureQueryData(
+        context.convexQueryClient.queryOptions(api.stations.listFilterOptions, {}),
+      ),
+      context.queryClient.ensureQueryData(
+        context.convexQueryClient.queryOptions(api.prices.latestRun, {}),
+      ),
+    ])
+    return { filterOptions, latestRun }
+  },
+  component: Home,
+})
 
 const StationMap = lazy(() =>
   import('../components/StationMap').then((m) => ({ default: m.StationMap })),
@@ -46,6 +95,7 @@ type StationFromQuery = {
   }
   prices: Record<string, { price: number } | undefined>
   highlightedPrice: number | null
+  distanceKm?: number | null
 }
 
 type FilterOption = {
@@ -80,22 +130,6 @@ function formatDate(value: string | undefined): string {
   }).format(date)
 }
 
-const toRad = (d: number) => (d * Math.PI) / 180
-function distanceKm(
-  a: { latitude: number; longitude: number },
-  b: { latitude: number; longitude: number },
-): number {
-  const R = 6371
-  const dLat = toRad(b.latitude - a.latitude)
-  const dLon = toRad(b.longitude - a.longitude)
-  const sinDLat = Math.sin(dLat / 2)
-  const sinDLon = Math.sin(dLon / 2)
-  const aa =
-    sinDLat * sinDLat +
-    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * sinDLon * sinDLon
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(aa)))
-}
-
 function defaultFilters(): FilterState {
   return {
     fuelTypes: ['regular', 'premium', 'diesel', 'duba'],
@@ -107,28 +141,120 @@ function defaultFilters(): FilterState {
   }
 }
 
+function parseFuelTypes(value: string | undefined): FuelType[] {
+  if (!value) return defaultFilters().fuelTypes
+  const selected = value
+    .split(',')
+    .filter((fuel): fuel is FuelType =>
+      FUEL_VALUES.includes(fuel as FuelType),
+    )
+  return selected.length > 0 ? selected : defaultFilters().fuelTypes
+}
+
+function filtersFromSearch(
+  search: HomeSearch,
+  hasPreciseLocation: boolean,
+  locationStateId: string | null,
+): FilterState {
+  const fuelTypes = parseFuelTypes(search.fuels)
+  const primaryFuel =
+    search.primary && fuelTypes.includes(search.primary)
+      ? search.primary
+      : fuelTypes[0]
+  return {
+    fuelTypes,
+    primaryFuel,
+    stateIds: search.state ? [search.state] : locationStateId ? [locationStateId] : [],
+    municipalityIds: search.municipality ? [search.municipality] : [],
+    search: search.q ?? '',
+    sortMode: search.sort ?? (hasPreciseLocation ? 'distance' : 'price'),
+  }
+}
+
+function filtersToSearch(filters: FilterState): HomeSearch {
+  return {
+    fuels: filters.fuelTypes.join(','),
+    primary: filters.primaryFuel,
+    state: filters.stateIds[0],
+    municipality: filters.municipalityIds[0],
+    q: filters.search || undefined,
+    sort: filters.sortMode,
+  }
+}
+
+function normalizeLocationName(value: string | null | undefined) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+const STATE_ALIASES: Record<string, string[]> = {
+  'ciudad de mexico': ['cdmx', 'mexico city', 'distrito federal'],
+  'estado de mexico': ['edomex', 'mexico state'],
+  'nuevo leon': ['nuevo leon'],
+  'san luis potosi': ['san luis potosi'],
+  'queretaro': ['queretaro', 'queretaro de arteaga'],
+  'michoacan': ['michoacan', 'michoacan de ocampo'],
+  'veracruz': ['veracruz', 'veracruz de ignacio de la llave'],
+}
+
+function inferStateIdFromLocation(
+  location: ReturnType<typeof useUserLocation>['location'],
+  states: FilterOption[],
+) {
+  if (!location || location.source !== 'precise') return null
+  const candidates = [
+    normalizeLocationName(location.region),
+    normalizeLocationName(location.city),
+  ].filter(Boolean)
+
+  return (
+    states.find((state) => {
+      const stateName = normalizeLocationName(state.name)
+      const aliases = STATE_ALIASES[stateName] ?? []
+      return candidates.some(
+        (candidate) =>
+          candidate === stateName ||
+          aliases.some((alias) => normalizeLocationName(alias) === candidate),
+      )
+    })?.externalId ?? null
+  )
+}
+
 function Home() {
-  const [filters, setFilters] = useState<FilterState>(defaultFilters)
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const loaderData = Route.useLoaderData()
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [notice, setNotice] = useState('')
-  const appliedPreciseLocationSort = useRef(false)
   const userLoc = useUserLocation()
   const { favoriteSet, toggleFavorite } = useFavorites()
 
-  useEffect(() => {
-    if (appliedPreciseLocationSort.current || !userLoc.hasPreciseLocation) return
-    appliedPreciseLocationSort.current = true
-    setFilters((prev) =>
-      prev.sortMode === 'distance' ? prev : { ...prev, sortMode: 'distance' },
-    )
-  }, [userLoc.hasPreciseLocation])
-
   const filterOptions =
-    (useQuery(api.stations.listFilterOptions, {}) as FilterOptionsResult | undefined) ?? {
+    (loaderData.filterOptions as FilterOptionsResult | undefined) ?? {
       states: [],
       municipalities: [],
     }
+
+  const locationStateId = useMemo(
+    () => inferStateIdFromLocation(userLoc.location, filterOptions.states),
+    [userLoc.location, filterOptions.states],
+  )
+
+  const filters = useMemo(
+    () =>
+      filtersFromSearch(search, userLoc.hasPreciseLocation, locationStateId),
+    [search, userLoc.hasPreciseLocation, locationStateId],
+  )
+
+  const setFilters = (next: FilterState | ((prev: FilterState) => FilterState)) => {
+    const resolved = typeof next === 'function' ? next(filters) : next
+    void navigate({ search: filtersToSearch(resolved), replace: true })
+  }
 
   const listStationsArgs = {
     fuelTypes: filters.fuelTypes.length > 0 ? filters.fuelTypes : undefined,
@@ -166,7 +292,7 @@ function Home() {
         limit: 800,
       }
     : 'skip' as const
-  const boundsResult = useQuery(
+  const boundsResult = useConvexQuery(
     api.stations.listStationsInBounds,
     boundsArgs,
   ) as
@@ -176,7 +302,7 @@ function Home() {
       }
     | undefined
 
-  const latestRun = useQuery(api.prices.latestRun)
+  const latestRun = loaderData.latestRun
 
   const visibleRows = useMemo<StationRow[]>(() => {
     if (!paginated.results) return []
@@ -192,6 +318,7 @@ function Home() {
       },
       prices: row.prices as Partial<Record<FuelType, { price: number }>>,
       highlightedPrice: row.highlightedPrice,
+      distanceKm: row.distanceKm,
     }))
   }, [paginated.results])
 
@@ -209,6 +336,7 @@ function Home() {
       },
       prices: row.prices as Partial<Record<FuelType, { price: number }>>,
       highlightedPrice: row.highlightedPrice,
+      distanceKm: row.distanceKm,
     }))
   }, [boundsResult])
 
@@ -216,20 +344,6 @@ function Home() {
     if (!showFavoritesOnly) return visibleRows
     return visibleRows.filter((r) => favoriteSet.has(r.station.permitNumber))
   }, [visibleRows, showFavoritesOnly, favoriteSet])
-
-  const distanceByPermit = useMemo(() => {
-    if (filters.sortMode !== 'distance' || !userLoc.location) return undefined
-    const ul = userLoc.location
-    const map = new Map<string, number>()
-    for (const row of visibleRows) {
-      const lat = row.station.latitude
-      const lon = row.station.longitude
-      if (typeof lat === 'number' && typeof lon === 'number') {
-        map.set(row.station.permitNumber, distanceKm(ul, { latitude: lat, longitude: lon }))
-      }
-    }
-    return map
-  }, [visibleRows, filters.sortMode, userLoc.location])
 
   async function handleToggleFavorite(permitNumber: string) {
     const result = await toggleFavorite(permitNumber)
@@ -432,7 +546,6 @@ function Home() {
                 }
               : null
           }
-          distanceByPermit={distanceByPermit}
         />
       </section>
 

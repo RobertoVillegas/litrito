@@ -31,6 +31,7 @@ type StationRow = {
   station: Doc<'stations'>
   prices: Record<string, { price: number }>
   highlightedPrice: number | null
+  distanceKm?: number | null
 }
 
 function parseOffset(cursor: string | null | undefined): number {
@@ -148,6 +149,7 @@ async function hydrateStationRows(
       station,
       prices: priceMap,
       highlightedPrice: pickHighlightedPrice(priceMap, fuelTypes),
+      distanceKm: null,
     }
   })
 }
@@ -305,31 +307,39 @@ async function listStationsByDistance(
     if (candidates.size >= needed) break
   }
 
-  const sorted = [...candidates.values()].sort((a, b) => {
-    const aDistance = haversineKm(
-      params.userLocation.latitude,
-      params.userLocation.longitude,
-      a.latitude ?? 0,
-      a.longitude ?? 0,
-    )
-    const bDistance = haversineKm(
-      params.userLocation.latitude,
-      params.userLocation.longitude,
-      b.latitude ?? 0,
-      b.longitude ?? 0,
-    )
-    return aDistance - bDistance || a.name.localeCompare(b.name)
-  })
+  const sorted = [...candidates.values()]
+    .map((station) => ({
+      station,
+      distanceKm: haversineKm(
+        params.userLocation.latitude,
+        params.userLocation.longitude,
+        station.latitude ?? 0,
+        station.longitude ?? 0,
+      ),
+    }))
+    .sort((a, b) => {
+      return a.distanceKm - b.distanceKm || a.station.name.localeCompare(b.station.name)
+    })
 
   const page = paginateArray(
     sorted,
     params.paginationOpts.cursor,
     params.paginationOpts.numItems,
   )
-  const rows = filterRowsByFuel(
-    await hydrateStationRows(ctx, page.page, params.fuelTypes),
-    params.fuelTypes,
+  const distanceByPermit = new Map(
+    page.page.map((item) => [item.station.permitNumber, item.distanceKm]),
   )
+  const rows = filterRowsByFuel(
+    await hydrateStationRows(
+      ctx,
+      page.page.map((item) => item.station),
+      params.fuelTypes,
+    ),
+    params.fuelTypes,
+  ).map((row) => ({
+    ...row,
+    distanceKm: distanceByPermit.get(row.station.permitNumber) ?? null,
+  }))
 
   return { ...page, page: rows }
 }

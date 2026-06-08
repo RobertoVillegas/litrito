@@ -1,12 +1,8 @@
-import { ConvexQueryClient } from '@convex-dev/react-query'
 import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react'
 import { authClient } from '#/lib/auth-client'
+import { createConvexQueryClient } from './query-client'
 
-const CONVEX_URL = (import.meta as any).env.VITE_CONVEX_URL
-if (!CONVEX_URL) {
-  console.error('missing envar CONVEX_URL')
-}
-const convexQueryClient = new ConvexQueryClient(CONVEX_URL)
+const convexQueryClient = createConvexQueryClient()
 
 export default function AppConvexProvider({
   children,
