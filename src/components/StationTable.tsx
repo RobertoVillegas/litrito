@@ -234,6 +234,16 @@ export function StationTable({
 
       <div
         ref={parentRef}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          if (
+            canLoadMore &&
+            !isLoadingMore &&
+            el.scrollHeight - el.scrollTop - el.clientHeight < 400
+          ) {
+            onLoadMore()
+          }
+        }}
         className="relative max-h-[60vh] min-h-[320px] overflow-auto"
       >
         <div
@@ -314,19 +324,16 @@ export function StationTable({
         </div>
       </div>
 
-      <div className="flex items-center justify-center border-t border-slate-200 bg-slate-50 px-4 py-3">
-        {canLoadMore ? (
-          <button
-            type="button"
-            disabled={isLoadingMore}
-            onClick={onLoadMore}
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-ink/25 bg-white px-4 text-xs font-bold text-ink transition hover:border-brand hover:text-brand disabled:opacity-50"
-          >
-            {isLoadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Cargar 50 más
-          </button>
+      <div className="flex items-center justify-center border-t border-line bg-canvas-soft px-4 py-3 text-xs">
+        {isLoadingMore ? (
+          <span className="inline-flex items-center gap-2 font-semibold text-body">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Cargando más…
+          </span>
+        ) : canLoadMore ? (
+          <span className="text-mute">Desliza para cargar más</span>
         ) : rows.length > 0 ? (
-          <span className="text-xs text-slate-500">Fin de la lista</span>
+          <span className="text-mute">Fin de la lista</span>
         ) : null}
       </div>
     </div>

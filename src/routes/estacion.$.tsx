@@ -1,9 +1,21 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { useState } from 'react'
-import { ArrowLeft, Fuel, MapPin, Navigation, Star } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { ArrowLeft, MapPin, Navigation, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { useFavorites } from '#/lib/useFavorites'
+
+const StationMiniMap = lazy(() =>
+  import('../components/StationMiniMap').then((m) => ({ default: m.StationMiniMap })),
+)
+
+function ClientOnly({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
+  return <>{children}</>
+}
 
 export const Route = createFileRoute('/estacion/$')({
   component: StationDetail,
@@ -113,11 +125,7 @@ function StationDetail() {
       <section className="bg-ink text-on-dark">
         <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
           <BackLink onDark />
-          <div className="eyebrow mt-6 inline-flex items-center gap-2 rounded-[32px] bg-brand px-3 py-1.5 text-white">
-            <Fuel className="h-4 w-4" />
-            Estación
-          </div>
-          <h1 className="font-display mt-4 text-4xl text-white sm:text-6xl">
+          <h1 className="font-display mt-6 text-4xl text-white sm:text-6xl">
             {station.name}
           </h1>
           <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-white/70">
@@ -173,6 +181,24 @@ function StationDetail() {
           )}
         </div>
       </section>
+
+      {/* Map */}
+      {hasCoords && (
+        <section className="mx-auto w-full max-w-5xl px-4 pt-8 sm:px-6 lg:px-8">
+          <ClientOnly>
+            <Suspense
+              fallback={
+                <div className="h-[320px] rounded-[6px] border border-line bg-canvas-soft" />
+              }
+            >
+              <StationMiniMap
+                latitude={station.latitude as number}
+                longitude={station.longitude as number}
+              />
+            </Suspense>
+          </ClientOnly>
+        </section>
+      )}
 
       {/* Current prices */}
       <section className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
