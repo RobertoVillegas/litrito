@@ -30,11 +30,19 @@ interface MyRouterContext {
 // sides with no hydration mismatch. Do NOT reuse another site's website id.
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   loader: () => {
-    const env = typeof process !== 'undefined' ? process.env : undefined
-    return {
-      umamiWebsiteId: env?.VITE_UMAMI_WEBSITE_ID ?? '',
-      umamiSrc: env?.VITE_UMAMI_SRC ?? 'https://umami.athas.mx/script.js',
-    }
+    // Read from both sources so it works regardless of how the deploy supplies
+    // it: import.meta.env (inlined at Vite build, like VITE_CONVEX_URL) and the
+    // server's runtime process.env (docker-compose / Dokploy .env).
+    const runtimeEnv = typeof process !== 'undefined' ? process.env : undefined
+    const umamiWebsiteId =
+      (import.meta.env.VITE_UMAMI_WEBSITE_ID as string | undefined) ||
+      runtimeEnv?.VITE_UMAMI_WEBSITE_ID ||
+      ''
+    const umamiSrc =
+      (import.meta.env.VITE_UMAMI_SRC as string | undefined) ||
+      runtimeEnv?.VITE_UMAMI_SRC ||
+      'https://umami.athas.mx/script.js'
+    return { umamiWebsiteId, umamiSrc }
   },
   head: ({ loaderData }) => ({
     scripts: loaderData?.umamiWebsiteId
