@@ -538,14 +538,6 @@ function Home() {
           }
           onToggleFavorite={handleToggleFavorite}
           favoriteSet={favoriteSet}
-          userLocation={
-            userLoc.location
-              ? {
-                  latitude: userLoc.location.latitude,
-                  longitude: userLoc.location.longitude,
-                }
-              : null
-          }
         />
       </section>
 

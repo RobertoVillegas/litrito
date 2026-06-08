@@ -41,7 +41,6 @@ type Props = {
   onFuelSortChange?: (fuelType: FuelType) => void
   onToggleFavorite?: (permitNumber: string) => void
   favoriteSet?: Set<string>
-  userLocation?: { latitude: number; longitude: number } | null
 }
 
 function formatCurrency(value: number): string {
@@ -166,7 +165,6 @@ export function StationTable({
   onFuelSortChange,
   onToggleFavorite,
   favoriteSet,
-  userLocation,
 }: Props) {
   const columns = useMemo<ColumnDef<StationRow>[]>(() => {
     const SortHeader = ({
@@ -289,7 +287,7 @@ export function StationTable({
         size: 110,
       })),
     ]
-    if (sortMode === 'distance' && userLocation) {
+    if (sortMode === 'distance') {
       cols.push({
         id: 'distance',
         header: () => (
@@ -320,7 +318,6 @@ export function StationTable({
     onFuelSortChange,
     onToggleFavorite,
     favoriteSet,
-    userLocation,
   ])
 
   const sorting = useMemo<SortingState>(() => {

@@ -511,15 +511,19 @@ export const listStations = query({
       rows.sort((a, b) => a.station.name.localeCompare(b.station.name))
     } else if (args.sortMode === 'distance' && args.userLocation) {
       const ul = args.userLocation
+      const distanceForRow = (row: StationRow) => {
+        const lat = row.station.latitude
+        const lon = row.station.longitude
+        if (typeof lat !== 'number' || typeof lon !== 'number') return null
+        return haversineKm(ul.latitude, ul.longitude, lat, lon)
+      }
+      rows = rows.map((row) => ({
+        ...row,
+        distanceKm: distanceForRow(row),
+      }))
       rows.sort((a, b) => {
-        const aLat = a.station.latitude
-        const aLon = a.station.longitude
-        const bLat = b.station.latitude
-        const bLon = b.station.longitude
-        if (typeof aLat !== 'number' || typeof aLon !== 'number') return 1
-        if (typeof bLat !== 'number' || typeof bLon !== 'number') return -1
-        const da = haversineKm(ul.latitude, ul.longitude, aLat, aLon)
-        const db = haversineKm(ul.latitude, ul.longitude, bLat, bLon)
+        const da = a.distanceKm ?? Number.POSITIVE_INFINITY
+        const db = b.distanceKm ?? Number.POSITIVE_INFINITY
         return da - db
       })
     }

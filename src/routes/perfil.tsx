@@ -134,7 +134,6 @@ function Profile() {
             onLoadMore={() => undefined}
             onToggleFavorite={(p) => void toggleFavorite(p)}
             favoriteSet={favoriteSet}
-            userLocation={null}
           />
         )}
       </section>
