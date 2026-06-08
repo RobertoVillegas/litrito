@@ -443,27 +443,34 @@ function Home() {
 
             <div className="mt-4 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600">
               {userLoc.location ? (
-                userLoc.location.source === 'precise' ? (
-                  <span>
-                    <strong className="text-emerald-800">Ubicacion precisa</strong>
-                    {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
-                  </span>
-                ) : userLoc.location.source === 'ip' ? (
-                  <span>
-                    <strong className="text-slate-700">Ubicacion aproximada</strong>
-                    {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
-                    {' '}
-                    <button
-                      type="button"
-                      onClick={userLoc.requestPrecise}
-                      className="ml-1 font-bold text-emerald-700 hover:underline"
-                    >
-                      precisar
-                    </button>
-                  </span>
-                ) : (
-                  <span>Ubicacion por defecto · CDMX</span>
-                )
+                <>
+                  {userLoc.location.source === 'precise' ? (
+                    <span>
+                      <strong className="text-emerald-800">Ubicacion precisa</strong>
+                      {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
+                    </span>
+                  ) : (
+                    <span>
+                      <strong className="text-slate-700">
+                        {userLoc.location.source === 'ip'
+                          ? 'Ubicacion aproximada'
+                          : 'Ubicacion por defecto'}
+                      </strong>
+                      {userLoc.location.city ? ` · ${userLoc.location.city}` : ''}
+                      {' '}
+                      <button
+                        type="button"
+                        onClick={userLoc.requestPrecise}
+                        className="ml-1 font-bold text-emerald-700 hover:underline"
+                      >
+                        usar mi ubicacion
+                      </button>
+                    </span>
+                  )}
+                  {userLoc.preciseError && (
+                    <p className="mt-1 text-rose-600">{userLoc.preciseError}</p>
+                  )}
+                </>
               ) : (
                 <span>Detectando tu ubicacion…</span>
               )}

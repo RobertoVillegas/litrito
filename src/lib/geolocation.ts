@@ -31,25 +31,28 @@ function fallbackLocation(): CachedLocation {
 async function fetchIpLocation(ip: string): Promise<CachedLocation | null> {
   try {
     const response = await fetch(
-      `https://ipwho.is/${encodeURIComponent(ip)}?fields=success,lat,longitude,city,region,country`,
+      `https://ipwho.is/${encodeURIComponent(ip)}?fields=success,latitude,longitude,city,region,country`,
       { headers: { accept: 'application/json' } },
     )
     if (!response.ok) return null
     const body = (await response.json()) as {
       success: boolean
-      lat?: number
+      latitude?: number
       longitude?: number
       city?: string
       region?: string
       country?: string
     }
     if (!body.success) return null
-    if (typeof body.lat !== 'number' || typeof body.longitude !== 'number') {
+    if (
+      typeof body.latitude !== 'number' ||
+      typeof body.longitude !== 'number'
+    ) {
       return null
     }
     return {
       ip,
-      latitude: body.lat,
+      latitude: body.latitude,
       longitude: body.longitude,
       city: body.city ?? null,
       region: body.region ?? null,
@@ -78,4 +81,42 @@ export const getApproximateLocation = createServerFn({ method: 'GET' })
     if (!fresh) return cache.get(ip) ?? fallbackLocation()
     cache.set(ip, fresh)
     return fresh
+  })
+
+// Turns precise GPS coordinates into a human-readable city/region so the UI can
+// show where the user actually is instead of the stale IP-derived city.
+export const reverseGeocode = createServerFn({ method: 'GET' })
+  .inputValidator(z.object({ latitude: z.number(), longitude: z.number() }))
+  .handler(async ({ data }): Promise<{ city: string | null; region: string | null }> => {
+    try {
+      const url = new URL('https://nominatim.openstreetmap.org/reverse')
+      url.searchParams.set('lat', String(data.latitude))
+      url.searchParams.set('lon', String(data.longitude))
+      url.searchParams.set('format', 'jsonv2')
+      url.searchParams.set('zoom', '12')
+      const response = await fetch(url, {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'Litrito/1.0 (+https://litrito.mx)',
+        },
+      })
+      if (!response.ok) return { city: null, region: null }
+      const body = (await response.json()) as {
+        address?: {
+          city?: string
+          town?: string
+          village?: string
+          municipality?: string
+          county?: string
+          state?: string
+        }
+      }
+      const a = body.address ?? {}
+      return {
+        city: a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? null,
+        region: a.state ?? null,
+      }
+    } catch {
+      return { city: null, region: null }
+    }
   })
