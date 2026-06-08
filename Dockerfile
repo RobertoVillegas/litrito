@@ -18,11 +18,12 @@ RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
-# --- Runtime stage: the Nitro .output bundle is self-contained, run on Node ---
-FROM node:22-alpine AS runner
+# --- Runtime stage: run with Bun, matching the Bun server preset Nitro emits
+# when the build runs under Bun (the output uses Bun.serve). ---
+FROM oven/bun:1-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 COPY --from=builder /app/.output ./.output
 EXPOSE 3000
-CMD ["node", ".output/server/index.mjs"]
+CMD ["bun", ".output/server/index.mjs"]
