@@ -9,14 +9,44 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RestablecerRouteImport } from './routes/restablecer'
+import { Route as RegistroRouteImport } from './routes/registro'
+import { Route as RecuperarRouteImport } from './routes/recuperar'
+import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as MetricasRouteImport } from './routes/metricas'
+import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EstacionSplatRouteImport } from './routes/estacion.$'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
+const RestablecerRoute = RestablecerRouteImport.update({
+  id: '/restablecer',
+  path: '/restablecer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegistroRoute = RegistroRouteImport.update({
+  id: '/registro',
+  path: '/registro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecuperarRoute = RecuperarRouteImport.update({
+  id: '/recuperar',
+  path: '/recuperar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PerfilRoute = PerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MetricasRoute = MetricasRouteImport.update({
   id: '/metricas',
   path: '/metricas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,45 +67,128 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/entrar': typeof EntrarRoute
   '/metricas': typeof MetricasRoute
+  '/perfil': typeof PerfilRoute
+  '/recuperar': typeof RecuperarRoute
+  '/registro': typeof RegistroRoute
+  '/restablecer': typeof RestablecerRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/entrar': typeof EntrarRoute
   '/metricas': typeof MetricasRoute
+  '/perfil': typeof PerfilRoute
+  '/recuperar': typeof RecuperarRoute
+  '/registro': typeof RegistroRoute
+  '/restablecer': typeof RestablecerRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/entrar': typeof EntrarRoute
   '/metricas': typeof MetricasRoute
+  '/perfil': typeof PerfilRoute
+  '/recuperar': typeof RecuperarRoute
+  '/registro': typeof RegistroRoute
+  '/restablecer': typeof RestablecerRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/metricas' | '/estacion/$' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/entrar'
+    | '/metricas'
+    | '/perfil'
+    | '/recuperar'
+    | '/registro'
+    | '/restablecer'
+    | '/estacion/$'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/metricas' | '/estacion/$' | '/api/auth/$'
-  id: '__root__' | '/' | '/metricas' | '/estacion/$' | '/api/auth/$'
+  to:
+    | '/'
+    | '/entrar'
+    | '/metricas'
+    | '/perfil'
+    | '/recuperar'
+    | '/registro'
+    | '/restablecer'
+    | '/estacion/$'
+    | '/api/auth/$'
+  id:
+    | '__root__'
+    | '/'
+    | '/entrar'
+    | '/metricas'
+    | '/perfil'
+    | '/recuperar'
+    | '/registro'
+    | '/restablecer'
+    | '/estacion/$'
+    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EntrarRoute: typeof EntrarRoute
   MetricasRoute: typeof MetricasRoute
+  PerfilRoute: typeof PerfilRoute
+  RecuperarRoute: typeof RecuperarRoute
+  RegistroRoute: typeof RegistroRoute
+  RestablecerRoute: typeof RestablecerRoute
   EstacionSplatRoute: typeof EstacionSplatRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/restablecer': {
+      id: '/restablecer'
+      path: '/restablecer'
+      fullPath: '/restablecer'
+      preLoaderRoute: typeof RestablecerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/registro': {
+      id: '/registro'
+      path: '/registro'
+      fullPath: '/registro'
+      preLoaderRoute: typeof RegistroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recuperar': {
+      id: '/recuperar'
+      path: '/recuperar'
+      fullPath: '/recuperar'
+      preLoaderRoute: typeof RecuperarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/perfil': {
+      id: '/perfil'
+      path: '/perfil'
+      fullPath: '/perfil'
+      preLoaderRoute: typeof PerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/metricas': {
       id: '/metricas'
       path: '/metricas'
       fullPath: '/metricas'
       preLoaderRoute: typeof MetricasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -104,7 +217,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EntrarRoute: EntrarRoute,
   MetricasRoute: MetricasRoute,
+  PerfilRoute: PerfilRoute,
+  RecuperarRoute: RecuperarRoute,
+  RegistroRoute: RegistroRoute,
+  RestablecerRoute: RestablecerRoute,
   EstacionSplatRoute: EstacionSplatRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }

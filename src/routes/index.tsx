@@ -332,8 +332,17 @@ function Home() {
             </div>
 
             <p className="mt-3 text-sm leading-6 text-white/60">
-              Fuente: Comision Nacional de Energia, precios reportados por
-              permisionarios. Son informativos y pueden cambiar en estacion.
+              Fuente:{' '}
+              <a
+                href="https://www.cne.gob.mx/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-white underline decoration-white/30 underline-offset-2 hover:text-brand"
+              >
+                Comision Nacional de Energia
+              </a>
+              , precios reportados por permisionarios. Son informativos y pueden
+              cambiar en estacion.
             </p>
 
             <p className="mt-4 text-xs leading-5 text-white/40">
@@ -469,7 +478,17 @@ function Home() {
             Precios informativos reportados por permisionarios a la Comision
             Nacional de Energia. Pueden cambiar en estacion.
           </p>
-          <p className="eyebrow mt-4 text-white/40">Hecho en Mexico · Fuente CNE</p>
+          <p className="eyebrow mt-4 text-white/40">
+            Hecho en Mexico ·{' '}
+            <a
+              href="https://www.cne.gob.mx/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/60 underline decoration-white/20 underline-offset-2 hover:text-brand"
+            >
+              Fuente CNE
+            </a>
+          </p>
         </div>
       </footer>
     </main>

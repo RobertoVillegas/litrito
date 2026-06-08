@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import type { FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import Avatar from 'boring-avatars'
-import { ChevronDown, Fuel, LogOut, MapPin } from 'lucide-react'
+import { ChevronDown, Fuel, LogOut, MapPin, User } from 'lucide-react'
 import { authClient } from '#/lib/auth-client'
 import { useUserLocation } from '#/lib/useUserLocation'
 
@@ -102,9 +101,28 @@ function AccountMenu() {
               <SignedInPanel
                 name={sessionUser.name ?? sessionUser.email ?? ''}
                 email={sessionUser.email ?? ''}
+                onNavigate={() => setOpen(false)}
               />
             ) : (
-              <AuthForm onDone={() => setOpen(false)} />
+              <div className="space-y-2">
+                <p className="text-sm text-body">
+                  Entra para sincronizar tus favoritas.
+                </p>
+                <Link
+                  to="/entrar"
+                  onClick={() => setOpen(false)}
+                  className="btn-pill btn-pill--primary w-full text-sm"
+                >
+                  Entrar
+                </Link>
+                <Link
+                  to="/registro"
+                  onClick={() => setOpen(false)}
+                  className="btn-pill btn-pill--outline-dark w-full text-sm"
+                >
+                  Crear cuenta
+                </Link>
+              </div>
             )}
           </div>
         </>
@@ -113,7 +131,15 @@ function AccountMenu() {
   )
 }
 
-function SignedInPanel({ name, email }: { name: string; email: string }) {
+function SignedInPanel({
+  name,
+  email,
+  onNavigate,
+}: {
+  name: string
+  email: string
+  onNavigate: () => void
+}) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -123,95 +149,23 @@ function SignedInPanel({ name, email }: { name: string; email: string }) {
           <div className="truncate text-xs text-body">{email}</div>
         </div>
       </div>
+      <Link
+        to="/perfil"
+        onClick={onNavigate}
+        className="btn-pill btn-pill--outline-dark w-full text-sm"
+      >
+        <User className="h-4 w-4" />
+        Mi perfil
+      </Link>
       <button
         type="button"
         onClick={() => void authClient.signOut()}
-        className="btn-pill btn-pill--outline-dark w-full text-sm"
+        className="btn-pill w-full border border-line text-sm text-body hover:text-ink"
       >
         <LogOut className="h-4 w-4" />
         Cerrar sesion
       </button>
     </div>
-  )
-}
-
-function AuthForm({ onDone }: { onDone: () => void }) {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSubmitting(true)
-    setMessage('')
-    try {
-      if (mode === 'signin') {
-        await authClient.signIn.email({ email, password })
-      } else {
-        await authClient.signUp.email({
-          email,
-          password,
-          name: name || email.split('@')[0] || 'Litrito',
-        })
-      }
-      setPassword('')
-      onDone()
-    } catch {
-      setMessage('No se pudo completar el acceso. Revisa tus datos.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-2.5">
-      <div className="eyebrow text-body">
-        {mode === 'signin' ? 'Iniciar sesion' : 'Crear cuenta'}
-      </div>
-      {mode === 'signup' && (
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nombre (opcional)"
-          className="h-10 w-full rounded-[6px] border border-line px-3 text-sm"
-        />
-      )}
-      <input
-        type="email"
-        required
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email"
-        className="h-10 w-full rounded-[6px] border border-line px-3 text-sm"
-      />
-      <input
-        type="password"
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Contrasena"
-        className="h-10 w-full rounded-[6px] border border-line px-3 text-sm"
-      />
-      <button
-        type="submit"
-        disabled={submitting}
-        className="btn-pill btn-pill--primary w-full text-sm disabled:opacity-50"
-      >
-        {submitting ? 'Enviando…' : mode === 'signin' ? 'Entrar' : 'Crear cuenta'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setMode((m) => (m === 'signin' ? 'signup' : 'signin'))}
-        className="w-full text-center text-xs font-bold text-brand hover:text-brand-dark"
-      >
-        {mode === 'signin' ? 'Crear una cuenta' : 'Ya tengo cuenta'}
-      </button>
-      {message && <p className="text-xs font-semibold text-brand">{message}</p>}
-    </form>
   )
 }
 

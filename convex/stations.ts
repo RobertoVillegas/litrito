@@ -370,6 +370,39 @@ export const getStationDetail = query({
   },
 })
 
+// Resolve a set of permit numbers (e.g. the user's favorites) to station rows
+// with current prices, in the same shape the home table consumes.
+export const getStationsByPermits = query({
+  args: { permitNumbers: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const permits = args.permitNumbers.slice(0, 200)
+    const rows = await Promise.all(
+      permits.map(async (permit) => {
+        const station = await ctx.db
+          .query('stations')
+          .withIndex('by_permit', (q) => q.eq('permitNumber', permit))
+          .unique()
+        if (!station) return null
+        const prices = await ctx.db
+          .query('fuelPricesCurrent')
+          .withIndex('by_station_fuel', (q) => q.eq('stationPermitNumber', permit))
+          .collect()
+        const priceMap: Record<string, { price: number }> = {}
+        for (const p of prices) priceMap[p.fuelType] = { price: p.price }
+        const highlightedPrice =
+          priceMap.regular?.price ??
+          priceMap.premium?.price ??
+          priceMap.diesel?.price ??
+          priceMap.duba?.price ??
+          priceMap.unknown?.price ??
+          null
+        return { station, prices: priceMap, highlightedPrice }
+      }),
+    )
+    return rows.filter((r): r is NonNullable<typeof r> => r !== null)
+  },
+})
+
 type FilterOptionsPayload = {
   states: { externalId: string; name: string; count: number }[]
   municipalities: {
