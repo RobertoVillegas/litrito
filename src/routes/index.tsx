@@ -130,6 +130,22 @@ function formatDate(value: string | undefined): string {
   }).format(date)
 }
 
+const toRad = (d: number) => (d * Math.PI) / 180
+function distanceKm(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number {
+  const R = 6371
+  const dLat = toRad(b.latitude - a.latitude)
+  const dLon = toRad(b.longitude - a.longitude)
+  const sinDLat = Math.sin(dLat / 2)
+  const sinDLon = Math.sin(dLon / 2)
+  const aa =
+    sinDLat * sinDLat +
+    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * sinDLon * sinDLon
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(aa)))
+}
+
 function defaultFilters(): FilterState {
   return {
     fuelTypes: ['regular', 'premium', 'diesel', 'duba'],
@@ -253,7 +269,11 @@ function Home() {
 
   const setFilters = (next: FilterState | ((prev: FilterState) => FilterState)) => {
     const resolved = typeof next === 'function' ? next(filters) : next
-    void navigate({ search: filtersToSearch(resolved), replace: true })
+    void navigate({
+      search: filtersToSearch(resolved),
+      replace: true,
+      resetScroll: false,
+    })
   }
 
   const listStationsArgs = {
@@ -304,6 +324,17 @@ function Home() {
 
   const latestRun = loaderData.latestRun
 
+  const displayDistanceForStation = (
+    row: StationFromQuery,
+  ): number | null | undefined => {
+    if (row.distanceKm != null) return row.distanceKm
+    if (filters.sortMode !== 'distance' || !userLoc.location) return row.distanceKm
+    const lat = row.station.latitude
+    const lon = row.station.longitude
+    if (typeof lat !== 'number' || typeof lon !== 'number') return row.distanceKm
+    return distanceKm(userLoc.location, { latitude: lat, longitude: lon })
+  }
+
   const visibleRows = useMemo<StationRow[]>(() => {
     if (!paginated.results) return []
     return paginated.results.map((row) => ({
@@ -318,9 +349,9 @@ function Home() {
       },
       prices: row.prices as Partial<Record<FuelType, { price: number }>>,
       highlightedPrice: row.highlightedPrice,
-      distanceKm: row.distanceKm,
+      distanceKm: displayDistanceForStation(row),
     }))
-  }, [paginated.results])
+  }, [paginated.results, filters.sortMode, userLoc.location])
 
   const mapRows = useMemo<StationRow[]>(() => {
     if (!boundsResult) return []

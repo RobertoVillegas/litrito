@@ -143,6 +143,17 @@ a:hover {
   color: var(--color-brand-dark);
 }
 
+a.btn-pill--primary,
+a.btn-pill--primary:hover,
+a.btn-pill--primary:focus,
+a.btn-pill--primary:active,
+.btn-pill--primary,
+.btn-pill--primary:hover,
+.btn-pill--primary:focus,
+.btn-pill--primary:active {
+  color: #ffffff;
+}
+
 .promo-marquee {
   color: var(--color-brand-contrast-charcoal);
   border-color: color-mix(in oklab, var(--color-brand-contrast-charcoal) 10%, transparent);

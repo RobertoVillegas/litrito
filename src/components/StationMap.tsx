@@ -197,7 +197,8 @@ function LocateControl({
       button.innerHTML =
         '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>'
       L.DomEvent.disableClickPropagation(container)
-      L.DomEvent.on(button, 'click', () => {
+      L.DomEvent.on(button, 'click', (event) => {
+        L.DomEvent.stop(event)
         if (location) {
           map.flyTo(location, 14, { duration: 0.7 })
         }
