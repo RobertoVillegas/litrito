@@ -15,7 +15,7 @@ import {
 } from 'recharts'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
-import { Skeleton } from '../components/Skeleton'
+import { Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 
 export const Route = createFileRoute('/metricas')({
@@ -257,37 +257,46 @@ function MetricsSkeleton() {
   return (
     <div className="space-y-12" aria-label="Cargando métricas">
       <div>
-        <Skeleton className="h-3 w-32" />
+        <SkeletonLine lead="h-[1.125rem]" bar="h-3" width="w-32" />
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className="rounded-[6px] border border-line p-5">
+            <div
+              key={index}
+              className="rounded-[6px] border border-line p-5"
+              style={{ borderTopColor: '#e6e6e6', borderTopWidth: 3 }}
+            >
               <div className="flex items-center justify-between gap-4">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-20" />
+                <SkeletonLine lead="h-5" bar="h-3.5" width="w-28" />
+                <SkeletonLine lead="h-4" bar="h-3" width="w-16" />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-4">
-                <div className="space-y-2 rounded-[6px] bg-canvas-soft p-3">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-6 w-20" />
-                  <Skeleton className="h-3 w-full" />
-                </div>
-                <div className="space-y-2 rounded-[6px] bg-canvas-soft p-3">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-6 w-20" />
-                  <Skeleton className="h-3 w-full" />
-                </div>
+                {[0, 1].map((cell) => (
+                  <div key={cell}>
+                    <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-16" />
+                    <SkeletonLine lead="h-6" bar="h-5" width="w-20" className="mt-1" />
+                    <SkeletonLine lead="h-4" bar="h-3" width="w-full" className="mt-1" />
+                    <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-2/3" />
+                  </div>
+                ))}
               </div>
             </div>
           ))}
         </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Skeleton className="h-32" />
-        <Skeleton className="h-32" />
+        {[0, 1].map((index) => (
+          <div key={index} className="rounded-[6px] border border-line p-5">
+            <SkeletonLine lead="h-[14px]" bar="h-3" width="w-28" />
+            <SkeletonLine lead="h-7" bar="h-6" width="w-40" className="mt-2" />
+            <SkeletonLine lead="h-5" bar="h-3.5" width="w-48" className="mt-1" />
+          </div>
+        ))}
       </div>
       <div>
-        <Skeleton className="h-3 w-48" />
-        <Skeleton className="mt-4 h-[360px]" />
+        <SkeletonLine lead="h-[1.125rem]" bar="h-3" width="w-48" />
+        <div className="mt-4 rounded-[6px] border border-line p-4">
+          <Skeleton className="h-[360px] w-full" />
+        </div>
       </div>
     </div>
   )

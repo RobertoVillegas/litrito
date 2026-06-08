@@ -23,6 +23,33 @@ export function DarkSkeleton({ className, ...props }: SkeletonProps) {
   )
 }
 
+/**
+ * Stands in for a single line of text. `lead` must match the text's line-box
+ * height (its line-height, e.g. h-5 for text-sm, h-6 for leading-6) so the real
+ * copy slots in without nudging layout — text reserves its full line height, not
+ * just the glyph height. The shimmer bar is thinner and vertically centered.
+ */
+export function SkeletonLine({
+  lead,
+  width,
+  bar = 'h-3',
+  dark = false,
+  className,
+}: {
+  lead: string
+  width: string
+  bar?: string
+  dark?: boolean
+  className?: string
+}) {
+  const Bar = dark ? DarkSkeleton : Skeleton
+  return (
+    <div aria-hidden="true" className={cn('flex items-center', lead, className)}>
+      <Bar className={cn(bar, width)} />
+    </div>
+  )
+}
+
 export function MapSkeleton({ className }: { className?: string }) {
   return (
     <div

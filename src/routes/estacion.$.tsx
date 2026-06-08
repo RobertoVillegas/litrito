@@ -6,7 +6,7 @@ import { ArrowLeft, Check, MapPin, Navigation, Share2, Star } from 'lucide-react
 import { api } from '../../convex/_generated/api'
 import { useFavorites } from '#/lib/useFavorites'
 import { RouteErrorFallback } from '../components/RouteError'
-import { DarkSkeleton, Skeleton } from '../components/Skeleton'
+import { DarkSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 
 const StationMiniMap = lazy(() =>
@@ -328,28 +328,54 @@ function StationDetailSkeleton() {
       <section className="bg-ink text-on-dark">
         <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4">
-            <DarkSkeleton className="h-9 w-24" />
+            <DarkSkeleton className="h-4 w-32" />
             <DarkSkeleton className="h-6 w-32 rounded-full" />
           </div>
-          <DarkSkeleton className="mt-6 h-12 w-4/5 sm:h-16" />
-          <DarkSkeleton className="mt-4 h-4 w-3/5" />
-          <div className="mt-6 flex flex-wrap gap-2">
+          <DarkSkeleton className="mt-6 h-9 w-4/5 sm:h-14" />
+          <div className="mt-4 flex items-start gap-2">
+            <DarkSkeleton className="h-4 w-4 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <SkeletonLine dark lead="h-6" bar="h-3.5" width="w-3/5" />
+              <SkeletonLine dark lead="h-6" bar="h-3.5" width="w-2/5" />
+            </div>
+          </div>
+          <SkeletonLine dark lead="h-4" bar="h-3" width="w-40" className="mt-3" />
+          <div className="mt-6 flex flex-wrap gap-3">
+            <DarkSkeleton className="h-10 w-32 rounded-full" />
             <DarkSkeleton className="h-10 w-28 rounded-full" />
-            <DarkSkeleton className="h-10 w-28 rounded-full" />
+            <DarkSkeleton className="h-10 w-32 rounded-full" />
           </div>
         </div>
       </section>
+      <section className="mx-auto w-full max-w-5xl px-4 pt-8 sm:px-6 lg:px-8">
+        <Skeleton className="h-[320px] w-full" />
+      </section>
       <section className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <SkeletonLine lead="h-[1.125rem]" bar="h-3" width="w-32" />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className="rounded-[6px] border border-line p-4">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="mt-3 h-8 w-24" />
-              <Skeleton className="mt-2 h-3 w-32" />
+            <div
+              key={index}
+              className="rounded-[6px] border border-line p-4"
+              style={{ borderTopColor: '#e6e6e6', borderTopWidth: 3 }}
+            >
+              <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-20" />
+              <SkeletonLine lead="h-7" bar="h-6" width="w-24" className="mt-2" />
+              <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-28" className="mt-1" />
             </div>
           ))}
         </div>
-        <Skeleton className="mt-8 h-[320px]" />
+        <div className="mt-12">
+          <SkeletonLine lead="h-[1.125rem]" bar="h-3" width="w-40" />
+          <div className="mt-4 rounded-[6px] border border-line p-4">
+            <Skeleton className="h-[240px] w-full" />
+            <div className="mt-3 flex flex-wrap gap-3">
+              {Array.from({ length: 3 }, (_, i) => (
+                <SkeletonLine key={i} lead="h-4" bar="h-3" width="w-16" />
+              ))}
+            </div>
+          </div>
+        </div>
       </section>
     </>
   )

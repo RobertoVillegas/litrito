@@ -10,7 +10,7 @@ import {
 import { ArrowDownUp, Loader2, Star } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '../lib/utils'
-import { Skeleton } from './Skeleton'
+import { Skeleton, SkeletonLine } from './Skeleton'
 import type { FuelType, SortMode } from './StationFilters'
 
 type Station = {
@@ -158,19 +158,18 @@ function StationCardSkeleton({ fuelTypes }: { fuelTypes: FuelType[] }) {
   return (
     <div className="p-4">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 space-y-2">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-3 w-full" />
-          <Skeleton className="h-3 w-2/3" />
+        <div className="min-w-0 flex-1">
+          <SkeletonLine lead="h-5" bar="h-3.5" width="w-3/4" />
         </div>
         <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
       </div>
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <SkeletonLine lead="h-4" bar="h-3" width="w-full" className="mt-0.5" />
+      <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-2/3" />
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
         {fuelTypes.map((ft) => (
-          <Skeleton key={ft} className="h-7 w-24 rounded-full" />
+          <Skeleton key={ft} className="h-6 w-20 rounded-full" />
         ))}
       </div>
-      <Skeleton className="mt-3 h-3 w-20" />
     </div>
   )
 }

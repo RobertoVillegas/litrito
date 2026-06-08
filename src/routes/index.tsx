@@ -6,7 +6,7 @@ import { ArrowRight, Fuel, LocateFixed, MapPin, Navigation } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
 import { SiteFooter } from '../components/SiteFooter'
-import { DarkSkeleton, MapSkeleton } from '../components/Skeleton'
+import { DarkSkeleton, MapSkeleton, SkeletonLine } from '../components/Skeleton'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { track } from '#/lib/analytics'
 import type { FuelType } from '../components/StationFilters'
@@ -327,13 +327,13 @@ function StationRankSkeletonList() {
           className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-[6px] border border-white/10 bg-white/[0.04] p-3"
         >
           <DarkSkeleton className="h-8 w-8 rounded-full bg-white/18" />
-          <div className="min-w-0 space-y-2">
-            <DarkSkeleton className="h-4 w-[min(100%,18rem)]" />
-            <DarkSkeleton className="h-3 w-[min(72%,12rem)]" />
+          <div className="min-w-0">
+            <SkeletonLine dark lead="h-5" bar="h-3.5" width="w-[min(100%,18rem)]" />
+            <SkeletonLine dark lead="h-4" bar="h-3" width="w-[min(72%,12rem)]" className="mt-0.5" />
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <DarkSkeleton className="h-5 w-16" />
-            <DarkSkeleton className="h-3 w-8" />
+          <div className="text-right">
+            <SkeletonLine dark lead="h-6" bar="h-4" width="w-16" className="justify-end" />
+            <SkeletonLine dark lead="h-5" bar="h-2.5" width="w-8" className="mt-1 justify-end" />
           </div>
         </div>
       ))}
