@@ -24,6 +24,14 @@ const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 const NOMINATIM_MIN_INTERVAL_MS = 1100
 const GEOCODE_BATCH_SIZE = 300
 
+// Convex actions cap at 1000 system operations per invocation. Each
+// `ctx.scheduler.runAfter` counts as one, so chunk municipality refreshes into
+// batches that fit comfortably under the limit and run in parallel.
+const MUNICIPALITY_BATCH_SIZE = 800
+const MUNICIPALITY_REFRESH_STAGGER_MS = 750
+const MUNICIPALITY_BATCH_START_STAGGER_MS = 2_000
+const PLACES_PATCH_CHUNK = 500
+
 type CneState = {
   EntidadFederativaId: string | number
   Nombre: string
@@ -529,37 +537,47 @@ export const recordXmlSnapshot = internalMutation({
   },
 })
 
-export const matchPlacesChunk = internalMutation({
+export const listAllStationPermits = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query('stations').collect()
+    return all.map((s) => ({ permitNumber: s.permitNumber, _id: s._id }))
+  },
+})
+
+export const patchStationsFromPlaces = internalMutation({
   args: {
-    places: v.array(
+    matches: v.array(
       v.object({
+        stationId: v.id('stations'),
         placeId: v.string(),
-        permitNumber: v.string(),
-        name: v.string(),
         latitude: v.number(),
         longitude: v.number(),
+        name: v.optional(v.string()),
       }),
     ),
   },
   handler: async (ctx, args) => {
-    let matched = 0
-
-    for (const place of args.places) {
-      const existing = await ctx.db
-        .query('stations')
-        .withIndex('by_permit', (q) => q.eq('permitNumber', place.permitNumber))
-        .unique()
-      if (!existing) continue
-      await ctx.db.patch(existing._id, {
-        placeId: place.placeId,
-        latitude: place.latitude,
-        longitude: place.longitude,
-        name: existing.name || place.name,
-      })
-      matched += 1
+    for (const m of args.matches) {
+      const patch: {
+        placeId: string
+        latitude: number
+        longitude: number
+        name?: string
+      } = {
+        placeId: m.placeId,
+        latitude: m.latitude,
+        longitude: m.longitude,
+      }
+      if (m.name) {
+        const current = await ctx.db.get(m.stationId)
+        if (current && !current.name) {
+          patch.name = m.name
+        }
+      }
+      await ctx.db.patch(m.stationId, patch)
     }
-
-    return { matched }
+    return { patched: args.matches.length }
   },
 })
 
@@ -611,6 +629,32 @@ export const refreshMunicipalityInternal = internalAction({
   },
   handler: async (ctx, args): Promise<MunicipalityRefreshResult> => {
     return await refreshMunicipalityData(ctx, args.stateExternalId, args.municipalityExternalId)
+  },
+})
+
+export const queueMunicipalityBatch = internalAction({
+  args: {
+    batch: v.array(
+      v.object({
+        stateExternalId: v.string(),
+        municipalityExternalId: v.string(),
+      }),
+    ),
+    staggerMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Each `runAfter` is a system operation. With 800 municipalities per batch
+    // we stay under Convex's 1000-op action limit and the outer queue action
+    // only spends a handful of ops fanning out the batches.
+    let delayMs = 0
+    for (const m of args.batch) {
+      await ctx.scheduler.runAfter(delayMs, internal.ingestion.refreshMunicipalityInternal, {
+        stateExternalId: m.stateExternalId,
+        municipalityExternalId: m.municipalityExternalId,
+      })
+      delayMs += args.staggerMs
+    }
+    return { queued: args.batch.length }
   },
 })
 
@@ -672,16 +716,48 @@ export const capturePlacesSnapshot = internalAction({
       const xml = await response.text()
       const allPlaces = parsePlaceRows(xml)
 
-      // Each place is an indexed by_permit lookup + patch, so keep chunks well
-      // under Convex's per-mutation read/write limits.
-      let matched = 0
-      const CHUNK = 1000
-      for (let i = 0; i < allPlaces.length; i += CHUNK) {
-        const slice = allPlaces.slice(i, i + CHUNK)
-        const result = await ctx.runMutation(internal.ingestion.matchPlacesChunk, {
-          places: slice,
+      // Read all known station permits in a single query and build the join
+      // client-side. The previous version did one indexed by_permit lookup per
+      // place inside a mutation — with ~15k places that easily exceeded
+      // Convex's per-mutation op budget and the whole action timed out.
+      const stationRows = await ctx.runQuery(
+        internal.ingestion.listAllStationPermits,
+        {},
+      )
+      const stationIdByPermit = new Map(
+        stationRows.map((row) => [row.permitNumber, row._id]),
+      )
+
+      type PlaceMatch = {
+        stationId: (typeof stationRows)[number]['_id']
+        placeId: string
+        latitude: number
+        longitude: number
+        name?: string
+      }
+      const matches: PlaceMatch[] = []
+      for (const place of allPlaces) {
+        const stationId = stationIdByPermit.get(place.permitNumber)
+        if (!stationId) continue
+        matches.push({
+          stationId,
+          placeId: place.placeId,
+          latitude: place.latitude,
+          longitude: place.longitude,
+          name: place.name || undefined,
         })
-        matched += result.matched
+      }
+
+      // Patch in small batches so each mutation stays well under Convex's
+      // 16k-op budget, regardless of how many stations the catalog grows to.
+      let patched = 0
+      for (let i = 0; i < matches.length; i += PLACES_PATCH_CHUNK) {
+        const slice = matches.slice(i, i + PLACES_PATCH_CHUNK)
+        const result = await ctx.runMutation(
+          internal.ingestion.patchStationsFromPlaces,
+          { matches: slice },
+        )
+        patched += result.patched
       }
 
       const { runId } = await ctx.runMutation(internal.ingestion.recordPlacesRun, {
@@ -689,7 +765,7 @@ export const capturePlacesSnapshot = internalAction({
         contentLength: xml.length,
         sample: xml.slice(0, 1800),
         placeCount: allPlaces.length,
-        matched,
+        matched: patched,
       })
 
       return { runId, places: allPlaces.length }
@@ -814,22 +890,32 @@ async function queueNationalRefresh(ctx: ActionCtx): Promise<QueueDailyRefreshRe
     await ctx.scheduler.runAfter(0, internal.ingestion.captureXmlSnapshot, {})
     await ctx.scheduler.runAfter(0, internal.ingestion.capturePlacesSnapshot, {})
 
-    let delayMs = 0
-    for (const municipality of catalog.municipalities) {
-      await ctx.scheduler.runAfter(delayMs, internal.ingestion.refreshMunicipalityInternal, {
-        stateExternalId: stateId(municipality.EntidadFederativaId),
-        municipalityExternalId: municipalityId(municipality.MunicipioId),
-      })
-      delayMs += 750
+    // Fan out across batches so the outer action stays under Convex's 1000
+    // system-op limit. Each batch runs as its own action and re-staggers the
+    // per-municipality refreshes so we don't hammer the CNE API.
+    const totalMunicipalities = catalog.municipalities.length
+    const batchCount = Math.max(1, Math.ceil(totalMunicipalities / MUNICIPALITY_BATCH_SIZE))
+    for (let i = 0; i < totalMunicipalities; i += MUNICIPALITY_BATCH_SIZE) {
+      const slice = catalog.municipalities.slice(i, i + MUNICIPALITY_BATCH_SIZE)
+      const batch = slice.map((m) => ({
+        stateExternalId: stateId(m.EntidadFederativaId),
+        municipalityExternalId: municipalityId(m.MunicipioId),
+      }))
+      const batchIndex = i / MUNICIPALITY_BATCH_SIZE
+      await ctx.scheduler.runAfter(
+        batchIndex * MUNICIPALITY_BATCH_START_STAGGER_MS,
+        internal.ingestion.queueMunicipalityBatch,
+        { batch, staggerMs: MUNICIPALITY_REFRESH_STAGGER_MS },
+      )
     }
 
     await ctx.runMutation(internal.ingestion.recordDailyQueue, {
-      queuedMunicipalities: catalog.municipalities.length,
-      message: `Carga nacional encolada para ${catalog.municipalities.length} municipios.`,
+      queuedMunicipalities: totalMunicipalities,
+      message: `Carga nacional encolada para ${totalMunicipalities} municipios en ${batchCount} lote(s).`,
     })
 
     return {
-      queuedMunicipalities: catalog.municipalities.length,
+      queuedMunicipalities: totalMunicipalities,
     }
   } catch (error) {
     await ctx.runMutation(internal.ingestion.recordFailure, {

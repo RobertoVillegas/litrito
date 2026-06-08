@@ -65,13 +65,15 @@ bunx convex env set SITE_URL http://127.0.0.1:3000   # or https://litrito.mx
 ## 6. Populate the data
 
 ```bash
-bunx convex run ingestion:refreshCatalog              # states + municipalities
-bunx convex run ingestion:refreshPlaces               # coordinates (fast, XML match)
-bunx convex run ingestion:bootstrapNationalRefresh    # national prices (runs ~hours in bg)
+bunx convex run ingestion:bootstrapNationalRefresh    # states + municipalities + national prices (queues ~2,500 jobs; runs hours in bg)
+bunx convex run ingestion:refreshPlaces               # coordinates (fast, XML match against known stations)
 bunx convex run stations:rebuildFilterOptionsCache    # filter counts snapshot
 ```
 
-The daily crons keep prices/coordinates fresh after this.
+The daily crons keep prices/coordinates fresh after this. `bootstrapNationalRefresh` is the
+single entry point that pulls the catalog, snapshots both XML feeds, and fans out
+price refreshes in batches of 800 to stay under Convex's per-action system-op
+limit.
 
 ## 7. Build + run the web app
 
@@ -129,7 +131,7 @@ wildcard matches one level only).
    ```
 7. **Repopulate — Zacatecas first to test fast:**
    ```bash
-   bunx convex run ingestion:refreshCatalog            # states + municipalities
+   bunx convex run ingestion:bootstrapNationalRefresh  # states + municipalities + queues all prices
    bunx convex run ingestion:refreshPlaces             # coordinates (national, fast)
    bunx convex run ingestion:refreshMunicipality '{"stateExternalId":"32","municipalityExternalId":"056"}'
    bunx convex run stations:rebuildFilterOptionsCache  # filter counts
