@@ -36,6 +36,65 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       {
         title: 'Litrito - precios de gasolina en Mexico',
       },
+      {
+        name: 'description',
+        content:
+          'Compara precios de gasolina por estacion, municipio y estado en Mexico. Regular, premium, diesel y duba, actualizados a diario.',
+      },
+      {
+        property: 'og:type',
+        content: 'website',
+      },
+      {
+        property: 'og:site_name',
+        content: 'Litrito',
+      },
+      {
+        property: 'og:title',
+        content: 'Litrito - precios de gasolina en Mexico',
+      },
+      {
+        property: 'og:description',
+        content:
+          'Compara precios de gasolina por estacion, municipio y estado en Mexico.',
+      },
+      {
+        property: 'og:image',
+        content: '/og-image.png',
+      },
+      {
+        property: 'og:image:width',
+        content: '1200',
+      },
+      {
+        property: 'og:image:height',
+        content: '630',
+      },
+      {
+        property: 'og:image:alt',
+        content: 'Litrito - precios de gasolina en Mexico',
+      },
+      {
+        property: 'og:locale',
+        content: 'es_MX',
+      },
+      {
+        name: 'twitter:card',
+        content: 'summary_large_image',
+      },
+      {
+        name: 'twitter:title',
+        content: 'Litrito - precios de gasolina en Mexico',
+      },
+      {
+        name: 'twitter:description',
+        content:
+          'Compara precios de gasolina por estacion, municipio y estado en Mexico.',
+      },
+      {
+        name: 'twitter:image',
+        content: '/og-image.png',
+      },
     ],
     links: [
       {

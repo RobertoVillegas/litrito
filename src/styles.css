@@ -136,11 +136,7 @@ a {
 }
 
 a {
-  color: var(--color-brand);
   text-underline-offset: 2px;
-}
-a:hover {
-  color: var(--color-brand-dark);
 }
 
 a.btn-pill--primary,
