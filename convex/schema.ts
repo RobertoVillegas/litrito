@@ -60,6 +60,8 @@ export default defineSchema({
     source: v.literal('CNE'),
   })
     .index('by_station_fuel', ['stationPermitNumber', 'fuelType'])
+    .index('by_fuel_price', ['fuelType', 'price'])
+    .index('by_state_fuel_price', ['stateExternalId', 'fuelType', 'price'])
     .index('by_location_fuel_price', [
       'stateExternalId',
       'municipalityExternalId',

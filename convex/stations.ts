@@ -25,6 +25,315 @@ const MEXICO_BOUNDS = {
   neLon: -86.5,
 }
 
+type FuelType = Doc<'fuelPricesCurrent'>['fuelType']
+type ParsedMunicipality = { state: string | null; muni: string }
+type StationRow = {
+  station: Doc<'stations'>
+  prices: Record<string, { price: number }>
+  highlightedPrice: number | null
+}
+
+function parseOffset(cursor: string | null | undefined): number {
+  if (!cursor) return 0
+  const value = Number.parseInt(cursor.replace(/^\D+/, ''), 10)
+  return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function paginateArray<T>(
+  rows: T[],
+  cursor: string | null,
+  numItems: number,
+): { page: T[]; isDone: boolean; continueCursor: string } {
+  const start = parseOffset(cursor)
+  const end = start + numItems
+  const page = rows.slice(start, end)
+  const isDone = end >= rows.length
+  return { page, isDone, continueCursor: isDone ? '' : `o:${end}` }
+}
+
+function stationMatchesSelections(
+  station: Doc<'stations'>,
+  stateIds: string[],
+  parsedMunis: ParsedMunicipality[],
+): boolean {
+  if (parsedMunis.length > 0) {
+    const muniKeys = new Set(
+      parsedMunis
+        .filter((p) => p.state)
+        .map((p) => `${p.state}|${p.muni}`),
+    )
+    const rawMunis = new Set(
+      parsedMunis.filter((p) => !p.state).map((p) => p.muni),
+    )
+    const allowedStates = stateIds.length > 0 ? new Set(stateIds) : null
+    const matchesComposite = muniKeys.has(
+      `${station.stateExternalId}|${station.municipalityExternalId}`,
+    )
+    const matchesRaw =
+      rawMunis.has(station.municipalityExternalId) &&
+      (allowedStates === null || allowedStates.has(station.stateExternalId))
+    return matchesComposite || matchesRaw
+  }
+  if (stateIds.length > 0) return stateIds.includes(station.stateExternalId)
+  return true
+}
+
+function priceMatchesSelections(
+  price: Doc<'fuelPricesCurrent'>,
+  stateIds: string[],
+  parsedMunis: ParsedMunicipality[],
+): boolean {
+  if (parsedMunis.length > 0) {
+    const muniKeys = new Set(
+      parsedMunis
+        .filter((p) => p.state)
+        .map((p) => `${p.state}|${p.muni}`),
+    )
+    const rawMunis = new Set(
+      parsedMunis.filter((p) => !p.state).map((p) => p.muni),
+    )
+    const allowedStates = stateIds.length > 0 ? new Set(stateIds) : null
+    const matchesComposite = muniKeys.has(
+      `${price.stateExternalId}|${price.municipalityExternalId}`,
+    )
+    const matchesRaw =
+      rawMunis.has(price.municipalityExternalId) &&
+      (allowedStates === null || allowedStates.has(price.stateExternalId))
+    return matchesComposite || matchesRaw
+  }
+  if (stateIds.length > 0) return stateIds.includes(price.stateExternalId)
+  return true
+}
+
+function pickHighlightedPrice(
+  priceMap: Record<string, { price: number }>,
+  fuelTypes: FuelType[],
+) {
+  for (const ft of fuelTypes) {
+    const price = priceMap[ft]?.price
+    if (price != null) return price
+  }
+  return (
+    priceMap.regular?.price ??
+    priceMap.premium?.price ??
+    priceMap.diesel?.price ??
+    priceMap.duba?.price ??
+    priceMap.unknown?.price ??
+    null
+  )
+}
+
+async function hydrateStationRows(
+  ctx: QueryCtx,
+  stations: Doc<'stations'>[],
+  fuelTypes: FuelType[],
+): Promise<StationRow[]> {
+  const priceArrays = await Promise.all(
+    stations.map((station) =>
+      ctx.db
+        .query('fuelPricesCurrent')
+        .withIndex('by_station_fuel', (q) =>
+          q.eq('stationPermitNumber', station.permitNumber),
+        )
+        .collect(),
+    ),
+  )
+
+  return stations.map((station, i) => {
+    const priceMap: Record<string, { price: number }> = {}
+    for (const p of priceArrays[i]) {
+      priceMap[p.fuelType] = { price: p.price }
+    }
+    return {
+      station,
+      prices: priceMap,
+      highlightedPrice: pickHighlightedPrice(priceMap, fuelTypes),
+    }
+  })
+}
+
+function filterRowsByFuel(rows: StationRow[], fuelTypes: FuelType[]) {
+  if (fuelTypes.length === 0) return rows
+  return rows.filter((r) => {
+    const hasAnyPrice = Object.keys(r.prices).length > 0
+    if (!hasAnyPrice) return true
+    return fuelTypes.some((ft) => r.prices[ft] != null)
+  })
+}
+
+const toRad = (d: number) => (d * Math.PI) / 180
+function haversineKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+function boundingBox(
+  point: { latitude: number; longitude: number },
+  radiusKm: number,
+) {
+  const latDelta = radiusKm / 111
+  const lonScale = Math.max(0.15, Math.cos(toRad(point.latitude)))
+  const lonDelta = radiusKm / (111 * lonScale)
+  return {
+    swLat: point.latitude - latDelta,
+    neLat: point.latitude + latDelta,
+    swLon: point.longitude - lonDelta,
+    neLon: point.longitude + lonDelta,
+  }
+}
+
+async function listStationsByPrice(
+  ctx: QueryCtx,
+  params: {
+    fuelTypes: FuelType[]
+    stateIds: string[]
+    parsedMunis: ParsedMunicipality[]
+    singleState: string | null
+    singleMuni: ParsedMunicipality | null
+    paginationOpts: { cursor: string | null; numItems: number }
+  },
+): Promise<{ page: StationRow[]; isDone: boolean; continueCursor: string }> {
+  const primaryFuel = params.fuelTypes[0] ?? 'regular'
+  const locationScopedMuni =
+    params.singleState && params.singleMuni
+      ? { state: params.singleState, muni: params.singleMuni.muni }
+      : null
+
+  const stateScoped = params.singleState
+  const priceDocs = locationScopedMuni
+    ? await ctx.db
+        .query('fuelPricesCurrent')
+        .withIndex('by_location_fuel_price', (q) =>
+          q
+            .eq('stateExternalId', locationScopedMuni.state)
+            .eq('municipalityExternalId', locationScopedMuni.muni)
+            .eq('fuelType', primaryFuel),
+        )
+        .collect()
+    : stateScoped && params.stateIds.length <= 1
+      ? await ctx.db
+          .query('fuelPricesCurrent')
+          .withIndex('by_state_fuel_price', (q) =>
+            q.eq('stateExternalId', stateScoped).eq('fuelType', primaryFuel),
+          )
+          .collect()
+      : await ctx.db
+          .query('fuelPricesCurrent')
+          .withIndex('by_fuel_price', (q) => q.eq('fuelType', primaryFuel))
+          .collect()
+
+  const seenPermits = new Set<string>()
+  const orderedPrices = priceDocs.filter((price) => {
+    if (!priceMatchesSelections(price, params.stateIds, params.parsedMunis)) {
+      return false
+    }
+    if (seenPermits.has(price.stationPermitNumber)) return false
+    seenPermits.add(price.stationPermitNumber)
+    return true
+  })
+
+  const pagePrices = paginateArray(
+    orderedPrices,
+    params.paginationOpts.cursor,
+    params.paginationOpts.numItems,
+  )
+  const stations = (
+    await Promise.all(
+      pagePrices.page.map((price) =>
+        ctx.db
+          .query('stations')
+          .withIndex('by_permit', (q) =>
+            q.eq('permitNumber', price.stationPermitNumber),
+          )
+          .unique(),
+      ),
+    )
+  ).filter((station): station is Doc<'stations'> => station !== null)
+
+  const rows = await hydrateStationRows(ctx, stations, params.fuelTypes)
+  return {
+    ...pagePrices,
+    page: rows,
+  }
+}
+
+async function listStationsByDistance(
+  ctx: QueryCtx,
+  params: {
+    fuelTypes: FuelType[]
+    stateIds: string[]
+    parsedMunis: ParsedMunicipality[]
+    userLocation: { latitude: number; longitude: number }
+    paginationOpts: { cursor: string | null; numItems: number }
+  },
+): Promise<{ page: StationRow[]; isDone: boolean; continueCursor: string }> {
+  const start = parseOffset(params.paginationOpts.cursor)
+  const needed = start + params.paginationOpts.numItems
+  const candidates = new Map<string, Doc<'stations'>>()
+  const radiiKm = [5, 10, 20, 40, 80, 160, 320, 640, 1300]
+
+  for (const radiusKm of radiiKm) {
+    const box = boundingBox(params.userLocation, radiusKm)
+    const byLat = await ctx.db
+      .query('stations')
+      .withIndex('by_lat', (q) =>
+        q.gte('latitude', box.swLat).lte('latitude', box.neLat),
+      )
+      .collect()
+
+    for (const station of byLat) {
+      const lat = station.latitude
+      const lon = station.longitude
+      if (typeof lat !== 'number' || typeof lon !== 'number') continue
+      if (lon < box.swLon || lon > box.neLon) continue
+      if (!stationMatchesSelections(station, params.stateIds, params.parsedMunis)) {
+        continue
+      }
+      candidates.set(station.permitNumber, station)
+    }
+
+    if (candidates.size >= needed) break
+  }
+
+  const sorted = [...candidates.values()].sort((a, b) => {
+    const aDistance = haversineKm(
+      params.userLocation.latitude,
+      params.userLocation.longitude,
+      a.latitude ?? 0,
+      a.longitude ?? 0,
+    )
+    const bDistance = haversineKm(
+      params.userLocation.latitude,
+      params.userLocation.longitude,
+      b.latitude ?? 0,
+      b.longitude ?? 0,
+    )
+    return aDistance - bDistance || a.name.localeCompare(b.name)
+  })
+
+  const page = paginateArray(
+    sorted,
+    params.paginationOpts.cursor,
+    params.paginationOpts.numItems,
+  )
+  const rows = filterRowsByFuel(
+    await hydrateStationRows(ctx, page.page, params.fuelTypes),
+    params.fuelTypes,
+  )
+
+  return { ...page, page: rows }
+}
+
 export const listStations = query({
   args: {
     fuelTypes: v.optional(v.array(fuelType)),
@@ -59,10 +368,25 @@ export const listStations = query({
     // For a single selected municipality, take the state from its composite key.
     const singleState = singleStateFromState ?? singleMuni?.state ?? null
 
-    function parseOffset(cursor: string | null | undefined): number {
-      if (!cursor) return 0
-      const value = Number.parseInt(cursor.replace(/^\D+/, ''), 10)
-      return Number.isFinite(value) && value >= 0 ? value : 0
+    if (!useSearch && args.sortMode === 'distance' && args.userLocation) {
+      return await listStationsByDistance(ctx, {
+        fuelTypes,
+        stateIds,
+        parsedMunis,
+        userLocation: args.userLocation,
+        paginationOpts: args.paginationOpts,
+      })
+    }
+
+    if (!useSearch && args.sortMode === 'price') {
+      return await listStationsByPrice(ctx, {
+        fuelTypes,
+        stateIds,
+        parsedMunis,
+        singleState,
+        singleMuni,
+        paginationOpts: args.paginationOpts,
+      })
     }
 
     let paginated: {
@@ -160,59 +484,12 @@ export const listStations = query({
       }
     }
 
-    const stations = paginated.page
-    const permitNumbers = stations.map((s) => s.permitNumber)
-
-    const priceArrays = await Promise.all(
-      permitNumbers.map((permit) =>
-        ctx.db
-          .query('fuelPricesCurrent')
-          .withIndex('by_station_fuel', (q) =>
-            q.eq('stationPermitNumber', permit),
-          )
-          .collect(),
-      ),
-    )
-    const pricesByStation = new Map<string, Record<string, { price: number }>>()
-    for (const arr of priceArrays) {
-      for (const p of arr) {
-        const slot = pricesByStation.get(p.stationPermitNumber) ?? {}
-        slot[p.fuelType] = { price: p.price }
-        pricesByStation.set(p.stationPermitNumber, slot)
-      }
-    }
-
-    const pickHighlightedPrice = (priceMap: Record<string, { price: number }>) => {
-      for (const ft of fuelTypes) {
-        const price = priceMap[ft]?.price
-        if (price != null) return price
-      }
-      return (
-        priceMap.regular?.price ??
-        priceMap.premium?.price ??
-        priceMap.diesel?.price ??
-        priceMap.duba?.price ??
-        priceMap.unknown?.price ??
-        null
-      )
-    }
-
-    let rows = stations.map((station) => {
-      const priceMap = pricesByStation.get(station.permitNumber) ?? {}
-      const highlightedPrice = pickHighlightedPrice(priceMap)
-      return { station, prices: priceMap, highlightedPrice }
-    })
+    let rows = await hydrateStationRows(ctx, paginated.page, fuelTypes)
 
     // Exclude a station from a fuel filter only when it reports prices but none
     // match the selected fuels. Stations with no reported price yet stay visible
     // so the catalog stays browsable while ingestion fills in.
-    if (fuelTypes.length > 0) {
-      rows = rows.filter((r) => {
-        const hasAnyPrice = Object.keys(r.prices).length > 0
-        if (!hasAnyPrice) return true
-        return fuelTypes.some((ft) => r.prices[ft] != null)
-      })
-    }
+    rows = filterRowsByFuel(rows, fuelTypes)
 
     if (args.sortMode === 'price') {
       rows.sort((a, b) => {
@@ -224,16 +501,6 @@ export const listStations = query({
       rows.sort((a, b) => a.station.name.localeCompare(b.station.name))
     } else if (args.sortMode === 'distance' && args.userLocation) {
       const ul = args.userLocation
-      const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-        const toRad = (d: number) => (d * Math.PI) / 180
-        const R = 6371
-        const dLat = toRad(lat2 - lat1)
-        const dLon = toRad(lon2 - lon1)
-        const a =
-          Math.sin(dLat / 2) ** 2 +
-          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
-        return 2 * R * Math.asin(Math.sqrt(a))
-      }
       rows.sort((a, b) => {
         const aLat = a.station.latitude
         const aLon = a.station.longitude
@@ -241,8 +508,8 @@ export const listStations = query({
         const bLon = b.station.longitude
         if (typeof aLat !== 'number' || typeof aLon !== 'number') return 1
         if (typeof bLat !== 'number' || typeof bLon !== 'number') return -1
-        const da = haversine(ul.latitude, ul.longitude, aLat, aLon)
-        const db = haversine(ul.latitude, ul.longitude, bLat, bLon)
+        const da = haversineKm(ul.latitude, ul.longitude, aLat, aLon)
+        const db = haversineKm(ul.latitude, ul.longitude, bLat, bLon)
         return da - db
       })
     }

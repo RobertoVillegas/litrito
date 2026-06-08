@@ -1,12 +1,6 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { create } from 'zustand'
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import { getApproximateLocation, reverseGeocode } from './geolocation'
 
 type Location = {
@@ -25,20 +19,146 @@ const FALLBACK: Location = {
   region: 'CDMX',
 }
 
-type UserLocationState = {
+type UserLocationStore = {
   location: Location | null
-  requestPrecise: () => void
-  hasPreciseLocation: boolean
+  rememberedPreciseLocation: Location | null
   preciseAttempted: boolean
   preciseError: string | null
+  setApproximateLocation: (location: Location) => void
+  setPreciseLocation: (location: Location) => void
+  setPreciseError: (error: string | null) => void
+  markPreciseAttempted: () => void
+  forgetPreciseLocation: () => void
 }
 
-const UserLocationContext = createContext<UserLocationState | null>(null)
+const noopStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+}
+
+function getLocationStorage(): StateStorage {
+  if (typeof window === 'undefined') return noopStorage
+  return window.localStorage
+}
+
+const useUserLocationStore = create<UserLocationStore>()(
+  persist(
+    (set) => ({
+      location: null,
+      rememberedPreciseLocation: null,
+      preciseAttempted: false,
+      preciseError: null,
+      setApproximateLocation: (location) =>
+        set((state) =>
+          state.location?.source === 'precise'
+            ? state
+            : { location, preciseError: null },
+        ),
+      setPreciseLocation: (location) =>
+        set({
+          location,
+          rememberedPreciseLocation: location,
+          preciseAttempted: true,
+          preciseError: null,
+        }),
+      setPreciseError: (error) => set({ preciseError: error }),
+      markPreciseAttempted: () => set({ preciseAttempted: true }),
+      forgetPreciseLocation: () =>
+        set({
+          rememberedPreciseLocation: null,
+          preciseError: 'Permiso de ubicación denegado.',
+        }),
+    }),
+    {
+      name: 'litrito:user-location',
+      storage: createJSONStorage(getLocationStorage),
+      partialize: (state) => ({
+        rememberedPreciseLocation: state.rememberedPreciseLocation,
+      }),
+    },
+  ),
+)
+
+function readFreshPreciseLocation() {
+  const {
+    markPreciseAttempted,
+    setPreciseError,
+    setPreciseLocation,
+    forgetPreciseLocation,
+  } = useUserLocationStore.getState()
+
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    setPreciseError('Tu navegador no soporta geolocalización.')
+    return
+  }
+  if (typeof window !== 'undefined' && !window.isSecureContext) {
+    // getCurrentPosition is blocked outside HTTPS/localhost.
+    setPreciseError(
+      'La ubicación precisa requiere HTTPS (o localhost). Ábrela sobre HTTPS.',
+    )
+    return
+  }
+
+  markPreciseAttempted()
+  setPreciseError(null)
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const latitude = pos.coords.latitude
+      const longitude = pos.coords.longitude
+      setPreciseLocation({
+        latitude,
+        longitude,
+        source: 'precise',
+        city: null,
+        region: null,
+      })
+      void reverseGeocode({ data: { latitude, longitude } })
+        .then((info) => {
+          const current = useUserLocationStore.getState().location
+          if (current?.source !== 'precise') return
+          setPreciseLocation({
+            ...current,
+            city: info.city,
+            region: info.region,
+          })
+        })
+        .catch(() => undefined)
+    },
+    (err) => {
+      if (err.code === err.PERMISSION_DENIED) {
+        forgetPreciseLocation()
+        return
+      }
+      setPreciseError('No se pudo obtener tu ubicación precisa.')
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
+  )
+}
 
 export function UserLocationProvider({ children }: { children: ReactNode }) {
-  const [location, setLocation] = useState<Location | null>(null)
-  const [preciseAttempted, setPreciseAttempted] = useState(false)
-  const [preciseError, setPreciseError] = useState<string | null>(null)
+  const rememberedPreciseLocation = useUserLocationStore(
+    (state) => state.rememberedPreciseLocation,
+  )
+  const setApproximateLocation = useUserLocationStore(
+    (state) => state.setApproximateLocation,
+  )
+  const setPreciseLocation = useUserLocationStore(
+    (state) => state.setPreciseLocation,
+  )
+  const requestedFreshPrecise = useRef(false)
+
+  useEffect(() => {
+    if (rememberedPreciseLocation) {
+      setPreciseLocation(rememberedPreciseLocation)
+    }
+  }, [rememberedPreciseLocation, setPreciseLocation])
+
+  useEffect(() => {
+    if (!rememberedPreciseLocation || requestedFreshPrecise.current) return
+    requestedFreshPrecise.current = true
+    readFreshPreciseLocation()
+  }, [rememberedPreciseLocation])
 
   useEffect(() => {
     let cancelled = false
@@ -46,99 +166,39 @@ export function UserLocationProvider({ children }: { children: ReactNode }) {
       try {
         const approx = await getApproximateLocation({ data: {} })
         if (cancelled) return
-        setLocation((prev) =>
-          prev?.source === 'precise'
-            ? prev
-            : {
-                latitude: approx.latitude,
-                longitude: approx.longitude,
-                source: 'ip',
-                city: approx.city,
-                region: approx.region,
-              },
-        )
+        setApproximateLocation({
+          latitude: approx.latitude,
+          longitude: approx.longitude,
+          source: 'ip',
+          city: approx.city,
+          region: approx.region,
+        })
       } catch {
         if (cancelled) return
-        setLocation((prev) =>
-          prev?.source === 'precise' ? prev : FALLBACK,
-        )
+        setApproximateLocation(FALLBACK)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [setApproximateLocation])
 
-  const requestPrecise = useCallback(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setPreciseError('Tu navegador no soporta geolocalización.')
-      return
-    }
-    if (typeof window !== 'undefined' && !window.isSecureContext) {
-      // getCurrentPosition is blocked outside HTTPS/localhost.
-      setPreciseError(
-        'La ubicación precisa requiere HTTPS (o localhost). Ábrela sobre HTTPS.',
-      )
-      return
-    }
-    setPreciseAttempted(true)
-    setPreciseError(null)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const latitude = pos.coords.latitude
-        const longitude = pos.coords.longitude
-        // Drop the stale IP-derived city until the reverse lookup resolves, so
-        // the label never shows the wrong city for the precise coordinates.
-        setLocation({
-          latitude,
-          longitude,
-          source: 'precise',
-          city: null,
-          region: null,
-        })
-        void reverseGeocode({ data: { latitude, longitude } })
-          .then((info) => {
-            setLocation((prev) =>
-              prev && prev.source === 'precise'
-                ? { ...prev, city: info.city, region: info.region }
-                : prev,
-            )
-          })
-          .catch(() => undefined)
-      },
-      (err) => {
-        setPreciseError(
-          err.code === err.PERMISSION_DENIED
-            ? 'Permiso de ubicación denegado.'
-            : 'No se pudo obtener tu ubicación precisa.',
-        )
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
-    )
-  }, [])
-
-  const value = useMemo<UserLocationState>(
-    () => ({
-      location,
-      requestPrecise,
-      hasPreciseLocation: location?.source === 'precise',
-      preciseAttempted,
-      preciseError,
-    }),
-    [location, preciseAttempted, preciseError, requestPrecise],
-  )
-
-  return (
-    <UserLocationContext.Provider value={value}>
-      {children}
-    </UserLocationContext.Provider>
-  )
+  return <>{children}</>
 }
 
 export function useUserLocation() {
-  const value = useContext(UserLocationContext)
-  if (!value) {
-    throw new Error('useUserLocation must be used within UserLocationProvider')
+  const location = useUserLocationStore((state) => state.location)
+  const preciseAttempted = useUserLocationStore(
+    (state) => state.preciseAttempted,
+  )
+  const preciseError = useUserLocationStore((state) => state.preciseError)
+  const requestPrecise = useCallback(() => readFreshPreciseLocation(), [])
+
+  return {
+    location,
+    requestPrecise,
+    hasPreciseLocation: location?.source === 'precise',
+    preciseAttempted,
+    preciseError,
   }
-  return value
 }

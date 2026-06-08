@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { BadgeCent, DatabaseZap, Fuel, RefreshCw, Star } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
@@ -112,8 +112,17 @@ function Home() {
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [notice, setNotice] = useState('')
+  const appliedPreciseLocationSort = useRef(false)
   const userLoc = useUserLocation()
   const { favoriteSet, toggleFavorite } = useFavorites()
+
+  useEffect(() => {
+    if (appliedPreciseLocationSort.current || !userLoc.hasPreciseLocation) return
+    appliedPreciseLocationSort.current = true
+    setFilters((prev) =>
+      prev.sortMode === 'distance' ? prev : { ...prev, sortMode: 'distance' },
+    )
+  }, [userLoc.hasPreciseLocation])
 
   const filterOptions =
     (useQuery(api.stations.listFilterOptions, {}) as FilterOptionsResult | undefined) ?? {
