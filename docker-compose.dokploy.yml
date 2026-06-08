@@ -1,0 +1,116 @@
+# Dokploy + Traefik deployment of the self-hosted Litrito stack.
+#
+# No host port bindings: Traefik (on dokploy-network) routes each domain to the
+# right container port via the labels below. Set these env vars in the Dokploy
+# UI before deploying:
+#
+#   CONVEX_DOMAIN        e.g. convex.litrito.mx        -> backend API + websocket
+#   CONVEX_HTTP_DOMAIN   e.g. convex-http.litrito.mx   -> backend HTTP actions
+#   DASHBOARD_DOMAIN     e.g. convex-admin.litrito.mx  -> Convex dashboard
+#   APP_DOMAIN           e.g. litrito.mx               -> the web app
+#   INSTANCE_SECRET      long random string
+#
+# The backend container exposes two ports (3210 API, 3211 HTTP actions), so it
+# gets two Traefik routers/services, one per domain.
+
+services:
+  backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    expose:
+      - "3210"
+      - "3211"
+    volumes:
+      - convex_data:/convex/data
+    environment:
+      # Must be the PUBLIC https URLs — Convex uses them for CORS and as the
+      # origin the browser/CLI connect to.
+      - CONVEX_CLOUD_ORIGIN=https://${CONVEX_DOMAIN}
+      - CONVEX_SITE_ORIGIN=https://${CONVEX_HTTP_DOMAIN}
+      - INSTANCE_NAME=${INSTANCE_NAME:-litrito}
+      - INSTANCE_SECRET=${INSTANCE_SECRET}
+      - DISABLE_BEACON=true
+      - RUST_LOG=${RUST_LOG:-info}
+      - DOCUMENT_RETENTION_DELAY=${DOCUMENT_RETENTION_DELAY:-172800}
+      # --- Optional Postgres engine instead of bundled SQLite ---
+      # - POSTGRES_URL=${POSTGRES_URL}
+      # - DO_NOT_REQUIRE_SSL=${DO_NOT_REQUIRE_SSL}
+    healthcheck:
+      test: curl -f http://localhost:3210/version
+      interval: 5s
+      start_period: 10s
+      retries: 5
+    networks:
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      # Convex API / client websocket -> port 3210
+      - traefik.http.routers.litrito-convex-api.rule=Host(`${CONVEX_DOMAIN}`)
+      - traefik.http.routers.litrito-convex-api.entrypoints=websecure
+      - traefik.http.routers.litrito-convex-api.tls.certResolver=letsencrypt
+      - traefik.http.routers.litrito-convex-api.service=litrito-convex-api
+      - traefik.http.services.litrito-convex-api.loadbalancer.server.port=3210
+      # Convex HTTP actions (auth + /stations/export) -> port 3211
+      - traefik.http.routers.litrito-convex-http.rule=Host(`${CONVEX_HTTP_DOMAIN}`)
+      - traefik.http.routers.litrito-convex-http.entrypoints=websecure
+      - traefik.http.routers.litrito-convex-http.tls.certResolver=letsencrypt
+      - traefik.http.routers.litrito-convex-http.service=litrito-convex-http
+      - traefik.http.services.litrito-convex-http.loadbalancer.server.port=3211
+
+  dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    expose:
+      - "6791"
+    environment:
+      - NEXT_PUBLIC_DEPLOYMENT_URL=https://${CONVEX_DOMAIN}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.litrito-convex-dashboard.rule=Host(`${DASHBOARD_DOMAIN}`)
+      - traefik.http.routers.litrito-convex-dashboard.entrypoints=websecure
+      - traefik.http.routers.litrito-convex-dashboard.tls.certResolver=letsencrypt
+      - traefik.http.routers.litrito-convex-dashboard.service=litrito-convex-dashboard
+      - traefik.http.services.litrito-convex-dashboard.loadbalancer.server.port=6791
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Browser-facing Convex URLs, baked into the bundle at build time.
+        VITE_CONVEX_URL: https://${CONVEX_DOMAIN}
+        VITE_CONVEX_SITE_URL: https://${CONVEX_HTTP_DOMAIN}
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.litrito-web.rule=Host(`${APP_DOMAIN}`)
+      - traefik.http.routers.litrito-web.entrypoints=websecure
+      - traefik.http.routers.litrito-web.tls.certResolver=letsencrypt
+      - traefik.http.routers.litrito-web.service=litrito-web
+      - traefik.http.services.litrito-web.loadbalancer.server.port=3000
+
+volumes:
+  convex_data:
+
+networks:
+  dokploy-network:
+    external: true

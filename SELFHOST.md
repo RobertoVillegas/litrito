@@ -85,6 +85,56 @@ App: `http://127.0.0.1:3000`. The browser-facing Convex URLs are baked into the
 build from `CONVEX_CLOUD_ORIGIN` / `CONVEX_SITE_ORIGIN`, so rebuild the `web`
 image if those change.
 
+## Deploy with Dokploy (Traefik)
+
+Use **`docker-compose.dokploy.yml`** instead of the local compose. It exposes
+nothing to the host — Traefik routes each domain to the right container port via
+labels, over the external `dokploy-network`. The backend container serves two
+ports (3210 API, 3211 HTTP actions), so it has two routers on two domains.
+
+1. **DNS**: point four subdomains at the VPS, e.g. `convex`, `convex-http`,
+   `convex-admin`, and the app domain (`litrito.mx`).
+2. **Dokploy → Compose service** pointing at this repo / `docker-compose.dokploy.yml`.
+   Set env vars in the Dokploy UI:
+   - `CONVEX_DOMAIN=convex.litrito.mx`
+   - `CONVEX_HTTP_DOMAIN=convex-http.litrito.mx`
+   - `DASHBOARD_DOMAIN=convex-admin.litrito.mx`
+   - `APP_DOMAIN=litrito.mx`
+   - `INSTANCE_SECRET=<long random>`
+3. **Deploy.** Traefik issues Let's Encrypt certs for each domain. The `web`
+   service builds and runs, but will error until functions are deployed (next).
+4. **Admin key** — in the backend container's terminal (Dokploy → backend → Terminal):
+   ```bash
+   ./generate_admin_key.sh
+   ```
+5. **From your laptop**, target the VPS backend in `.env.local`:
+   ```bash
+   CONVEX_SELF_HOSTED_URL='https://convex.litrito.mx'
+   CONVEX_SELF_HOSTED_ADMIN_KEY='<admin key>'
+   # comment out the old cloud CONVEX_DEPLOYMENT
+   ```
+   Then push schema + functions and set the app URL:
+   ```bash
+   bunx convex deploy
+   bunx convex env set SITE_URL https://litrito.mx
+   ```
+6. **Repopulate — Zacatecas first to test fast:**
+   ```bash
+   bunx convex run ingestion:refreshCatalog            # states + municipalities
+   bunx convex run ingestion:refreshPlaces             # coordinates (national, fast)
+   bunx convex run ingestion:refreshMunicipality '{"stateExternalId":"32","municipalityExternalId":"056"}'
+   bunx convex run stations:rebuildFilterOptionsCache  # filter counts
+   ```
+   Then the rest of the country in the background when ready:
+   ```bash
+   bunx convex run ingestion:bootstrapNationalRefresh
+   ```
+7. Redeploy the compose in Dokploy if you change `CONVEX_DOMAIN`/`CONVEX_HTTP_DOMAIN`
+   (the web bundle bakes those URLs at build time).
+
+> Prefer not to expose the dashboard publicly? Drop the `dashboard` service's
+> Traefik labels and reach it through a Dokploy tunnel / SSH port-forward instead.
+
 ## VPS notes
 
 - Put the backend (3210), HTTP actions (3211) and the app (3000) behind a reverse
