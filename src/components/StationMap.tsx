@@ -25,6 +25,7 @@ type StationRow = {
   station: Station
   prices: Partial<Record<FuelType, { price: number }>>
   highlightedPrice: number | null
+  rank?: number
 }
 
 export type MapBounds = {
@@ -47,6 +48,7 @@ type Props = {
   truncated?: boolean
   autoCenterOnUserLocation?: boolean
   initialBounds?: MapBounds | null
+  markerMode?: 'price' | 'rank'
   onMoveEnd?: (bounds: MapBounds) => void
   onLocateClick?: () => void
 }
@@ -84,9 +86,24 @@ function priceColor(price: number, allPrices: number[]): string {
   return '#b91c1c'
 }
 
-function buildIcon(price: number | null, allPrices: number[], dim: boolean): L.DivIcon {
+function buildIcon({
+  allPrices,
+  dim,
+  price,
+  rank,
+}: {
+  allPrices: number[]
+  dim: boolean
+  price: number | null
+  rank?: number
+}): L.DivIcon {
   const color = price != null ? priceColor(price, allPrices) : '#94a3b8'
-  const label = price != null ? `$${price.toFixed(2).replace(/\.00$/, '')}` : '–'
+  const label =
+    typeof rank === 'number'
+      ? String(rank)
+      : price != null
+        ? `$${price.toFixed(2).replace(/\.00$/, '')}`
+        : '–'
   const dimClass = dim ? ' litrito-marker__pin--dim' : ''
   return L.divIcon({
     className: 'litrito-marker',
@@ -265,6 +282,7 @@ export function StationMap({
   truncated,
   autoCenterOnUserLocation,
   initialBounds,
+  markerMode = 'price',
   onMoveEnd,
   onLocateClick,
 }: Props) {
@@ -347,7 +365,12 @@ export function StationMap({
                 <Marker
                   key={station.permitNumber}
                   position={row.latLng}
-                  icon={buildIcon(displayPrice, allPrices, !hasFuelPrice)}
+                  icon={buildIcon({
+                    allPrices,
+                    dim: !hasFuelPrice,
+                    price: displayPrice,
+                    rank: markerMode === 'rank' ? row.rank : undefined,
+                  })}
                 >
                   <Popup>
                     <div className="litrito-popup">

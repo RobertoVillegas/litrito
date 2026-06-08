@@ -22,6 +22,7 @@ export function SiteNav() {
 
         <div className="ml-2 hidden items-center gap-1 sm:flex">
           <NavLink to="/" label="Inicio" />
+          <NavLink to="/explorar" label="Explorar" />
           <NavLink to="/metricas" label="Métricas" />
         </div>
 
@@ -43,6 +44,11 @@ export function SiteNav() {
         <div className="border-t border-white/10 bg-ink px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.22)] sm:hidden">
           <div className="mx-auto grid w-full max-w-6xl gap-2">
             <MobileNavLink to="/" label="Inicio" onNavigate={() => setMobileOpen(false)} />
+            <MobileNavLink
+              to="/explorar"
+              label="Explorar"
+              onNavigate={() => setMobileOpen(false)}
+            />
             <MobileNavLink
               to="/metricas"
               label="Métricas"

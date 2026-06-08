@@ -14,6 +14,7 @@ import { Route as RegistroRouteImport } from './routes/registro'
 import { Route as RecuperarRouteImport } from './routes/recuperar'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as MetricasRouteImport } from './routes/metricas'
+import { Route as ExplorarRouteImport } from './routes/explorar'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EstacionSplatRouteImport } from './routes/estacion.$'
@@ -44,6 +45,11 @@ const MetricasRoute = MetricasRouteImport.update({
   path: '/metricas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ExplorarRoute = ExplorarRouteImport.update({
+  id: '/explorar',
+  path: '/explorar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EntrarRoute = EntrarRouteImport.update({
   id: '/entrar',
   path: '/entrar',
@@ -68,6 +74,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/entrar': typeof EntrarRoute
+  '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
   '/perfil': typeof PerfilRoute
   '/recuperar': typeof RecuperarRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/entrar': typeof EntrarRoute
+  '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
   '/perfil': typeof PerfilRoute
   '/recuperar': typeof RecuperarRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/entrar': typeof EntrarRoute
+  '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
   '/perfil': typeof PerfilRoute
   '/recuperar': typeof RecuperarRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/entrar'
+    | '/explorar'
     | '/metricas'
     | '/perfil'
     | '/recuperar'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/entrar'
+    | '/explorar'
     | '/metricas'
     | '/perfil'
     | '/recuperar'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/entrar'
+    | '/explorar'
     | '/metricas'
     | '/perfil'
     | '/recuperar'
@@ -138,6 +150,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EntrarRoute: typeof EntrarRoute
+  ExplorarRoute: typeof ExplorarRoute
   MetricasRoute: typeof MetricasRoute
   PerfilRoute: typeof PerfilRoute
   RecuperarRoute: typeof RecuperarRoute
@@ -184,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MetricasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/explorar': {
+      id: '/explorar'
+      path: '/explorar'
+      fullPath: '/explorar'
+      preLoaderRoute: typeof ExplorarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/entrar': {
       id: '/entrar'
       path: '/entrar'
@@ -218,6 +238,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EntrarRoute: EntrarRoute,
+  ExplorarRoute: ExplorarRoute,
   MetricasRoute: MetricasRoute,
   PerfilRoute: PerfilRoute,
   RecuperarRoute: RecuperarRoute,
