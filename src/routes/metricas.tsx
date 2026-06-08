@@ -272,10 +272,10 @@ function MetricsSkeleton() {
               <div className="mt-4 grid grid-cols-2 gap-4">
                 {[0, 1].map((cell) => (
                   <div key={cell}>
-                    <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-16" />
-                    <SkeletonLine lead="h-6" bar="h-5" width="w-20" className="mt-1" />
+                    <SkeletonLine lead="h-[15px]" bar="h-2.5" width="w-16" />
+                    <SkeletonLine lead="h-[23px]" bar="h-5" width="w-20" className="mt-1" />
                     <SkeletonLine lead="h-4" bar="h-3" width="w-full" className="mt-1" />
-                    <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-2/3" />
+                    <SkeletonLine lead="h-4" bar="h-2.5" width="w-2/3" />
                   </div>
                 ))}
               </div>
@@ -286,7 +286,7 @@ function MetricsSkeleton() {
       <div className="grid gap-4 sm:grid-cols-2">
         {[0, 1].map((index) => (
           <div key={index} className="rounded-[6px] border border-line p-5">
-            <SkeletonLine lead="h-[14px]" bar="h-3" width="w-28" />
+            <SkeletonLine lead="h-[15px]" bar="h-3" width="w-28" />
             <SkeletonLine lead="h-7" bar="h-6" width="w-40" className="mt-2" />
             <SkeletonLine lead="h-5" bar="h-3.5" width="w-48" className="mt-1" />
           </div>

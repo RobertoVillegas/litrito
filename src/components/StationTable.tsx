@@ -164,7 +164,7 @@ function StationCardSkeleton({ fuelTypes }: { fuelTypes: FuelType[] }) {
         <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
       </div>
       <SkeletonLine lead="h-4" bar="h-3" width="w-full" className="mt-0.5" />
-      <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-2/3" />
+      <SkeletonLine lead="h-4" bar="h-2.5" width="w-2/3" />
       <div className="mt-2.5 flex flex-wrap gap-1.5">
         {fuelTypes.map((ft) => (
           <Skeleton key={ft} className="h-6 w-20 rounded-full" />

@@ -198,8 +198,8 @@ function Home() {
               </div>
 
               {hasLocation && (
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-white/55">
-                  <MapPin className="h-3.5 w-3.5 text-brand" />
+                <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-white/55 sm:justify-start">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-brand" />
                   Buscando cerca de {locationLabel}
                 </p>
               )}

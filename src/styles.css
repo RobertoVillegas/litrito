@@ -317,7 +317,9 @@ code {
   color: var(--color-ink);
 }
 
-.litrito-popup__cta {
+/* Scoped under .leaflet-container to beat Leaflet's `.leaflet-container a`
+   link color (specificity 0,1,1), which otherwise turns the CTA blue. */
+.leaflet-container a.litrito-popup__cta {
   display: inline-block;
   margin-top: 4px;
   padding: 8px 12px;
@@ -329,7 +331,7 @@ code {
   font-size: 12px;
   text-align: center;
 }
-.litrito-popup__cta:hover {
+.leaflet-container a.litrito-popup__cta:hover {
   background: var(--color-brand-dark);
   color: #ffffff;
 }

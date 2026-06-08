@@ -359,9 +359,9 @@ function StationDetailSkeleton() {
               className="rounded-[6px] border border-line p-4"
               style={{ borderTopColor: '#e6e6e6', borderTopWidth: 3 }}
             >
-              <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-20" />
+              <SkeletonLine lead="h-4" bar="h-2.5" width="w-20" />
               <SkeletonLine lead="h-7" bar="h-6" width="w-24" className="mt-2" />
-              <SkeletonLine lead="h-[13px]" bar="h-2.5" width="w-28" className="mt-1" />
+              <SkeletonLine lead="h-4" bar="h-2.5" width="w-28" className="mt-1" />
             </div>
           ))}
         </div>
