@@ -577,13 +577,13 @@ function Home() {
           <div>
             <div className="font-display text-3xl text-white">Litrito</div>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/60">
-              Precios informativos reportados por permisionarios a la Comision
-              Nacional de Energia. Pueden cambiar en estacion.
+              Precios informativos reportados por permisionarios a la Comisión
+              Nacional de Energía. Pueden cambiar en estación.
             </p>
           </div>
           <div className="space-y-2 md:hidden">
             <p className="eyebrow text-white/40">
-              Hecho en Mexico
+              Hecho en México
             </p>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-bold uppercase tracking-widest">
               <a
@@ -607,7 +607,7 @@ function Home() {
           </div>
           <div className="hidden md:flex md:items-center md:justify-between">
             <p className="eyebrow text-white/40">
-              Hecho en Mexico ·{' '}
+              Hecho en México ·{' '}
               <a
                 href="https://www.cne.gob.mx/"
                 target="_blank"
