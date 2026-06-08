@@ -23,6 +23,8 @@ interface MyRouterContext {
   queryClient: QueryClient
 }
 
+const OG_IMAGE_VERSION = '2026-06-08'
+
 // Read the Umami config from the SERVER runtime env (not import.meta.env, which
 // Vite inlines at build time — that fails when the value is only present in the
 // container's runtime .env). The loader runs on the server and its result is
@@ -52,7 +54,9 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         ? appDomain
         : `https://${appDomain}`
       : ''
-    const ogImage = appOrigin ? `${appOrigin}/og-image.png` : '/og-image.png'
+    const ogImage = appOrigin
+      ? `${appOrigin}/og-image.png?v=${OG_IMAGE_VERSION}`
+      : `/og-image.png?v=${OG_IMAGE_VERSION}`
     return { umamiWebsiteId, umamiSrc, appOrigin, ogImage }
   },
   head: ({ loaderData }) => ({
@@ -103,6 +107,14 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         content: loaderData?.ogImage ?? '/og-image.png',
       },
       {
+        property: 'og:image:url',
+        content: loaderData?.ogImage ?? '/og-image.png',
+      },
+      {
+        property: 'og:image:secure_url',
+        content: loaderData?.ogImage ?? '/og-image.png',
+      },
+      {
         property: 'og:image:type',
         content: 'image/png',
       },
@@ -147,8 +159,32 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         name: 'twitter:image',
         content: loaderData?.ogImage ?? '/og-image.png',
       },
+      {
+        name: 'twitter:image:alt',
+        content: 'Litrito - precios de gasolina en Mexico',
+      },
+      {
+        name: 'twitter:image:type',
+        content: 'image/png',
+      },
+      {
+        name: 'twitter:image:width',
+        content: '1200',
+      },
+      {
+        name: 'twitter:image:height',
+        content: '630',
+      },
     ],
     links: [
+      ...(loaderData?.appOrigin
+        ? [
+            {
+              rel: 'canonical',
+              href: loaderData.appOrigin,
+            },
+          ]
+        : []),
       {
         rel: 'stylesheet',
         href: appCss,
