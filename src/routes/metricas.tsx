@@ -65,15 +65,17 @@ function Metrics() {
     <main className="min-h-screen">
       <section className="bg-ink text-on-dark">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-white/60 hover:text-white"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Volver a la lista
-          </Link>
-          <div className="eyebrow mt-6 inline-flex items-center gap-2 rounded-[32px] bg-brand px-3 py-1.5 text-white">
-            Datos CNE
+          <div className="flex items-center justify-between gap-4">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-white/60 hover:text-white"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Volver al listado
+            </Link>
+            <div className="eyebrow inline-flex items-center gap-2 rounded-[32px] bg-brand px-3 py-1.5 text-white">
+              Datos CNE
+            </div>
           </div>
           <h1 className="font-display mt-4 text-6xl text-white sm:text-7xl">Métricas</h1>
           <p className="mt-4 max-w-2xl text-lg font-light leading-8 text-white/70">
