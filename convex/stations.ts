@@ -39,6 +39,11 @@ const MEXICO_BOUNDS = {
 // everything, so we'd otherwise iterate every station to find a handful.
 const MAX_STATION_SCAN = 4000
 
+// Cap on stations sampled for a national (no state/muni filter) distance sort.
+// ~4k docs is well under the 32k-doc / 16MB per-query limits, and the true
+// nearest stations fall inside this latitude-centered window.
+const DISTANCE_SCAN_CAP = 4000
+
 // N+1 price lookups, throttled to this many in flight at a time. Convex
 // queries have a per-call parallel-read ceiling (self-hosted is more
 // aggressive than cloud), so 800 simultaneous indexed reads get killed with
@@ -200,21 +205,6 @@ function haversineKm(
   return 2 * R * Math.asin(Math.sqrt(a))
 }
 
-function boundingBox(
-  point: { latitude: number; longitude: number },
-  radiusKm: number,
-) {
-  const latDelta = radiusKm / 111
-  const lonScale = Math.max(0.15, Math.cos(toRad(point.latitude)))
-  const lonDelta = radiusKm / (111 * lonScale)
-  return {
-    swLat: point.latitude - latDelta,
-    neLat: point.latitude + latDelta,
-    swLon: point.longitude - lonDelta,
-    neLon: point.longitude + lonDelta,
-  }
-}
-
 async function listStationsByPrice(
   ctx: QueryCtx,
   params: {
@@ -290,6 +280,94 @@ async function listStationsByPrice(
   }
 }
 
+// Read at most `limit` docs from an async-iterable query. Async iteration is
+// lazy, so this never reads the whole table — unlike `.collect()`.
+async function collectUpTo<T>(
+  iterable: AsyncIterable<T>,
+  limit: number,
+): Promise<T[]> {
+  const out: T[] = []
+  for await (const doc of iterable) {
+    out.push(doc)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+// Candidate stations for a state/municipality selection, read straight from the
+// most selective index (one state is ~600-1500 docs) instead of scanning the
+// whole catalog by latitude.
+async function loadStationsForSelections(
+  ctx: QueryCtx,
+  stateIds: string[],
+  parsedMunis: ParsedMunicipality[],
+): Promise<Doc<'stations'>[]> {
+  const out: Doc<'stations'>[] = []
+  const seen = new Set<string>()
+  const push = (rows: Doc<'stations'>[]) => {
+    for (const s of rows) {
+      if (seen.has(s.permitNumber)) continue
+      seen.add(s.permitNumber)
+      out.push(s)
+    }
+  }
+
+  const munisWithState = parsedMunis.filter((m) => m.state)
+  if (munisWithState.length > 0) {
+    for (const m of munisWithState) {
+      push(
+        await ctx.db
+          .query('stations')
+          .withIndex('by_location', (q) =>
+            q
+              .eq('stateExternalId', m.state as string)
+              .eq('municipalityExternalId', m.muni),
+          )
+          .collect(),
+      )
+    }
+  } else if (stateIds.length > 0) {
+    for (const sid of stateIds) {
+      push(
+        await ctx.db
+          .query('stations')
+          .withIndex('by_state', (q) => q.eq('stateExternalId', sid))
+          .collect(),
+      )
+    }
+  }
+  return out
+}
+
+// National distance sort: read the stations nearest to the user's latitude by
+// walking the `by_lat` index outward in both directions, capped at
+// DISTANCE_SCAN_CAP total. True nearest-by-distance stations sit within a small
+// latitude band of the user, so this bounded sample contains them while keeping
+// reads far under the per-query document/byte limits. The previous nested
+// radius `.collect()` loop re-read overlapping latitude bands and blew the
+// 32k-doc / 16MB limit once the catalog filled up.
+async function loadNearestByLatitude(
+  ctx: QueryCtx,
+  userLat: number,
+  cap: number,
+): Promise<Doc<'stations'>[]> {
+  const half = Math.ceil(cap / 2)
+  const north = await collectUpTo(
+    ctx.db
+      .query('stations')
+      .withIndex('by_lat', (q) => q.gte('latitude', userLat)),
+    half,
+  )
+  const south = await collectUpTo(
+    ctx.db
+      .query('stations')
+      .withIndex('by_lat', (q) => q.lt('latitude', userLat))
+      .order('desc'),
+    half,
+  )
+  return [...north, ...south]
+}
+
 async function listStationsByDistance(
   ctx: QueryCtx,
   params: {
@@ -300,35 +378,21 @@ async function listStationsByDistance(
     paginationOpts: { cursor: string | null; numItems: number }
   },
 ): Promise<{ page: StationRow[]; isDone: boolean; continueCursor: string }> {
-  const start = parseOffset(params.paginationOpts.cursor)
-  const needed = start + params.paginationOpts.numItems
-  const candidates = new Map<string, Doc<'stations'>>()
-  const radiiKm = [5, 10, 20, 40, 80, 160, 320, 640, 1300]
+  const hasIndexedSelection =
+    params.parsedMunis.some((m) => m.state) || params.stateIds.length > 0
 
-  for (const radiusKm of radiiKm) {
-    const box = boundingBox(params.userLocation, radiusKm)
-    const byLat = await ctx.db
-      .query('stations')
-      .withIndex('by_lat', (q) =>
-        q.gte('latitude', box.swLat).lte('latitude', box.neLat),
+  const candidates = hasIndexedSelection
+    ? await loadStationsForSelections(ctx, params.stateIds, params.parsedMunis)
+    : await loadNearestByLatitude(
+        ctx,
+        params.userLocation.latitude,
+        DISTANCE_SCAN_CAP,
       )
-      .collect()
 
-    for (const station of byLat) {
-      const lat = station.latitude
-      const lon = station.longitude
-      if (typeof lat !== 'number' || typeof lon !== 'number') continue
-      if (lon < box.swLon || lon > box.neLon) continue
-      if (!stationMatchesSelections(station, params.stateIds, params.parsedMunis)) {
-        continue
-      }
-      candidates.set(station.permitNumber, station)
-    }
-
-    if (candidates.size >= needed) break
-  }
-
-  const sorted = [...candidates.values()]
+  const sorted = candidates
+    .filter((station) =>
+      stationMatchesSelections(station, params.stateIds, params.parsedMunis),
+    )
     .map((station) => ({
       station,
       distanceKm: haversineKm(
@@ -452,25 +516,11 @@ export const listStations = query({
         continueCursor: result.continueCursor,
       }
     } else if (parsedMunis.length > 0) {
-      const muniKeys = new Set(
-        parsedMunis
-          .filter((p) => p.state)
-          .map((p) => `${p.state}|${p.muni}`),
-      )
-      const rawMunis = new Set(
-        parsedMunis.filter((p) => !p.state).map((p) => p.muni),
-      )
-      const allowedStates = stateIds.length > 0 ? new Set(stateIds) : null
-      const allStations = await ctx.db.query('stations').collect()
-      const filtered = allStations.filter((s) => {
-        const matchesComposite = muniKeys.has(
-          `${s.stateExternalId}|${s.municipalityExternalId}`,
-        )
-        const matchesRaw =
-          rawMunis.has(s.municipalityExternalId) &&
-          (allowedStates === null || allowedStates.has(s.stateExternalId))
-        return matchesComposite || matchesRaw
-      })
+      // Read only the selected municipalities/states via index instead of
+      // scanning the whole catalog, then narrow with the shared matcher.
+      const filtered = (
+        await loadStationsForSelections(ctx, stateIds, parsedMunis)
+      ).filter((s) => stationMatchesSelections(s, stateIds, parsedMunis))
       const start = parseOffset(args.paginationOpts.cursor)
       const end = start + args.paginationOpts.numItems
       const page = filtered.slice(start, end)
@@ -491,9 +541,9 @@ export const listStations = query({
         continueCursor: result.continueCursor,
       }
     } else if (stateIds.length > 1) {
-      const allowed = new Set(stateIds)
-      const all = await ctx.db.query('stations').collect()
-      const filtered = all.filter((s) => allowed.has(s.stateExternalId))
+      // Read the selected states via the by_state index rather than the whole
+      // catalog.
+      const filtered = await loadStationsForSelections(ctx, stateIds, [])
       const start = parseOffset(args.paginationOpts.cursor)
       const end = start + args.paginationOpts.numItems
       const page = filtered.slice(start, end)
