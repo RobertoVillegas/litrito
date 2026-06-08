@@ -259,7 +259,7 @@ function BackLink({ onDark = false }: { onDark?: boolean }) {
       }`}
     >
       <ArrowLeft className="h-3.5 w-3.5" />
-      Volver a la lista
+      Volver al listado
     </Link>
   )
 }
