@@ -9,6 +9,7 @@ import { useUserLocation } from '#/lib/useUserLocation'
 import { useFavorites } from '#/lib/useFavorites'
 import { RouteErrorFallback } from '../components/RouteError'
 import { SiteFooter } from '../components/SiteFooter'
+import { MapSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
@@ -529,7 +530,7 @@ function Explore() {
               ? `${visibleRows.length} ${
                   paginated.status === 'Exhausted' ? 'resultados' : 'cargados'
                 }${paginated.status === 'CanLoadMore' ? ' — hay más' : ''}`
-              : 'Cargando…'}
+              : <Skeleton className="h-4 w-40" />}
             {showFavoritesOnly && (
               <span className="ml-2 text-brand">· solo favoritas</span>
             )}
@@ -560,21 +561,17 @@ function Explore() {
             <p className="mt-1 text-xs font-semibold text-body">
               {boundsResult
                 ? `${boundsResult.stations.length} estaciones visibles${boundsResult.truncated ? ' (acércate para más)' : ''}`
-                : 'Cargando marcadores…'}
+                : <Skeleton className="h-4 w-44" />}
             </p>
           </div>
           <ClientOnly
             fallback={
-              <div className="m-3 flex h-[55vh] min-h-[320px] items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-sm text-slate-500">
-                Cargando mapa…
-              </div>
+              <MapSkeleton className="m-3" />
             }
           >
             <Suspense
               fallback={
-                <div className="m-3 flex h-[55vh] min-h-[320px] items-center justify-center text-sm text-slate-500">
-                  Cargando mapa…
-                </div>
+                <MapSkeleton className="m-3" />
               }
             >
               <div className="p-3">

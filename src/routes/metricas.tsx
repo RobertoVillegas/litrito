@@ -15,6 +15,7 @@ import {
 } from 'recharts'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
+import { Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 
 export const Route = createFileRoute('/metricas')({
@@ -154,7 +155,7 @@ function Metrics() {
 
       <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         {data === undefined ? (
-          <p className="text-sm font-semibold text-body">Cargando métricas…</p>
+          <MetricsSkeleton />
         ) : data.pricedStations === 0 ? (
           <p className="text-sm text-body">
             Aún no hay precios cargados. Las métricas aparecerán cuando se ingesten.
@@ -249,6 +250,46 @@ function Metrics() {
         )}
       </section>
     </main>
+  )
+}
+
+function MetricsSkeleton() {
+  return (
+    <div className="space-y-12" aria-label="Cargando métricas">
+      <div>
+        <Skeleton className="h-3 w-32" />
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="rounded-[6px] border border-line p-5">
+              <div className="flex items-center justify-between gap-4">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="space-y-2 rounded-[6px] bg-canvas-soft p-3">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-6 w-20" />
+                  <Skeleton className="h-3 w-full" />
+                </div>
+                <div className="space-y-2 rounded-[6px] bg-canvas-soft p-3">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-6 w-20" />
+                  <Skeleton className="h-3 w-full" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Skeleton className="h-32" />
+        <Skeleton className="h-32" />
+      </div>
+      <div>
+        <Skeleton className="h-3 w-48" />
+        <Skeleton className="mt-4 h-[360px]" />
+      </div>
+    </div>
   )
 }
 

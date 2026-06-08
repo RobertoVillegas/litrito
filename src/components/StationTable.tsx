@@ -10,6 +10,7 @@ import {
 import { ArrowDownUp, Loader2, Star } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '../lib/utils'
+import { Skeleton } from './Skeleton'
 import type { FuelType, SortMode } from './StationFilters'
 
 type Station = {
@@ -149,6 +150,86 @@ function StationCard({
           A {formatDistance(distanceKm)}
         </div>
       )}
+    </div>
+  )
+}
+
+function StationCardSkeleton({ fuelTypes }: { fuelTypes: FuelType[] }) {
+  return (
+    <div className="p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+        <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {fuelTypes.map((ft) => (
+          <Skeleton key={ft} className="h-7 w-24 rounded-full" />
+        ))}
+      </div>
+      <Skeleton className="mt-3 h-3 w-20" />
+    </div>
+  )
+}
+
+function StationTableSkeleton({
+  columnWidths,
+  fuelTypes,
+  isMobile,
+  minTableWidth,
+}: {
+  columnWidths: number[]
+  fuelTypes: FuelType[]
+  isMobile: boolean
+  minTableWidth: number
+}) {
+  if (isMobile) {
+    return (
+      <div className="divide-y divide-line">
+        {Array.from({ length: 5 }, (_, index) => (
+          <StationCardSkeleton key={index} fuelTypes={fuelTypes} />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="grid"
+      style={{ minWidth: `${minTableWidth}px` }}
+      role="presentation"
+    >
+      {Array.from({ length: 8 }, (_, rowIndex) => (
+        <div
+          key={rowIndex}
+          className="grid border-b border-slate-100 bg-white"
+          style={{
+            gridTemplateColumns: columnWidths.map((w) => `${w}px`).join(' '),
+            height: 64,
+          }}
+        >
+          {columnWidths.map((width, colIndex) => (
+            <div
+              key={`${rowIndex}-${colIndex}`}
+              className="flex items-center px-3"
+              style={{
+                justifyContent: colIndex === 0 || colIndex === 1 ? 'flex-start' : 'flex-end',
+              }}
+            >
+              <Skeleton
+                className={cn(
+                  'h-4',
+                  colIndex === 0 ? 'w-3/4' : colIndex === 1 ? 'w-2/3' : 'w-16',
+                )}
+                style={{ maxWidth: width - 24 }}
+              />
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
@@ -422,7 +503,14 @@ export function StationTable({
             </div>
           )}
 
-          {rows.length === 0 && !isLoading ? (
+          {isLoading ? (
+            <StationTableSkeleton
+              columnWidths={columnWidths}
+              fuelTypes={fuelTypes}
+              isMobile={isMobile}
+              minTableWidth={minTableWidth}
+            />
+          ) : rows.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">
               Sin resultados con los filtros activos.
             </div>

@@ -6,6 +6,7 @@ import { ArrowRight, Fuel, LocateFixed, MapPin, Navigation } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
 import { SiteFooter } from '../components/SiteFooter'
+import { DarkSkeleton, MapSkeleton } from '../components/Skeleton'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { track } from '#/lib/analytics'
 import type { FuelType } from '../components/StationFilters'
@@ -238,16 +239,12 @@ function Home() {
           </div>
           <ClientOnly
             fallback={
-              <div className="flex h-[55vh] min-h-[320px] items-center justify-center rounded-md border border-line bg-canvas-soft text-sm text-body">
-                Cargando mapa…
-              </div>
+              <MapSkeleton />
             }
           >
             <Suspense
               fallback={
-                <div className="flex h-[55vh] min-h-[320px] items-center justify-center rounded-md border border-line bg-canvas-soft text-sm text-body">
-                  Cargando mapa…
-                </div>
+                <MapSkeleton />
               }
             >
               <StationMap
@@ -299,9 +296,7 @@ function ResultsPanel({
           Comparte tu ubicación para ver estaciones dentro de {radiusKm} km.
         </div>
       ) : rows === undefined ? (
-        <div className="mt-4 rounded-[6px] border border-white/10 px-4 py-6 text-sm font-semibold text-white/60">
-          Buscando mejores precios…
-        </div>
+        <StationRankSkeletonList />
       ) : rows.length === 0 ? (
         <div className="mt-4 rounded-[6px] border border-white/10 px-4 py-6 text-sm font-semibold leading-6 text-white/60">
           No encontré {fuelLabel(fuelType)} dentro de {radiusKm} km. Amplía el
@@ -319,6 +314,29 @@ function ResultsPanel({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function StationRankSkeletonList() {
+  return (
+    <div className="mt-4 space-y-2" aria-label="Cargando mejores estaciones">
+      {Array.from({ length: 10 }, (_, index) => (
+        <div
+          key={index}
+          className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-[6px] border border-white/10 bg-white/[0.04] p-3"
+        >
+          <DarkSkeleton className="h-8 w-8 rounded-full bg-white/18" />
+          <div className="min-w-0 space-y-2">
+            <DarkSkeleton className="h-4 w-[min(100%,18rem)]" />
+            <DarkSkeleton className="h-3 w-[min(72%,12rem)]" />
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <DarkSkeleton className="h-5 w-16" />
+            <DarkSkeleton className="h-3 w-8" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

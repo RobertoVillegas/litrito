@@ -6,6 +6,7 @@ import { ArrowLeft, Check, MapPin, Navigation, Share2, Star } from 'lucide-react
 import { api } from '../../convex/_generated/api'
 import { useFavorites } from '#/lib/useFavorites'
 import { RouteErrorFallback } from '../components/RouteError'
+import { DarkSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 
 const StationMiniMap = lazy(() =>
@@ -143,9 +144,7 @@ function StationDetail() {
   if (data === undefined) {
     return (
       <main className="min-h-screen">
-        <div className="mx-auto w-full max-w-5xl px-4 py-16 text-sm font-semibold text-body sm:px-6 lg:px-8">
-          Cargando estación…
-        </div>
+        <StationDetailSkeleton />
       </main>
     )
   }
@@ -320,6 +319,39 @@ function StationDetail() {
         </div>
       </section>
     </main>
+  )
+}
+
+function StationDetailSkeleton() {
+  return (
+    <>
+      <section className="bg-ink text-on-dark">
+        <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <DarkSkeleton className="h-9 w-24" />
+            <DarkSkeleton className="h-6 w-32 rounded-full" />
+          </div>
+          <DarkSkeleton className="mt-6 h-12 w-4/5 sm:h-16" />
+          <DarkSkeleton className="mt-4 h-4 w-3/5" />
+          <div className="mt-6 flex flex-wrap gap-2">
+            <DarkSkeleton className="h-10 w-28 rounded-full" />
+            <DarkSkeleton className="h-10 w-28 rounded-full" />
+          </div>
+        </div>
+      </section>
+      <section className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="rounded-[6px] border border-line p-4">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="mt-3 h-8 w-24" />
+              <Skeleton className="mt-2 h-3 w-32" />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="mt-8 h-[320px]" />
+      </section>
+    </>
   )
 }
 
