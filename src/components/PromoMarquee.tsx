@@ -8,7 +8,7 @@ function Item() {
       href="https://athas.mx"
       target="_blank"
       rel="noopener noreferrer"
-      className="mx-6 inline-flex shrink-0 items-center gap-1.5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:text-white/80"
+      className="promo-marquee__link mx-6 inline-flex shrink-0 items-center gap-1.5 py-1 text-sm font-bold uppercase tracking-wide"
     >
       {MESSAGE}
       <ArrowUpRight className="h-3.5 w-3.5" />
@@ -18,7 +18,7 @@ function Item() {
 
 export function PromoMarquee() {
   return (
-    <div className="border-b border-white/10 bg-brand text-white">
+    <div className="promo-marquee border-b bg-brand">
       <div className="overflow-hidden">
         {/* One track holding the content twice; translating -50% loops seamlessly. */}
         <div className="flex w-max animate-marquee items-center">

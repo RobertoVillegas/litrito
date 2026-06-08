@@ -11,6 +11,11 @@
 import type * as auth from "../auth.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
+import type * as email_config from "../email/config.js";
+import type * as email_resend from "../email/resend.js";
+import type * as email_templates_passwordReset from "../email/templates/passwordReset.js";
+import type * as email_templates_theme from "../email/templates/theme.js";
+import type * as email_useCases_sendPasswordResetEmail from "../email/useCases/sendPasswordResetEmail.js";
 import type * as favorites from "../favorites.js";
 import type * as http from "../http.js";
 import type * as ingestion from "../ingestion.js";
@@ -29,6 +34,11 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   catalog: typeof catalog;
   crons: typeof crons;
+  "email/config": typeof email_config;
+  "email/resend": typeof email_resend;
+  "email/templates/passwordReset": typeof email_templates_passwordReset;
+  "email/templates/theme": typeof email_templates_theme;
+  "email/useCases/sendPasswordResetEmail": typeof email_useCases_sendPasswordResetEmail;
   favorites: typeof favorites;
   http: typeof http;
   ingestion: typeof ingestion;

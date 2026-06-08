@@ -45,6 +45,7 @@ type Props = {
   fuelTypes: FuelType[]
   userLocation?: UserLocation | null
   truncated?: boolean
+  autoCenterOnUserLocation?: boolean
   initialBounds?: MapBounds | null
   onMoveEnd?: (bounds: MapBounds) => void
   onLocateClick?: () => void
@@ -151,6 +152,27 @@ function FitInitialBounds({ bounds }: { bounds: LatLngBoundsExpression | null })
   return null
 }
 
+function AutoCenterOnUserLocation({
+  location,
+  enabled,
+}: {
+  location: LatLngTuple | null
+  enabled: boolean
+}) {
+  const map = useMap()
+  const lastCenteredRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!enabled || !location) return
+    const key = `${location[0].toFixed(6)},${location[1].toFixed(6)}`
+    if (lastCenteredRef.current === key) return
+    lastCenteredRef.current = key
+    map.flyTo(location, Math.max(map.getZoom(), 14), { duration: 0.7 })
+  }, [enabled, location, map])
+
+  return null
+}
+
 function LocateControl({
   location,
   onClick,
@@ -240,6 +262,7 @@ export function StationMap({
   fuelTypes,
   userLocation,
   truncated,
+  autoCenterOnUserLocation,
   initialBounds,
   onMoveEnd,
   onLocateClick,
@@ -298,6 +321,10 @@ export function StationMap({
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
           {bounds && <FitInitialBounds bounds={bounds} />}
+          <AutoCenterOnUserLocation
+            location={userLatLng}
+            enabled={Boolean(autoCenterOnUserLocation)}
+          />
           {onMoveEnd && <MoveWatcher onMoveEnd={onMoveEnd} />}
           <LocateControl location={userLatLng} onClick={onLocateClick} />
           <LegendControl primaryFuel={primaryFuel} hasFuelPrices={allPrices.length > 0} />

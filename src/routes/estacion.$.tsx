@@ -124,7 +124,12 @@ function StationDetail() {
       {/* Hero band */}
       <section className="bg-ink text-on-dark">
         <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-          <BackLink onDark />
+          <div className="flex items-center justify-between gap-4">
+            <BackLink onDark />
+            <span className="shrink-0 rounded-full border border-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white/50">
+              Permiso {station.permitNumber}
+            </span>
+          </div>
           <h1 className="font-display mt-6 text-4xl text-white sm:text-6xl">
             {station.name}
           </h1>
@@ -142,8 +147,7 @@ function StationDetail() {
             </span>
           </p>
           <p className="mt-3 text-xs font-semibold tracking-wide text-white/40">
-            Permiso {station.permitNumber} · Actualizado{' '}
-            {formatDate(station.lastSeenAt, true)}
+            Actualizado {formatDate(station.lastSeenAt, true)}
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             {directionsHref && (

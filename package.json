@@ -17,6 +17,8 @@
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.2",
     "@convex-dev/react-query": "0.1.0",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.0.8",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-query": "latest",

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAction, usePaginatedQuery, useQuery } from 'convex/react'
+import { usePaginatedQuery, useQuery } from 'convex/react'
 import { BadgeCent, DatabaseZap, Fuel, RefreshCw, Star } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
@@ -168,8 +168,6 @@ function Home() {
     | undefined
 
   const latestRun = useQuery(api.prices.latestRun)
-  const refreshCatalog = useAction(api.ingestion.refreshCatalog)
-  const refreshMunicipality = useAction(api.ingestion.refreshMunicipality)
 
   const visibleRows = useMemo<StationRow[]>(() => {
     if (!paginated.results) return []
@@ -229,36 +227,6 @@ function Home() {
     setNotice(result.message)
   }
 
-  async function handleRefreshCatalog() {
-    setNotice('')
-    try {
-      await refreshCatalog({})
-      setNotice('Catalogo CNE actualizado.')
-    } catch {
-      setNotice('No se pudo actualizar el catalogo CNE.')
-    }
-  }
-
-  async function handleRefreshMunicipality() {
-    if (filters.stateIds.length !== 1) {
-      setNotice('Elige un solo estado y municipio para forzar la actualizacion.')
-      return
-    }
-    const muni = filters.municipalityIds[0]
-    const [stateExternalId, municipalityExternalId] = (muni ?? '').split('|')
-    if (!stateExternalId || !municipalityExternalId) {
-      setNotice('Selecciona un municipio especifico para actualizar.')
-      return
-    }
-    setNotice('')
-    try {
-      const result = await refreshMunicipality({ stateExternalId, municipalityExternalId })
-      setNotice(`Listo: ${result.recordsWritten} precios actualizados.`)
-    } catch {
-      setNotice('La fuente CNE no respondio. Conservamos los ultimos datos.')
-    }
-  }
-
   const bestPrice = useMemo(() => {
     let min: number | null = null
     for (const row of visibleRows) {
@@ -282,20 +250,20 @@ function Home() {
   return (
     <main className="min-h-screen">
       <section className="bg-ink text-on-dark">
-        <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_340px] lg:px-8">
+        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_280px] lg:px-8">
           <div className="flex flex-col justify-between gap-10">
             <div>
               <div className="eyebrow mb-6 inline-flex items-center gap-2 rounded-[32px] bg-brand px-3 py-1.5 text-white">
                 <Fuel className="h-4 w-4" />
-                Precios por litro, sin drama
+                Gasolina y diésel · México
               </div>
               <h1 className="font-display text-7xl text-white sm:text-8xl">
                 Litrito
               </h1>
               <p className="mt-6 max-w-2xl text-lg font-light leading-8 text-white/70">
-                Encuentra donde cargar gasolina y diesel en Mexico con precios
-                reportados por estacion. Filtra por zona, busca por nombre y
-                compara por combustible.
+                Los precios reportados de cada gasolinera del país, en un solo
+                lugar. Busca por nombre o zona, compara por combustible y
+                encuentra la más barata cerca de ti.
               </p>
             </div>
 
@@ -318,37 +286,24 @@ function Home() {
             </div>
           </div>
 
-          <aside className="rounded-[6px] border border-white/15 bg-white/[0.04] p-5">
-            <div className="eyebrow flex items-center justify-between gap-2 text-white/50">
-              <span>Datos</span>
-              <button
-                type="button"
-                onClick={() => void handleRefreshCatalog()}
-                className="inline-flex items-center gap-1 text-[10px] font-bold normal-case tracking-normal text-brand hover:text-white"
-              >
-                <RefreshCw className="h-3 w-3" />
-                Reimportar catalogo
-              </button>
+          <aside className="self-end rounded-[6px] border border-white/15 bg-white/[0.04] p-4">
+            <div className="eyebrow text-white/50">Datos</div>
+            <div className="mt-3 divide-y divide-white/10">
+              <HeroFact label="Cobertura" value="Nacional" />
+              <HeroFact label="Combustibles" value="Regular, Premium, Diésel" />
+              <HeroFact label="Orden" value="Precio o cercanía" />
             </div>
-
-            <p className="mt-3 text-sm leading-6 text-white/60">
-              Fuente:{' '}
+            <div className="mt-4 text-xs leading-5 text-white/45">
               <a
                 href="https://www.cne.gob.mx/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold text-white underline decoration-white/30 underline-offset-2 hover:text-brand"
               >
-                Comision Nacional de Energia
+                Fuente CNE
               </a>
-              , precios reportados por permisionarios. Son informativos y pueden
-              cambiar en estacion.
-            </p>
-
-            <p className="mt-4 text-xs leading-5 text-white/40">
-              Tu ubicacion se detecta en automatico — actívala con precisión
-              desde la barra de arriba para ordenar por cercanía.
-            </p>
+              {' '}con precios informativos reportados por permisionarios.
+            </div>
           </aside>
         </div>
       </section>
@@ -374,28 +329,18 @@ function Home() {
               <span className="ml-2 text-brand">· solo favoritas</span>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setShowFavoritesOnly((v) => !v)}
-              className={`inline-flex h-9 items-center gap-2 rounded-full border px-4 text-xs font-bold transition ${
-                showFavoritesOnly
-                  ? 'border-ink bg-ink text-white'
-                  : 'border-ink/25 bg-white text-ink hover:border-ink'
-              }`}
-            >
-              <Star className="h-3.5 w-3.5" />
-              {showFavoritesOnly ? 'Mostrar todo' : 'Solo favoritas'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleRefreshMunicipality()}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-ink/25 bg-white px-4 text-xs font-bold text-ink transition hover:border-ink"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refrescar municipio
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowFavoritesOnly((v) => !v)}
+            className={`inline-flex h-9 items-center gap-2 rounded-full border px-4 text-xs font-bold transition ${
+              showFavoritesOnly
+                ? 'border-ink bg-ink text-white'
+                : 'border-ink/25 bg-white text-ink hover:border-ink'
+            }`}
+          >
+            <Star className="h-3.5 w-3.5" />
+            {showFavoritesOnly ? 'Mostrar todo' : 'Solo favoritas'}
+          </button>
         </div>
 
         {notice && (
@@ -434,6 +379,7 @@ function Home() {
                   fuelTypes={filters.fuelTypes}
                   userLocation={userLoc.location}
                   truncated={boundsResult?.truncated}
+                  autoCenterOnUserLocation={userLoc.hasPreciseLocation}
                   initialBounds={mapBounds}
                   onMoveEnd={setMapBounds}
                   onLocateClick={() => {
@@ -472,23 +418,36 @@ function Home() {
       </section>
 
       <footer className="mt-6 bg-ink text-on-dark">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-10 sm:px-6 lg:px-8">
-          <div className="font-display text-3xl text-white">Litrito</div>
-          <p className="max-w-xl text-sm leading-6 text-white/60">
-            Precios informativos reportados por permisionarios a la Comision
-            Nacional de Energia. Pueden cambiar en estacion.
-          </p>
-          <p className="eyebrow mt-4 text-white/40">
-            Hecho en Mexico ·{' '}
-            <a
-              href="https://www.cne.gob.mx/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white/60 underline decoration-white/20 underline-offset-2 hover:text-brand"
-            >
-              Fuente CNE
-            </a>
-          </p>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10 sm:px-6 md:flex-row md:items-end md:justify-between lg:px-8">
+          <div className="min-w-0 flex-1">
+            <div className="font-display text-3xl text-white">Litrito</div>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-white/60">
+              Precios informativos reportados por permisionarios a la Comision
+              Nacional de Energia. Pueden cambiar en estacion.
+            </p>
+            <p className="eyebrow mt-4 text-white/40">
+              Hecho en Mexico ·{' '}
+              <a
+                href="https://www.cne.gob.mx/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/60 underline decoration-white/20 underline-offset-2 hover:text-brand"
+              >
+                Fuente CNE
+              </a>
+            </p>
+          </div>
+          <a
+            href="https://athas.mx"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 text-left md:text-right"
+          >
+            <span className="eyebrow block text-white/35">Por</span>
+            <span className="font-display block text-2xl text-white hover:text-brand">
+              athas
+            </span>
+          </a>
         </div>
       </footer>
     </main>
@@ -503,6 +462,17 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
         {label}
       </div>
       <div className="mt-1 text-base font-bold text-white">{value}</div>
+    </div>
+  )
+}
+
+function HeroFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2.5">
+      <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+        {label}
+      </span>
+      <span className="text-right text-xs font-bold text-white/80">{value}</span>
     </div>
   )
 }

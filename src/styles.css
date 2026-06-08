@@ -14,6 +14,7 @@
   /* Brand & surface */
   --color-brand: #e60000;
   --color-brand-dark: #b80000;
+  --color-brand-contrast-charcoal: #121212;
   --color-ink: #25282b;
   --color-ink-soft: #3a3e42;
   --color-canvas: #ffffff;
@@ -140,6 +141,20 @@ a {
 }
 a:hover {
   color: var(--color-brand-dark);
+}
+
+.promo-marquee {
+  color: var(--color-brand-contrast-charcoal);
+  border-color: color-mix(in oklab, var(--color-brand-contrast-charcoal) 10%, transparent);
+}
+
+.promo-marquee__link,
+.promo-marquee__link:hover {
+  color: var(--color-brand-contrast-charcoal);
+}
+
+.promo-marquee__link:hover {
+  opacity: 0.8;
 }
 
 code {

@@ -67,11 +67,6 @@ type CnePlace = {
   longitude: number
 }
 
-type CatalogRefreshResult = {
-  states: number
-  municipalities: number
-}
-
 type MunicipalityRefreshResult = {
   runId: unknown
   recordsWritten: number
@@ -606,32 +601,6 @@ export const recordPlacesRun = internalMutation({
     }
 
     return { runId }
-  },
-})
-
-export const refreshCatalog = action({
-  args: {},
-  handler: async (ctx): Promise<CatalogRefreshResult> => {
-    try {
-      const catalog = await fetchCatalog()
-      return await ctx.runMutation(internal.ingestion.applyCatalog, catalog)
-    } catch (error) {
-      await ctx.runMutation(internal.ingestion.recordFailure, {
-        kind: 'catalog',
-        message: error instanceof Error ? error.message : 'Catalog refresh failed',
-      })
-      throw error
-    }
-  },
-})
-
-export const refreshMunicipality = action({
-  args: {
-    stateExternalId: v.string(),
-    municipalityExternalId: v.string(),
-  },
-  handler: async (ctx, args): Promise<MunicipalityRefreshResult> => {
-    return await refreshMunicipalityData(ctx, args.stateExternalId, args.municipalityExternalId)
   },
 })
 
