@@ -187,15 +187,15 @@ export function StationFilters({
 
   return (
     <div className="island-shell space-y-4 rounded-lg p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
+      <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <div className="grid grid-cols-3 gap-1 rounded-[6px] border border-slate-200 bg-white p-1 sm:inline-grid sm:w-auto sm:rounded-full">
           {SORT_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
               onClick={() => update({ sortMode: opt.value })}
               className={cn(
-                'rounded-full px-3 py-1 text-xs font-bold transition',
+                'rounded-[5px] px-3 py-2 text-xs font-bold transition sm:rounded-full sm:py-1',
                 state.sortMode === opt.value
                   ? 'bg-ink text-white'
                   : 'text-slate-600 hover:bg-slate-100',
@@ -206,7 +206,7 @@ export function StationFilters({
           ))}
         </div>
 
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative min-w-0 sm:min-w-[200px] sm:flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
@@ -232,6 +232,7 @@ export function StationFilters({
             onClick={onRequestPreciseLocation}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition',
+              'w-full justify-center sm:w-auto',
               hasPreciseLocation
                 ? 'border-brand bg-[#fff0f0] text-brand'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-brand hover:text-brand',
@@ -250,7 +251,7 @@ export function StationFilters({
           <span className="text-slate-300">·</span>
           <span>Doble click para fijar principal</span>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-1.5">
           {FUEL_OPTIONS.map((opt) => {
             const checked = state.fuelTypes.includes(opt.value)
             const isPrimary = state.primaryFuel === opt.value
@@ -277,7 +278,7 @@ export function StationFilters({
                   if (checked) update({ primaryFuel: opt.value })
                 }}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold transition',
+                  'inline-flex w-full items-center justify-center gap-1.5 rounded-[6px] border px-2.5 py-2 text-xs font-bold transition sm:w-auto sm:rounded-full sm:py-1',
                   checked
                     ? isPrimary
                       ? 'border-ink bg-ink text-white'

@@ -130,7 +130,7 @@ function Home() {
             <div className="space-y-4">
               <div>
                 <div className="eyebrow text-white/45">Combustible</div>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                   {FUEL_OPTIONS.map((option) => (
                     <button
                       key={option.value}
@@ -139,7 +139,7 @@ function Home() {
                         setFuelType(option.value)
                         track('home_fuel', { fuel: option.value })
                       }}
-                      className={`rounded-full border px-4 py-2 text-sm font-bold transition ${
+                      className={`w-full rounded-[6px] border px-4 py-3 text-sm font-bold transition sm:w-auto sm:rounded-full sm:py-2 ${
                         fuelType === option.value
                           ? 'border-white bg-white text-ink'
                           : 'border-white/20 bg-white/[0.04] text-white/65 hover:border-white/50 hover:text-white'
@@ -153,7 +153,7 @@ function Home() {
 
               <div>
                 <div className="eyebrow text-white/45">Radio</div>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 grid grid-cols-5 gap-2 sm:flex sm:flex-wrap">
                   {RADIUS_OPTIONS.map((radius) => (
                     <button
                       key={radius}
@@ -162,7 +162,7 @@ function Home() {
                         setRadiusKm(radius)
                         track('home_radius', { radiusKm: radius })
                       }}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                      className={`w-full rounded-[6px] border px-2 py-2 text-xs font-bold transition sm:w-auto sm:rounded-full sm:px-3 sm:py-1.5 ${
                         radiusKm === radius
                           ? 'border-brand bg-brand text-white'
                           : 'border-white/20 bg-white/[0.04] text-white/65 hover:border-white/50 hover:text-white'
@@ -174,21 +174,21 @@ function Home() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     track('home_location_request', { fuel: fuelType, radiusKm })
                     userLoc.requestPrecise()
                   }}
-                  className="btn-pill btn-pill--primary"
+                  className="btn-pill btn-pill--primary w-full justify-center sm:w-auto"
                 >
                   <LocateFixed className="h-4 w-4" />
                   {userLoc.hasPreciseLocation ? 'Actualizar ubicación' : 'Usar mi ubicación'}
                 </button>
                 <Link
                   to="/explorar"
-                  className="btn-pill border border-white/35 text-white hover:bg-white/10"
+                  className="btn-pill w-full justify-center border border-white/35 text-white hover:bg-white/10 sm:w-auto"
                 >
                   Explorar estaciones
                   <ArrowRight className="h-4 w-4" />
@@ -220,7 +220,7 @@ function Home() {
 
       {hasLocation && rows && rows.length > 0 && (
         <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mb-4 flex items-end justify-between gap-4">
+          <div className="mb-4 grid gap-3 sm:flex sm:items-end sm:justify-between sm:gap-4">
             <div>
               <h2 className="font-display text-2xl text-ink">Mapa de resultados</h2>
               <p className="mt-1 text-sm font-semibold text-body">
@@ -230,7 +230,7 @@ function Home() {
             <Link
               to="/explorar"
               search={{ primary: fuelType, fuels: fuelType, sort: 'distance' }}
-              className="hidden rounded-full border border-line px-4 py-2 text-xs font-bold text-ink transition hover:border-ink sm:inline-flex"
+              className="inline-flex w-full justify-center rounded-[6px] border border-line px-4 py-3 text-xs font-bold text-ink transition hover:border-ink sm:w-auto sm:rounded-full sm:py-2"
             >
               Ver más
             </Link>
