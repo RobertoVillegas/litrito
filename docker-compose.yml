@@ -61,6 +61,8 @@ services:
       args:
         VITE_CONVEX_URL: ${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:3210}
         VITE_CONVEX_SITE_URL: ${CONVEX_SITE_ORIGIN:-http://127.0.0.1:3211}
+        VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID:-}
+        VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
     ports:
       - "3000:3000"
     environment:
@@ -70,6 +72,8 @@ services:
       # during SSR (Nitro doesn't inline process.env.VITE_* server-side).
       - VITE_CONVEX_URL=${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:3210}
       - VITE_CONVEX_SITE_URL=${CONVEX_SITE_ORIGIN:-http://127.0.0.1:3211}
+      - VITE_UMAMI_WEBSITE_ID=${VITE_UMAMI_WEBSITE_ID:-}
+      - VITE_UMAMI_SRC=${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
     depends_on:
       backend:
         condition: service_healthy

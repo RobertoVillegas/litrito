@@ -12,6 +12,12 @@ ARG VITE_CONVEX_SITE_URL
 ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
 ENV VITE_CONVEX_SITE_URL=$VITE_CONVEX_SITE_URL
 
+# Umami analytics, inlined at build time (also passed at runtime via compose).
+ARG VITE_UMAMI_WEBSITE_ID
+ARG VITE_UMAMI_SRC
+ENV VITE_UMAMI_WEBSITE_ID=$VITE_UMAMI_WEBSITE_ID
+ENV VITE_UMAMI_SRC=$VITE_UMAMI_SRC
+
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 

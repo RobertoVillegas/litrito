@@ -64,6 +64,9 @@ services:
         # Browser-facing Convex URLs, baked into the bundle at build time.
         VITE_CONVEX_URL: https://${CONVEX_DOMAIN}
         VITE_CONVEX_SITE_URL: https://${CONVEX_HTTP_DOMAIN}
+        # Umami analytics, baked in at build time.
+        VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID}
+        VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -72,6 +75,9 @@ services:
       # into the server bundle.
       - VITE_CONVEX_URL=https://${CONVEX_DOMAIN}
       - VITE_CONVEX_SITE_URL=https://${CONVEX_HTTP_DOMAIN}
+      # Umami read at runtime by the root loader (SSR) as a fallback to the build arg.
+      - VITE_UMAMI_WEBSITE_ID=${VITE_UMAMI_WEBSITE_ID}
+      - VITE_UMAMI_SRC=${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
     expose:
       - "3000"
     depends_on:

@@ -42,7 +42,18 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       (import.meta.env.VITE_UMAMI_SRC as string | undefined) ||
       runtimeEnv?.VITE_UMAMI_SRC ||
       'https://umami.athas.mx/script.js'
-    return { umamiWebsiteId, umamiSrc }
+    const appDomain =
+      (import.meta.env.VITE_APP_DOMAIN as string | undefined) ||
+      runtimeEnv?.APP_DOMAIN ||
+      runtimeEnv?.VITE_APP_DOMAIN ||
+      ''
+    const appOrigin = appDomain
+      ? appDomain.startsWith('http')
+        ? appDomain
+        : `https://${appDomain}`
+      : ''
+    const ogImage = appOrigin ? `${appOrigin}/og-image.png` : '/og-image.png'
+    return { umamiWebsiteId, umamiSrc, ogImage }
   },
   head: ({ loaderData }) => ({
     scripts: loaderData?.umamiWebsiteId
@@ -89,7 +100,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
       {
         property: 'og:image',
-        content: '/og-image.png',
+        content: loaderData?.ogImage ?? '/og-image.png',
       },
       {
         property: 'og:image:width',
@@ -122,7 +133,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
       {
         name: 'twitter:image',
-        content: '/og-image.png',
+        content: loaderData?.ogImage ?? '/og-image.png',
       },
     ],
     links: [

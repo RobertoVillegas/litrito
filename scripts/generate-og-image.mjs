@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 
 import { Resvg } from "@resvg/resvg-js";
 import satori from "satori";
-import { html } from "satori-html";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -38,8 +37,11 @@ const loadFont = async () => {
 const render = async () => {
   const font = await loadFont();
 
-  const markup = html({
-    type: "root",
+  // satori accepts a JSX-like element tree directly. (Do NOT wrap this in
+  // satori-html's `html()` — that parses an HTML *string*; handing it an object
+  // produced an empty render, i.e. a blank PNG.)
+  const markup = {
+    type: "div",
     props: {
       style: {
         background: "#ffffff",
@@ -66,7 +68,100 @@ const render = async () => {
               textTransform: "uppercase",
             },
             children: [
-              { type: "span", props: { style: { fontSize: "44px" }, children: "\u26FD" } },
+              {
+                type: "span",
+                props: {
+                  style: {
+                    alignItems: "center",
+                    background: "#e60000",
+                    borderRadius: "8px",
+                    color: "#ffffff",
+                    display: "flex",
+                    height: "40px",
+                    justifyContent: "center",
+                    position: "relative",
+                    width: "40px",
+                  },
+                  children: [
+                    {
+                      type: "span",
+                      props: {
+                        style: {
+                          background: "#ffffff",
+                          borderRadius: "4px",
+                          display: "flex",
+                          height: "23px",
+                          left: "10px",
+                          position: "absolute",
+                          top: "9px",
+                          width: "16px",
+                        },
+                      },
+                    },
+                    {
+                      type: "span",
+                      props: {
+                        style: {
+                          background: "#e60000",
+                          borderRadius: "2px",
+                          display: "flex",
+                          height: "7px",
+                          left: "13px",
+                          position: "absolute",
+                          top: "12px",
+                          width: "10px",
+                        },
+                      },
+                    },
+                    {
+                      type: "span",
+                      props: {
+                        style: {
+                          background: "#ffffff",
+                          borderRadius: "2px",
+                          display: "flex",
+                          height: "4px",
+                          left: "27px",
+                          position: "absolute",
+                          top: "15px",
+                          transform: "rotate(34deg)",
+                          width: "8px",
+                        },
+                      },
+                    },
+                    {
+                      type: "span",
+                      props: {
+                        style: {
+                          background: "#ffffff",
+                          borderRadius: "2px",
+                          display: "flex",
+                          height: "13px",
+                          left: "31px",
+                          position: "absolute",
+                          top: "18px",
+                          width: "4px",
+                        },
+                      },
+                    },
+                    {
+                      type: "span",
+                      props: {
+                        style: {
+                          background: "#ffffff",
+                          borderRadius: "2px",
+                          display: "flex",
+                          height: "4px",
+                          left: "9px",
+                          position: "absolute",
+                          top: "31px",
+                          width: "18px",
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
               { type: "span", props: { children: "Litrito" } },
             ],
           },
@@ -116,31 +211,9 @@ const render = async () => {
             ],
           },
         },
-        {
-          type: "div",
-          props: {
-            style: {
-              alignItems: "center",
-              background: "#e60000",
-              borderRadius: "999px",
-              color: "#ffffff",
-              display: "flex",
-              fontSize: "24px",
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              paddingBottom: "18px",
-              paddingLeft: "32px",
-              paddingRight: "32px",
-              paddingTop: "18px",
-              textTransform: "uppercase",
-              width: "fit-content",
-            },
-            children: "litrito.mx",
-          },
-        },
       ],
     },
-  });
+  };
 
   const svg = await satori(markup, {
     ...ogSize,
