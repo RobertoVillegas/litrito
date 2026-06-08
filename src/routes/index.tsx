@@ -418,14 +418,16 @@ function Home() {
       </section>
 
       <footer className="mt-6 bg-ink text-on-dark">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10 sm:px-6 md:flex-row md:items-end md:justify-between lg:px-8">
-          <div className="min-w-0 flex-1">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-10 sm:px-6 lg:px-8">
+          <div>
             <div className="font-display text-3xl text-white">Litrito</div>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/60">
               Precios informativos reportados por permisionarios a la Comision
               Nacional de Energia. Pueden cambiar en estacion.
             </p>
-            <p className="eyebrow mt-4 text-white/40">
+          </div>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="eyebrow text-white/40">
               Hecho en Mexico ·{' '}
               <a
                 href="https://www.cne.gob.mx/"
@@ -436,18 +438,15 @@ function Home() {
                 Fuente CNE
               </a>
             </p>
+            <a
+              href="https://athas.mx"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="eyebrow text-white/40 hover:text-brand"
+            >
+              Por athas
+            </a>
           </div>
-          <a
-            href="https://athas.mx"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 text-left md:text-right"
-          >
-            <span className="eyebrow block text-white/35">Por</span>
-            <span className="font-display block text-2xl text-white hover:text-brand">
-              athas
-            </span>
-          </a>
         </div>
       </footer>
     </main>
