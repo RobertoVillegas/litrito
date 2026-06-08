@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { ArrowRight, Fuel, LocateFixed, MapPin, Navigation } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
+import { SiteFooter } from '../components/SiteFooter'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { track } from '#/lib/analytics'
 import type { FuelType } from '../components/StationFilters'
@@ -111,7 +112,7 @@ function Home() {
   return (
     <main className="min-h-screen bg-white">
       <section className="bg-ink text-on-dark">
-        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)] lg:px-8">
+        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(280px,0.78fr)_minmax(420px,1.22fr)] lg:px-8">
           <div className="flex flex-col justify-between gap-8">
             <div>
               <div className="eyebrow inline-flex items-center gap-2 rounded-[32px] bg-brand px-3 py-1.5 text-white">
@@ -130,7 +131,7 @@ function Home() {
             <div className="space-y-4">
               <div>
                 <div className="eyebrow text-white/45">Combustible</div>
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                <div className="mt-2 grid grid-cols-2 gap-2">
                   {FUEL_OPTIONS.map((option) => (
                     <button
                       key={option.value}
@@ -139,7 +140,7 @@ function Home() {
                         setFuelType(option.value)
                         track('home_fuel', { fuel: option.value })
                       }}
-                      className={`w-full rounded-[6px] border px-4 py-3 text-sm font-bold transition sm:w-auto sm:rounded-full sm:py-2 ${
+                      className={`w-full rounded-[6px] border px-4 py-3 text-sm font-bold transition ${
                         fuelType === option.value
                           ? 'border-white bg-white text-ink'
                           : 'border-white/20 bg-white/[0.04] text-white/65 hover:border-white/50 hover:text-white'
@@ -153,7 +154,7 @@ function Home() {
 
               <div>
                 <div className="eyebrow text-white/45">Radio</div>
-                <div className="mt-2 grid grid-cols-5 gap-2 sm:flex sm:flex-wrap">
+                <div className="mt-2 grid grid-cols-5 gap-2">
                   {RADIUS_OPTIONS.map((radius) => (
                     <button
                       key={radius}
@@ -162,7 +163,7 @@ function Home() {
                         setRadiusKm(radius)
                         track('home_radius', { radiusKm: radius })
                       }}
-                      className={`w-full rounded-[6px] border px-2 py-2 text-xs font-bold transition sm:w-auto sm:rounded-full sm:px-3 sm:py-1.5 ${
+                      className={`w-full rounded-[6px] border px-2 py-2 text-xs font-bold transition ${
                         radiusKm === radius
                           ? 'border-brand bg-brand text-white'
                           : 'border-white/20 bg-white/[0.04] text-white/65 hover:border-white/50 hover:text-white'
@@ -174,21 +175,21 @@ function Home() {
                 </div>
               </div>
 
-              <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                 <button
                   type="button"
                   onClick={() => {
                     track('home_location_request', { fuel: fuelType, radiusKm })
                     userLoc.requestPrecise()
                   }}
-                  className="btn-pill btn-pill--primary w-full justify-center sm:w-auto"
+                  className="btn-pill btn-pill--primary w-full justify-center"
                 >
                   <LocateFixed className="h-4 w-4" />
                   {userLoc.hasPreciseLocation ? 'Actualizar ubicación' : 'Usar mi ubicación'}
                 </button>
                 <Link
                   to="/explorar"
-                  className="btn-pill w-full justify-center border border-white/35 text-white hover:bg-white/10 sm:w-auto"
+                  className="btn-pill w-full justify-center border border-white/35 text-white hover:bg-white/10"
                 >
                   Explorar estaciones
                   <ArrowRight className="h-4 w-4" />
@@ -263,15 +264,7 @@ function Home() {
         </section>
       )}
 
-      <footer className="bg-ink text-on-dark">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-8 sm:px-6 lg:px-8">
-          <div className="font-display text-3xl text-white">Litrito</div>
-          <p className="max-w-xl text-sm leading-6 text-white/60">
-            Precios informativos reportados por permisionarios a la Comisión
-            Nacional de Energía. Pueden cambiar en estación.
-          </p>
-        </div>
-      </footer>
+      <SiteFooter />
     </main>
   )
 }
