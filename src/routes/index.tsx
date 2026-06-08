@@ -403,6 +403,15 @@ function Home() {
           canLoadMore={paginated.status === 'CanLoadMore'}
           isLoadingMore={paginated.status === 'LoadingMore'}
           onLoadMore={() => paginated.loadMore(PAGE_SIZE)}
+          onSortModeChange={(sortMode) => setFilters((prev) => ({ ...prev, sortMode }))}
+          onFuelSortChange={(fuelType) =>
+            setFilters((prev) => ({
+              ...prev,
+              sortMode: 'price',
+              primaryFuel: fuelType,
+              fuelTypes: [fuelType, ...prev.fuelTypes.filter((ft) => ft !== fuelType)],
+            }))
+          }
           onToggleFavorite={handleToggleFavorite}
           favoriteSet={favoriteSet}
           userLocation={

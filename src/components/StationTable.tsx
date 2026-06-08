@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   flexRender,
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDownUp, Loader2, Star } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
@@ -35,6 +36,8 @@ type Props = {
   canLoadMore: boolean
   isLoadingMore: boolean
   onLoadMore: () => void
+  onSortModeChange?: (sortMode: SortMode) => void
+  onFuelSortChange?: (fuelType: FuelType) => void
   onToggleFavorite?: (permitNumber: string) => void
   favoriteSet?: Set<string>
   userLocation?: { latitude: number; longitude: number } | null
@@ -159,20 +162,51 @@ export function StationTable({
   canLoadMore,
   isLoadingMore,
   onLoadMore,
+  onSortModeChange,
+  onFuelSortChange,
   onToggleFavorite,
   favoriteSet,
   userLocation,
   distanceByPermit,
 }: Props) {
   const columns = useMemo<ColumnDef<StationRow>[]>(() => {
+    const SortHeader = ({
+      children,
+      active,
+      onClick,
+      align = 'left',
+    }: {
+      children: ReactNode
+      active: boolean
+      onClick: () => void
+      align?: 'left' | 'right'
+    }) => (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          'inline-flex w-full items-center gap-1.5 transition hover:text-ink',
+          align === 'right' ? 'justify-end' : 'justify-start',
+          active ? 'text-ink' : 'text-slate-500',
+        )}
+      >
+        <span>{children}</span>
+        <ArrowDownUp
+          className={cn('h-3 w-3', active ? 'opacity-100' : 'opacity-35')}
+        />
+      </button>
+    )
+
     const cols: ColumnDef<StationRow>[] = [
       {
         id: 'name',
         header: () => (
-          <div className="flex items-center gap-1.5">
-            <span>Estación</span>
-            {sortMode === 'name' && <ArrowDownUp className="h-3 w-3" />}
-          </div>
+          <SortHeader
+            active={sortMode === 'name'}
+            onClick={() => onSortModeChange?.('name')}
+          >
+            Estación
+          </SortHeader>
         ),
         cell: ({ row }) => {
           const s = row.original.station
@@ -215,7 +249,7 @@ export function StationTable({
       },
       {
         id: 'location',
-        header: 'Ubicación',
+        header: () => <span>Ubicación</span>,
         cell: ({ row }) => {
           const s = row.original.station
           return (
@@ -232,10 +266,13 @@ export function StationTable({
       ...fuelTypes.map<ColumnDef<StationRow>>((ft) => ({
         id: `fuel-${ft}`,
         header: () => (
-          <div className="flex items-center justify-end gap-1">
+          <SortHeader
+            active={sortMode === 'price' && ft === fuelTypes[0]}
+            onClick={() => onFuelSortChange?.(ft)}
+            align="right"
+          >
             <span className="uppercase">{ft}</span>
-            {sortMode === 'price' && <ArrowDownUp className="h-3 w-3" />}
-          </div>
+          </SortHeader>
         ),
         cell: ({ row }) => {
           const price = row.original.prices[ft]?.price
@@ -257,9 +294,13 @@ export function StationTable({
       cols.push({
         id: 'distance',
         header: () => (
-          <div className="flex items-center justify-end gap-1">
-            <span>Distancia</span>
-          </div>
+          <SortHeader
+            active={sortMode === 'distance'}
+            onClick={() => onSortModeChange?.('distance')}
+            align="right"
+          >
+            Distancia
+          </SortHeader>
         ),
         cell: ({ row }) => {
           const km = distanceByPermit?.get(row.original.station.permitNumber)
@@ -273,13 +314,30 @@ export function StationTable({
       })
     }
     return cols
-  }, [fuelTypes, sortMode, onToggleFavorite, favoriteSet, userLocation, distanceByPermit])
+  }, [
+    fuelTypes,
+    sortMode,
+    onSortModeChange,
+    onFuelSortChange,
+    onToggleFavorite,
+    favoriteSet,
+    userLocation,
+    distanceByPermit,
+  ])
+
+  const sorting = useMemo<SortingState>(() => {
+    if (sortMode === 'name') return [{ id: 'name', desc: false }]
+    if (sortMode === 'distance') return [{ id: 'distance', desc: false }]
+    return [{ id: `fuel-${fuelTypes[0] ?? 'regular'}`, desc: false }]
+  }, [fuelTypes, sortMode])
 
   const table = useReactTable({
     data: rows,
     columns,
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
+    manualSorting: true,
+    state: { sorting },
   })
 
   const parentRef = useRef<HTMLDivElement>(null)

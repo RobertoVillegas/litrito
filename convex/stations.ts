@@ -182,15 +182,24 @@ export const listStations = query({
       }
     }
 
-    let rows = stations.map((station) => {
-      const priceMap = pricesByStation.get(station.permitNumber) ?? {}
-      const highlightedPrice =
+    const pickHighlightedPrice = (priceMap: Record<string, { price: number }>) => {
+      for (const ft of fuelTypes) {
+        const price = priceMap[ft]?.price
+        if (price != null) return price
+      }
+      return (
         priceMap.regular?.price ??
         priceMap.premium?.price ??
         priceMap.diesel?.price ??
         priceMap.duba?.price ??
         priceMap.unknown?.price ??
         null
+      )
+    }
+
+    let rows = stations.map((station) => {
+      const priceMap = pricesByStation.get(station.permitNumber) ?? {}
+      const highlightedPrice = pickHighlightedPrice(priceMap)
       return { station, prices: priceMap, highlightedPrice }
     })
 
@@ -306,16 +315,25 @@ export const listStationsInBounds = query({
       }
     }
 
+    const pickHighlightedPrice = (priceMap: Record<string, { price: number }>) => {
+      for (const ft of fuelTypes) {
+        const price = priceMap[ft]?.price
+        if (price != null) return price
+      }
+      return (
+        priceMap.regular?.price ??
+        priceMap.premium?.price ??
+        priceMap.diesel?.price ??
+        priceMap.duba?.price ??
+        priceMap.unknown?.price ??
+        null
+      )
+    }
+
     const projected = selected
       .map((station) => {
         const priceMap = pricesByStation.get(station.permitNumber) ?? {}
-        const highlightedPrice =
-          priceMap.regular?.price ??
-          priceMap.premium?.price ??
-          priceMap.diesel?.price ??
-          priceMap.duba?.price ??
-          priceMap.unknown?.price ??
-          null
+        const highlightedPrice = pickHighlightedPrice(priceMap)
         return { station, prices: priceMap, highlightedPrice }
       })
       .filter((r) => {
