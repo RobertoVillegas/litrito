@@ -23,8 +23,29 @@ interface MyRouterContext {
   queryClient: QueryClient
 }
 
+// Read the Umami config from the SERVER runtime env (not import.meta.env, which
+// Vite inlines at build time — that fails when the value is only present in the
+// container's runtime .env). The loader runs on the server and its result is
+// dehydrated to the client, so `head()` produces the same <script> on both
+// sides with no hydration mismatch. Do NOT reuse another site's website id.
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-  head: () => ({
+  loader: () => {
+    const env = typeof process !== 'undefined' ? process.env : undefined
+    return {
+      umamiWebsiteId: env?.VITE_UMAMI_WEBSITE_ID ?? '',
+      umamiSrc: env?.VITE_UMAMI_SRC ?? 'https://umami.athas.mx/script.js',
+    }
+  },
+  head: ({ loaderData }) => ({
+    scripts: loaderData?.umamiWebsiteId
+      ? [
+          {
+            src: loaderData.umamiSrc,
+            defer: true,
+            'data-website-id': loaderData.umamiWebsiteId,
+          },
+        ]
+      : [],
     meta: [
       {
         charSet: 'utf-8',
@@ -110,25 +131,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
   shellComponent: RootDocument,
 })
 
-// Umami analytics. Configure per-environment so litrito reports under its own
-// website (do NOT reuse another site's id). Set VITE_UMAMI_WEBSITE_ID (and
-// optionally VITE_UMAMI_SRC) in the deploy env; when the id is absent the
-// script is skipped entirely, which keeps local dev out of the dashboard.
-const UMAMI_WEBSITE_ID = import.meta.env.VITE_UMAMI_WEBSITE_ID as
-  | string
-  | undefined
-const UMAMI_SRC =
-  (import.meta.env.VITE_UMAMI_SRC as string | undefined) ??
-  'https://umami.athas.mx/script.js'
-
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es-MX">
       <head>
         <HeadContent />
-        {UMAMI_WEBSITE_ID && (
-          <script defer src={UMAMI_SRC} data-website-id={UMAMI_WEBSITE_ID} />
-        )}
       </head>
       <body>
         <ConvexProvider>
