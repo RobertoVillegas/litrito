@@ -1,8 +1,14 @@
 import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
-import { internalMutation, query } from './_generated/server'
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  query,
+} from './_generated/server'
 import type { QueryCtx, MutationCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
+import { internal } from './_generated/api'
 
 const fuelType = v.union(
   v.literal('regular'),
@@ -24,6 +30,21 @@ const MEXICO_BOUNDS = {
   neLat: 32.7,
   neLon: -86.5,
 }
+
+// Hard cap on how many station docs the bounds scan will read before giving
+// up and returning a truncated result. The common case (national or city
+// zoom) fills `limit` long before this. The cap protects the per-query read
+// budget against a pathological viewport — e.g. a tall, thin vertical strip
+// where the lat band spans the country but the lon filter rejects almost
+// everything, so we'd otherwise iterate every station to find a handful.
+const MAX_STATION_SCAN = 4000
+
+// N+1 price lookups, throttled to this many in flight at a time. Convex
+// queries have a per-call parallel-read ceiling (self-hosted is more
+// aggressive than cloud), so 800 simultaneous indexed reads get killed with
+// 'too many system operations'. Small parallel batches keep the in-flight
+// count well under the cap while still finishing an 800-station view quickly.
+const PRICE_LOOKUP_CHUNK = 16
 
 type FuelType = Doc<'fuelPricesCurrent'>['fuelType']
 type ParsedMunicipality = { state: string | null; muni: string }
@@ -555,44 +576,71 @@ export const listStationsInBounds = query({
       return { stations: [], truncated: false }
     }
 
-    const candidates = await ctx.db
+    const fuelTypes = args.fuelTypes ?? []
+
+    // Stream the by_lat index and stop as soon as we have enough so a national
+    // view doesn't read all 8k+ stations at once. We must NOT use `.paginate()`
+    // here: Convex allows only one paginated query per function and a
+    // server-side pagination loop calls it repeatedly, which the backend
+    // rejects with "ran multiple paginated queries". Async iteration reads
+    // lazily and lets us break early without any pagination call. The previous
+    // `.collect()` version pulled every station in the lat range and timed out
+    // the self-hosted op budget once the catalog filled up.
+    const selected: Doc<'stations'>[] = []
+    let truncated = false
+    let scanned = 0
+
+    for await (const station of ctx.db
       .query('stations')
       .withIndex('by_lat', (q) =>
         q.gte('latitude', swLat).lte('latitude', neLat),
-      )
-      .collect()
+      )) {
+      scanned++
+      const lat = station.latitude
+      const lon = station.longitude
+      if (
+        typeof lat === 'number' &&
+        typeof lon === 'number' &&
+        lon >= swLon &&
+        lon <= neLon
+      ) {
+        selected.push(station)
+        if (selected.length >= limit) {
+          truncated = true
+          break
+        }
+      }
+      if (scanned >= MAX_STATION_SCAN) {
+        truncated = true
+        break
+      }
+    }
 
-    const fuelTypes = args.fuelTypes ?? []
-    const inBounds = candidates.filter((s) => {
-      const lat = s.latitude
-      const lon = s.longitude
-      if (typeof lat !== 'number' || typeof lon !== 'number') return false
-      if (lon < swLon || lon > neLon) return false
-      return true
-    })
-
-    // Cap the result set before looking up prices: a national view can hold
-    // ~13k stations and one price query per station would blow past Convex's
-    // per-query read limit.
-    const truncated = inBounds.length > limit
-    const selected = truncated ? inBounds.slice(0, limit) : inBounds
-
-    const prices = await Promise.all(
-      selected.map((s) =>
-        ctx.db
-          .query('fuelPricesCurrent')
-          .withIndex('by_station_fuel', (q) =>
-            q.eq('stationPermitNumber', s.permitNumber),
-          )
-          .collect(),
-      ),
-    )
+    // N+1 price lookups, throttled to PRICE_LOOKUP_CHUNK in flight at a time.
+    // Convex queries have a per-call parallel-read ceiling (and self-hosted
+    // is more aggressive about it than cloud), so 800 simultaneous indexed
+    // reads will be killed with 'too many system operations'. Doing 16
+    // parallel reads per turn keeps the in-flight count well under the cap
+    // while still finishing a 800-station view in ~50 sequential turns.
     const pricesByStation = new Map<string, Record<string, { price: number }>>()
-    for (const arr of prices) {
-      for (const p of arr) {
-        const slot = pricesByStation.get(p.stationPermitNumber) ?? {}
-        slot[p.fuelType] = { price: p.price }
-        pricesByStation.set(p.stationPermitNumber, slot)
+    for (let i = 0; i < selected.length; i += PRICE_LOOKUP_CHUNK) {
+      const batch = selected.slice(i, i + PRICE_LOOKUP_CHUNK)
+      const priceArrays = await Promise.all(
+        batch.map((s) =>
+          ctx.db
+            .query('fuelPricesCurrent')
+            .withIndex('by_station_fuel', (q) =>
+              q.eq('stationPermitNumber', s.permitNumber),
+            )
+            .collect(),
+        ),
+      )
+      for (const arr of priceArrays) {
+        for (const p of arr) {
+          const slot = pricesByStation.get(p.stationPermitNumber) ?? {}
+          slot[p.fuelType] = { price: p.price }
+          pricesByStation.set(p.stationPermitNumber, slot)
+        }
       }
     }
 
@@ -783,13 +831,69 @@ export const listFilterOptions = query({
   },
 })
 
-export const rebuildFilterOptionsCache = internalMutation({
+// Per-state slice of the filter options. Reading one state's stations and
+// municipalities stays well under the per-transaction op budget (a single
+// `stations.collect()` over the whole catalog does not — that is why the old
+// single-mutation rebuild timed out and the cache was stuck on a stale,
+// early-development payload).
+export const filterOptionsForState = internalQuery({
+  args: { stateExternalId: v.string() },
+  handler: async (ctx, args) => {
+    const state = await ctx.db
+      .query('states')
+      .withIndex('by_external_id', (q) => q.eq('externalId', args.stateExternalId))
+      .unique()
+    if (!state) return null
+
+    const stations = await ctx.db
+      .query('stations')
+      .withIndex('by_state', (q) => q.eq('stateExternalId', args.stateExternalId))
+      .collect()
+    const municipalities = await ctx.db
+      .query('municipalities')
+      .withIndex('by_state', (q) => q.eq('stateExternalId', args.stateExternalId))
+      .collect()
+
+    const byMuni = new Map<string, number>()
+    for (const s of stations) {
+      byMuni.set(
+        s.municipalityExternalId,
+        (byMuni.get(s.municipalityExternalId) ?? 0) + 1,
+      )
+    }
+
+    return {
+      state: {
+        externalId: state.externalId,
+        name: state.name,
+        count: stations.length,
+      },
+      municipalities: municipalities
+        .map((m) => ({
+          externalId: m.externalId,
+          stateExternalId: m.stateExternalId,
+          name: m.name,
+          count: byMuni.get(m.externalId) ?? 0,
+        }))
+        .filter((m) => m.count > 0),
+    }
+  },
+})
+
+export const listStateExternalIds = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const payload = await computeFilterOptions(ctx)
+    const states = await ctx.db.query('states').collect()
+    return states.map((s) => s.externalId)
+  },
+})
+
+export const writeFilterOptionsCache = internalMutation({
+  args: { data: v.string() },
+  handler: async (ctx, args) => {
     const value = {
       key: FILTER_OPTIONS_CACHE_KEY,
-      data: JSON.stringify(payload),
+      data: args.data,
       updatedAt: new Date().toISOString(),
     }
     const existing = await ctx.db
@@ -801,9 +905,44 @@ export const rebuildFilterOptionsCache = internalMutation({
     } else {
       await ctx.db.insert('filterOptionsCache', value)
     }
+  },
+})
+
+// Rebuilds the filter-options cache one state at a time so no single
+// transaction scans the whole catalog. The action accumulates per-state slices
+// in memory (action memory, not a DB transaction) and writes the merged blob
+// in one small mutation at the end.
+export const rebuildFilterOptionsCache = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const stateIds = await ctx.runQuery(
+      internal.stations.listStateExternalIds,
+      {},
+    )
+
+    const states: FilterOptionsPayload['states'] = []
+    const municipalities: FilterOptionsPayload['municipalities'] = []
+    for (const stateExternalId of stateIds) {
+      const chunk = await ctx.runQuery(
+        internal.stations.filterOptionsForState,
+        { stateExternalId },
+      )
+      if (!chunk) continue
+      states.push(chunk.state)
+      for (const m of chunk.municipalities) municipalities.push(m)
+    }
+
+    states.sort((a, b) => a.name.localeCompare(b.name))
+    municipalities.sort((a, b) => a.name.localeCompare(b.name))
+
+    const payload: FilterOptionsPayload = { states, municipalities }
+    await ctx.runMutation(internal.stations.writeFilterOptionsCache, {
+      data: JSON.stringify(payload),
+    })
+
     return {
-      states: payload.states.length,
-      municipalities: payload.municipalities.length,
+      states: states.length,
+      municipalities: municipalities.length,
     }
   },
 })

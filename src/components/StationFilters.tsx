@@ -108,8 +108,8 @@ function Combobox({
 
         {open && !disabled && (
           <>
-            <div className="fixed inset-0 z-[40]" onClick={() => setOpen(false)} />
-            <div className="absolute left-0 right-0 z-[50] mt-1 rounded-[6px] border border-line bg-white shadow-[0_12px_40px_rgba(37,40,43,0.16)]">
+            <div className="fixed inset-0 z-[1090]" onClick={() => setOpen(false)} />
+            <div className="absolute left-0 right-0 z-[1100] mt-1 rounded-[6px] border border-line bg-white shadow-[0_12px_40px_rgba(37,40,43,0.16)]">
               <div className="relative border-b border-line p-2">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input

@@ -45,4 +45,11 @@ crons.daily(
   {},
 )
 
+crons.daily(
+  'rebuild-metrics-cache-2145-mexico-city',
+  { hourUTC: 3, minuteUTC: 45 },
+  internal.metrics.rebuildMetricsCache,
+  {},
+)
+
 export default crons
