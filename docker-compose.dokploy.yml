@@ -67,6 +67,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Needed at RUNTIME too (not just build args): auth-server.ts reads these
+      # from process.env during SSR, and Nitro doesn't inline process.env.VITE_*
+      # into the server bundle.
+      - VITE_CONVEX_URL=https://${CONVEX_DOMAIN}
+      - VITE_CONVEX_SITE_URL=https://${CONVEX_HTTP_DOMAIN}
     expose:
       - "3000"
     depends_on:
