@@ -87,38 +87,47 @@ image if those change.
 
 ## Deploy with Dokploy (Traefik)
 
-Use **`docker-compose.dokploy.yml`** instead of the local compose. It exposes
-nothing to the host — Traefik routes each domain to the right container port via
-labels, over the external `dokploy-network`. The backend container serves two
-ports (3210 API, 3211 HTTP actions), so it has two routers on two domains.
+Use **`docker-compose.dokploy.yml`** instead of the local compose. It declares
+only the services, ports, env and the data volume — Dokploy injects
+`dokploy-network` and the Traefik labels, and you add the domains from the
+Dokploy **Domains** UI. No host port bindings.
 
-1. **DNS**: point four subdomains at the VPS, e.g. `convex`, `convex-http`,
-   `convex-admin`, and the app domain (`litrito.mx`).
+Use **single-level** subdomains so a `*.athas.mx` wildcard cert covers them (a
+wildcard matches one level only).
+
+1. **DNS**: point four single-level subdomains at the VPS (already covered by
+   your `*.athas.mx` wildcard), e.g. `litrito`, `litrito-convex`,
+   `litrito-convex-http`, `litrito-convex-admin`.
 2. **Dokploy → Compose service** pointing at this repo / `docker-compose.dokploy.yml`.
-   Set env vars in the Dokploy UI:
-   - `CONVEX_DOMAIN=convex.litrito.mx`
-   - `CONVEX_HTTP_DOMAIN=convex-http.litrito.mx`
-   - `DASHBOARD_DOMAIN=convex-admin.litrito.mx`
-   - `APP_DOMAIN=litrito.mx`
-   - `INSTANCE_SECRET=<long random>`
-3. **Deploy.** Traefik issues Let's Encrypt certs for each domain. The `web`
-   service builds and runs, but will error until functions are deployed (next).
-4. **Admin key** — in the backend container's terminal (Dokploy → backend → Terminal):
+   Set the env vars from `.env.selfhost` in the Dokploy service settings.
+3. **Dokploy → Domains**: route each domain to its service + container port:
+
+   | Domain | Service | Port |
+   |---|---|---|
+   | `litrito.athas.mx` | `web` | 3000 |
+   | `litrito-convex.athas.mx` | `backend` | 3210 (API + websocket) |
+   | `litrito-convex-http.athas.mx` | `backend` | 3211 (HTTP actions) |
+   | `litrito-convex-admin.athas.mx` | `dashboard` | 6791 |
+
+   The `backend` service gets **two** domains (3210 and 3211).
+4. **Deploy.** The `web` service builds and runs, but errors until functions are
+   deployed (next).
+5. **Admin key** — in the backend container's terminal (Dokploy → backend → Terminal):
    ```bash
    ./generate_admin_key.sh
    ```
-5. **From your laptop**, target the VPS backend in `.env.local`:
+6. **From your laptop**, target the VPS backend in `.env.local`:
    ```bash
-   CONVEX_SELF_HOSTED_URL='https://convex.litrito.mx'
+   CONVEX_SELF_HOSTED_URL='https://litrito-convex.athas.mx'
    CONVEX_SELF_HOSTED_ADMIN_KEY='<admin key>'
    # comment out the old cloud CONVEX_DEPLOYMENT
    ```
    Then push schema + functions and set the app URL:
    ```bash
    bunx convex deploy
-   bunx convex env set SITE_URL https://litrito.mx
+   bunx convex env set SITE_URL https://litrito.athas.mx
    ```
-6. **Repopulate — Zacatecas first to test fast:**
+7. **Repopulate — Zacatecas first to test fast:**
    ```bash
    bunx convex run ingestion:refreshCatalog            # states + municipalities
    bunx convex run ingestion:refreshPlaces             # coordinates (national, fast)
@@ -129,11 +138,12 @@ ports (3210 API, 3211 HTTP actions), so it has two routers on two domains.
    ```bash
    bunx convex run ingestion:bootstrapNationalRefresh
    ```
-7. Redeploy the compose in Dokploy if you change `CONVEX_DOMAIN`/`CONVEX_HTTP_DOMAIN`
+8. Redeploy the compose in Dokploy if you change `CONVEX_DOMAIN`/`CONVEX_HTTP_DOMAIN`
    (the web bundle bakes those URLs at build time).
 
-> Prefer not to expose the dashboard publicly? Drop the `dashboard` service's
-> Traefik labels and reach it through a Dokploy tunnel / SSH port-forward instead.
+> Prefer not to expose the dashboard publicly? Just don't add a domain for the
+> `dashboard` service in Dokploy and reach it through a Dokploy terminal / SSH
+> port-forward instead.
 
 ## VPS notes
 
