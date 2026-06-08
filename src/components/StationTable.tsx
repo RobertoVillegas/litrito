@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   flexRender,
@@ -54,6 +54,101 @@ function formatDistance(km: number): string {
   if (km < 1) return `${Math.round(km * 1000)} m`
   if (km < 10) return `${km.toFixed(1)} km`
   return `${Math.round(km)} km`
+}
+
+const FUEL_LABEL: Record<FuelType, string> = {
+  regular: 'Regular',
+  premium: 'Premium',
+  diesel: 'Diésel',
+  duba: 'Diésel S',
+}
+
+function useIsMobile(query = '(max-width: 639px)') {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mql = window.matchMedia(query)
+    const update = () => setIsMobile(mql.matches)
+    update()
+    mql.addEventListener('change', update)
+    return () => mql.removeEventListener('change', update)
+  }, [query])
+  return isMobile
+}
+
+function StationCard({
+  row,
+  fuelTypes,
+  sortMode,
+  onToggleFavorite,
+  isFavorite,
+  distanceKm,
+}: {
+  row: StationRow
+  fuelTypes: FuelType[]
+  sortMode: SortMode
+  onToggleFavorite?: (permitNumber: string) => void
+  isFavorite: boolean
+  distanceKm?: number
+}) {
+  const s = row.station
+  return (
+    <div className="p-4">
+      <div className="flex items-start justify-between gap-2">
+        <Link
+          to="/estacion/$"
+          params={{ _splat: s.permitNumber }}
+          className="min-w-0 flex-1 truncate text-sm font-black text-ink hover:text-brand"
+        >
+          {s.name}
+        </Link>
+        {onToggleFavorite && (
+          <button
+            type="button"
+            onClick={() => onToggleFavorite(s.permitNumber)}
+            className={cn(
+              'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition',
+              isFavorite
+                ? 'border-brand bg-[#fff0f0] text-brand'
+                : 'border-slate-200 bg-white text-slate-400',
+            )}
+            title="Favorita"
+          >
+            <Star className="h-3.5 w-3.5" fill={isFavorite ? 'currentColor' : 'none'} />
+          </button>
+        )}
+      </div>
+      <div className="mt-0.5 truncate text-xs text-body">{s.address}</div>
+      <div className="truncate text-[11px] text-mute">
+        {[s.municipalityName, s.stateName].filter(Boolean).join(', ')}
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {fuelTypes.map((ft) => {
+          const price = row.prices[ft]?.price
+          return (
+            <span
+              key={ft}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold',
+                price != null
+                  ? 'border-line bg-canvas-soft text-ink'
+                  : 'border-slate-100 bg-white text-mute',
+              )}
+            >
+              <span className="text-[10px] uppercase tracking-wide text-body">
+                {FUEL_LABEL[ft]}
+              </span>
+              {price != null ? formatCurrency(price) : '–'}
+            </span>
+          )
+        })}
+      </div>
+      {sortMode === 'distance' && distanceKm != null && (
+        <div className="mt-2 text-xs font-bold text-brand">
+          A {formatDistance(distanceKm)}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function StationTable({
@@ -189,11 +284,12 @@ export function StationTable({
 
   const parentRef = useRef<HTMLDivElement>(null)
   const flatRows = table.getRowModel().rows
+  const isMobile = useIsMobile()
 
   const rowVirtualizer = useVirtualizer({
     count: flatRows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 64,
+    estimateSize: () => (isMobile ? 150 : 64),
     overscan: 8,
   })
 
@@ -209,7 +305,7 @@ export function StationTable({
 
   useEffect(() => {
     rowVirtualizer.measure()
-  }, [rows.length, rowVirtualizer])
+  }, [rows.length, rowVirtualizer, isMobile])
 
   const alignForColumn = (id: string) =>
     id === 'name' || id === 'location' ? 'flex-start' : 'flex-end'
@@ -227,7 +323,7 @@ export function StationTable({
             </span>
           )}
         </span>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <span className="hidden text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:inline">
           Desliza para ver más →
         </span>
       </div>
@@ -248,31 +344,33 @@ export function StationTable({
       >
         <div
           className="grid"
-          style={{ minWidth: `${minTableWidth}px` }}
+          style={{ minWidth: isMobile ? undefined : `${minTableWidth}px` }}
           role="table"
         >
-          <div
-            className="sticky top-0 z-20 grid bg-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-500 shadow-[0_1px_0_0_theme(colors.slate.200)]"
-            style={{
-              gridTemplateColumns: columnWidths.map((w) => `${w}px`).join(' '),
-            }}
-            role="rowgroup"
-          >
-            {table.getHeaderGroups().map((hg) =>
-              hg.headers.map((header) => (
-                <div
-                  key={header.id}
-                  className="flex items-center px-3 py-2.5"
-                  style={{ justifyContent: alignForColumn(header.id) }}
-                  role="columnheader"
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                </div>
-              )),
-            )}
-          </div>
+          {!isMobile && (
+            <div
+              className="sticky top-0 z-20 grid bg-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-500 shadow-[0_1px_0_0_theme(colors.slate.200)]"
+              style={{
+                gridTemplateColumns: columnWidths.map((w) => `${w}px`).join(' '),
+              }}
+              role="rowgroup"
+            >
+              {table.getHeaderGroups().map((hg) =>
+                hg.headers.map((header) => (
+                  <div
+                    key={header.id}
+                    className="flex items-center px-3 py-2.5"
+                    style={{ justifyContent: alignForColumn(header.id) }}
+                    role="columnheader"
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </div>
+                )),
+              )}
+            </div>
+          )}
 
           {rows.length === 0 && !isLoading ? (
             <div className="px-4 py-12 text-center text-sm text-slate-500">
@@ -294,28 +392,52 @@ export function StationTable({
                     ref={(node) => {
                       if (node) rowVirtualizer.measureElement(node)
                     }}
-                    className="absolute left-0 flex w-full items-center border-b border-slate-100 bg-white hover:bg-canvas-soft"
-                    style={{
-                      transform: `translateY(${vRow.start}px)`,
-                      height: `${vRow.size}px`,
-                    }}
+                    className={cn(
+                      'absolute left-0 w-full border-b bg-white',
+                      isMobile
+                        ? 'border-line'
+                        : 'flex items-center border-slate-100 hover:bg-canvas-soft',
+                    )}
+                    style={
+                      isMobile
+                        ? { transform: `translateY(${vRow.start}px)` }
+                        : {
+                            transform: `translateY(${vRow.start}px)`,
+                            height: `${vRow.size}px`,
+                          }
+                    }
                     role="row"
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <div
-                        key={cell.id}
-                        className="flex items-center overflow-hidden px-3"
-                        style={{
-                          width: `${cell.column.getSize()}px`,
-                          justifyContent: alignForColumn(cell.column.id),
-                        }}
-                        role="cell"
-                      >
-                        <div className="min-w-0 flex-1 truncate">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    {isMobile ? (
+                      <StationCard
+                        row={row.original}
+                        fuelTypes={fuelTypes}
+                        sortMode={sortMode}
+                        onToggleFavorite={onToggleFavorite}
+                        isFavorite={
+                          favoriteSet?.has(row.original.station.permitNumber) ?? false
+                        }
+                        distanceKm={distanceByPermit?.get(
+                          row.original.station.permitNumber,
+                        )}
+                      />
+                    ) : (
+                      row.getVisibleCells().map((cell) => (
+                        <div
+                          key={cell.id}
+                          className="flex items-center overflow-hidden px-3"
+                          style={{
+                            width: `${cell.column.getSize()}px`,
+                            justifyContent: alignForColumn(cell.column.id),
+                          }}
+                          role="cell"
+                        >
+                          <div className="min-w-0 flex-1 truncate">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 )
               })}
