@@ -44,6 +44,11 @@ const MAX_STATION_SCAN = 4000
 // nearest stations fall inside this latitude-centered window.
 const DISTANCE_SCAN_CAP = 4000
 
+// The home "Top 10" only needs stations inside the selected radius. Use a
+// latitude range scan instead of the broader nearest-latitude sample used by
+// paginated national distance sorting.
+const NEARBY_SCAN_CAP = 2000
+
 // N+1 price lookups, throttled to this many in flight at a time. Convex
 // queries have a per-call parallel-read ceiling (self-hosted is more
 // aggressive than cloud), so 800 simultaneous indexed reads get killed with
@@ -368,6 +373,51 @@ async function loadNearestByLatitude(
   return [...north, ...south]
 }
 
+async function loadStationsWithinRadius(
+  ctx: QueryCtx,
+  userLocation: { latitude: number; longitude: number },
+  maxDistanceKm: number,
+): Promise<Array<{ station: Doc<'stations'>; distanceKm: number }>> {
+  const latDelta = maxDistanceKm / 111.32
+  const cosLat = Math.cos(toRad(userLocation.latitude))
+  const lonDelta =
+    maxDistanceKm / (111.32 * Math.max(Math.abs(cosLat), 0.01))
+  const minLat = userLocation.latitude - latDelta
+  const maxLat = userLocation.latitude + latDelta
+  const minLon = userLocation.longitude - lonDelta
+  const maxLon = userLocation.longitude + lonDelta
+
+  const candidates = await collectUpTo(
+    ctx.db
+      .query('stations')
+      .withIndex('by_lat', (q) =>
+        q.gte('latitude', minLat).lte('latitude', maxLat),
+      ),
+    NEARBY_SCAN_CAP,
+  )
+
+  return candidates
+    .flatMap((station) => {
+      const lat = station.latitude
+      const lon = station.longitude
+      if (
+        typeof lat !== 'number' ||
+        typeof lon !== 'number' ||
+        lon < minLon ||
+        lon > maxLon
+      ) {
+        return []
+      }
+      const distanceKm = haversineKm(
+        userLocation.latitude,
+        userLocation.longitude,
+        lat,
+        lon,
+      )
+      return distanceKm <= maxDistanceKm ? [{ station, distanceKm }] : []
+    })
+}
+
 async function listStationsByDistance(
   ctx: QueryCtx,
   params: {
@@ -439,10 +489,10 @@ export const bestNearbyStations = query({
   handler: async (ctx, args) => {
     const limit = Math.min(Math.max(args.limit ?? 10, 1), 20)
     const maxDistanceKm = Math.min(Math.max(args.maxDistanceKm ?? 15, 1), 100)
-    const candidates = await loadNearestByLatitude(
+    const candidates = await loadStationsWithinRadius(
       ctx,
-      args.userLocation.latitude,
-      DISTANCE_SCAN_CAP,
+      args.userLocation,
+      maxDistanceKm,
     )
 
     const rows: Array<{
@@ -455,7 +505,7 @@ export const bestNearbyStations = query({
     for (let i = 0; i < candidates.length; i += PRICE_LOOKUP_CHUNK) {
       const batch = candidates.slice(i, i + PRICE_LOOKUP_CHUNK)
       const prices = await Promise.all(
-        batch.map((station) =>
+        batch.map(({ station }) =>
           ctx.db
             .query('fuelPricesCurrent')
             .withIndex('by_station_fuel', (q) =>
@@ -468,33 +518,21 @@ export const bestNearbyStations = query({
       )
 
       for (let j = 0; j < batch.length; j++) {
-        const station = batch[j]
+        const { station, distanceKm } = batch[j]
         const price = prices[j]
-        const lat = station.latitude
-        const lon = station.longitude
-        if (
-          !price ||
-          typeof lat !== 'number' ||
-          typeof lon !== 'number'
-        ) {
+        if (!price) {
           continue
         }
         rows.push({
           station,
           price: price.price,
           reportedAt: price.reportedAt,
-          distanceKm: haversineKm(
-            args.userLocation.latitude,
-            args.userLocation.longitude,
-            lat,
-            lon,
-          ),
+          distanceKm,
         })
       }
     }
 
     return rows
-      .filter((row) => row.distanceKm <= maxDistanceKm)
       .sort(
         (a, b) =>
           a.price - b.price ||
