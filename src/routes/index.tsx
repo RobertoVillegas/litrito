@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { useFavorites } from '#/lib/useFavorites'
-import { logger, errorFields } from '#/lib/logger'
+import { RouteErrorFallback } from '../components/RouteError'
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
 import type { MapBounds } from '../components/StationMap'
@@ -66,8 +66,8 @@ export const Route = createFileRoute('/')({
 
 // Without this, a thrown Convex query error bubbles to the root with no
 // boundary, blanking the page and (because the query re-throws on every
-// re-render) looping. Here we log the screen + what was being filtered so the
-// failure is debuggable, and show a recoverable fallback instead of a crash.
+// re-render) looping. We log the screen + active filters and show a recoverable
+// fallback instead of a crash.
 function HomeErrorBoundary({
   error,
   reset,
@@ -76,32 +76,13 @@ function HomeErrorBoundary({
   reset: () => void
 }) {
   const search = Route.useSearch()
-  useEffect(() => {
-    logger.error('home route render failed', {
-      screen: 'home',
-      route: '/',
-      filters: search,
-      ...errorFields(error),
-    })
-  }, [error, search])
-
   return (
-    <main className="mx-auto flex min-h-[60vh] w-full max-w-6xl flex-col items-center justify-center gap-4 px-4 text-center">
-      <h2 className="font-display text-3xl text-ink">
-        No pudimos cargar el listado
-      </h2>
-      <p className="max-w-md text-sm text-body">
-        Algo falló al consultar las estaciones. Puedes reintentar; si el
-        problema persiste, intenta quitar algún filtro.
-      </p>
-      <button
-        type="button"
-        onClick={reset}
-        className="inline-flex h-10 items-center gap-2 rounded-full bg-ink px-5 text-sm font-bold text-white hover:bg-ink/90"
-      >
-        Reintentar
-      </button>
-    </main>
+    <RouteErrorFallback
+      error={error}
+      reset={reset}
+      screen="home"
+      context={{ route: '/', filters: search }}
+    />
   )
 }
 

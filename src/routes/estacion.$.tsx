@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { ArrowLeft, MapPin, Navigation, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { useFavorites } from '#/lib/useFavorites'
+import { RouteErrorFallback } from '../components/RouteError'
 
 const StationMiniMap = lazy(() =>
   import('../components/StationMiniMap').then((m) => ({ default: m.StationMiniMap })),
@@ -19,6 +20,17 @@ function ClientOnly({ children }: { children: ReactNode }) {
 
 export const Route = createFileRoute('/estacion/$')({
   component: StationDetail,
+  errorComponent: ({ error, reset }) => {
+    const { _splat } = Route.useParams()
+    return (
+      <RouteErrorFallback
+        error={error}
+        reset={reset}
+        screen="station-detail"
+        context={{ route: '/estacion/$', permitNumber: _splat }}
+      />
+    )
+  },
 })
 
 type FuelType = 'regular' | 'premium' | 'diesel' | 'duba' | 'unknown'

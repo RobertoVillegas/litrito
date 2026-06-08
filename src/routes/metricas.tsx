@@ -13,8 +13,19 @@ import {
   YAxis,
 } from 'recharts'
 import { api } from '../../convex/_generated/api'
+import { RouteErrorFallback } from '../components/RouteError'
 
-export const Route = createFileRoute('/metricas')({ component: Metrics })
+export const Route = createFileRoute('/metricas')({
+  component: Metrics,
+  errorComponent: ({ error, reset }) => (
+    <RouteErrorFallback
+      error={error}
+      reset={reset}
+      screen="metrics"
+      context={{ route: '/metricas' }}
+    />
+  ),
+})
 
 const FUELS = ['regular', 'premium', 'diesel', 'duba'] as const
 const FUEL_META: Record<string, { label: string; color: string }> = {

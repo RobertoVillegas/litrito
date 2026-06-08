@@ -6,7 +6,7 @@ import {
   internalQuery,
   query,
 } from './_generated/server'
-import type { QueryCtx, MutationCtx } from './_generated/server'
+import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
 
@@ -812,72 +812,25 @@ type FilterOptionsPayload = {
 
 const FILTER_OPTIONS_CACHE_KEY = 'default'
 
-// Scans the full catalog to build the state/municipality filter lists with
-// station counts. Used both by the live query (fallback) and the cache builder.
-async function computeFilterOptions(
-  ctx: QueryCtx | MutationCtx,
-): Promise<FilterOptionsPayload> {
-  const states = await ctx.db.query('states').collect()
-  const stations = await ctx.db.query('stations').collect()
-
-  // Walk municipalities one state at a time. A single
-  // `db.query('municipalities').collect()` would read all ~2,500 rows in one
-  // shot, which trips the self-hosted backend's per-mutation system-op cap
-  // when combined with the parallel stations collect.
-  const municipalities: Doc<'municipalities'>[] = []
-  for (const state of states) {
-    const chunk = await ctx.db
-      .query('municipalities')
-      .withIndex('by_state', (q) => q.eq('stateExternalId', state.externalId))
-      .collect()
-    for (const m of chunk) municipalities.push(m)
-  }
-
-  const stationsByState = new Map<string, number>()
-  const stationsByMuni = new Map<string, number>()
-  for (const s of stations) {
-    stationsByState.set(
-      s.stateExternalId,
-      (stationsByState.get(s.stateExternalId) ?? 0) + 1,
-    )
-    const muniKey = `${s.stateExternalId}|${s.municipalityExternalId}`
-    stationsByMuni.set(muniKey, (stationsByMuni.get(muniKey) ?? 0) + 1)
-  }
-
-  return {
-    states: states
-      .map((s) => ({
-        externalId: s.externalId,
-        name: s.name,
-        count: stationsByState.get(s.externalId) ?? 0,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    municipalities: municipalities
-      .map((m) => ({
-        externalId: m.externalId,
-        stateExternalId: m.stateExternalId,
-        name: m.name,
-        count: stationsByMuni.get(`${m.stateExternalId}|${m.externalId}`) ?? 0,
-      }))
-      .filter((m) => m.count > 0)
-      .sort((a, b) => a.name.localeCompare(b.name)),
-  }
+const EMPTY_FILTER_OPTIONS: FilterOptionsPayload = {
+  states: [],
+  municipalities: [],
 }
 
 export const listFilterOptions = query({
   args: {},
   handler: async (ctx): Promise<FilterOptionsPayload> => {
-    // Serve the precomputed snapshot when present; scanning the whole catalog
-    // on every page load is what burns read I/O. Fall back to a live compute
-    // until the cache has been built at least once.
+    // Serve the precomputed snapshot. Building it live would require scanning
+    // the whole catalog (~13.7k stations) in one transaction, which trips the
+    // self-hosted op budget — that is why we never compute it inline. The
+    // snapshot is kept fresh by `rebuildFilterOptionsCache` (cron + manual), so
+    // an empty result only happens on a cold deployment before the first build.
     const cached = await ctx.db
       .query('filterOptionsCache')
       .withIndex('by_key', (q) => q.eq('key', FILTER_OPTIONS_CACHE_KEY))
       .unique()
-    if (cached) {
-      return JSON.parse(cached.data) as FilterOptionsPayload
-    }
-    return await computeFilterOptions(ctx)
+    if (!cached) return EMPTY_FILTER_OPTIONS
+    return JSON.parse(cached.data) as FilterOptionsPayload
   },
 })
 

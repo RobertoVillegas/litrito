@@ -11,6 +11,13 @@ const FUELS = ['regular', 'premium', 'diesel', 'duba'] as const
 
 const METRICS_CACHE_KEY = 'default'
 
+// CNE's feed occasionally reports junk prices (e.g. $3.34 or $14.53 per liter).
+// No real Mexican fuel price falls outside this band — IEPS + taxes alone keep
+// it well above $15 — so out-of-band values are excluded from the aggregation.
+// The raw rows stay in fuelPricesCurrent; this only guards what feeds metrics.
+const MIN_PLAUSIBLE_PRICE = 15
+const MAX_PLAUSIBLE_PRICE = 50
+
 type Extreme = {
   price: number
   name: string
@@ -93,6 +100,7 @@ export const metricsForState = internalQuery({
 
     for (const p of prices) {
       if (!(p.fuelType in perFuel)) continue
+      if (p.price < MIN_PLAUSIBLE_PRICE || p.price > MAX_PLAUSIBLE_PRICE) continue
       pricedStations.add(p.stationPermitNumber)
       const slot = perFuel[p.fuelType]
       const st = stationByPermit.get(p.stationPermitNumber)
