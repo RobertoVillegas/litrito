@@ -15,7 +15,9 @@
 
 services:
   backend:
-    image: ghcr.io/get-convex/convex-backend:latest
+    # Pinned by digest (= :latest as of 2026-06-07) for reproducible pulls and to
+    # avoid flaky :latest resolution. Update both images together when upgrading.
+    image: ghcr.io/get-convex/convex-backend@sha256:edd7959f3464ed661f6663f646db205d5d61bda606c969b074dfb3c69ed71463
     stop_grace_period: 10s
     stop_signal: SIGINT
     expose:
@@ -43,7 +45,7 @@ services:
       retries: 5
 
   dashboard:
-    image: ghcr.io/get-convex/convex-dashboard:latest
+    image: ghcr.io/get-convex/convex-dashboard@sha256:bbc4d2c43d19fd6f2791dd6c5153a76e127f3eea489c1639e5acf66999c216bf
     stop_grace_period: 10s
     stop_signal: SIGINT
     expose:
