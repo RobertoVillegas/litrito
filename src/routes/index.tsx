@@ -429,7 +429,7 @@ function Home() {
               />
               <Metric
                 icon={<RefreshCw className="h-5 w-5" />}
-                label="Actualizacion"
+                label="Actualización"
                 value={formatDate(updatedAt)}
               />
               <Metric
@@ -508,7 +508,7 @@ function Home() {
             <h3 className="font-display text-lg text-ink">Mapa</h3>
             <p className="mt-1 text-xs font-semibold text-body">
               {boundsResult
-                ? `${boundsResult.stations.length} estaciones visibles${boundsResult.truncated ? ' (acercate para mas)' : ''}`
+                ? `${boundsResult.stations.length} estaciones visibles${boundsResult.truncated ? ' (acércate para más)' : ''}`
                 : 'Cargando marcadores…'}
             </p>
           </div>

@@ -85,7 +85,7 @@ function Profile() {
               className="btn-pill border border-white/40 text-white hover:bg-white/10"
             >
               <LogOut className="h-4 w-4" />
-              Cerrar sesion
+              Cerrar sesión
             </button>
           ) : (
             <Link to="/entrar" className="btn-pill btn-pill--primary">
