@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { Popover } from '@base-ui/react/popover'
 import { useQuery } from 'convex/react'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -286,21 +287,25 @@ function ViewButton({
 
 function InfoTooltip({ text }: { text: string }) {
   return (
-    <span className="group relative inline-flex">
-      <button
-        type="button"
+    <Popover.Root>
+      <Popover.Trigger
         aria-label="Por qué hay dos vistas"
-        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:text-white"
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:text-white data-popup-open:border-white/40 data-popup-open:text-white"
       >
         <Info className="h-3.5 w-3.5" />
-      </button>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-72 -translate-x-1/2 rounded-lg border border-line bg-white p-3 text-left text-xs font-medium leading-5 text-ink opacity-0 shadow-[0_12px_40px_rgba(37,40,43,0.16)] transition group-hover:opacity-100 group-focus-within:opacity-100"
-      >
-        {text}
-      </span>
-    </span>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner
+          sideOffset={8}
+          className="z-[1400] max-w-[calc(100vw-2rem)]"
+        >
+          <Popover.Popup className="relative w-[min(18rem,calc(100vw-2rem))] origin-[var(--transform-origin)] rounded-lg border border-line bg-white p-3 text-left text-xs font-medium leading-5 text-ink shadow-[0_12px_40px_rgba(37,40,43,0.16)] outline-none transition-[opacity,transform] duration-150 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0">
+            <Popover.Arrow className="relative block h-2 w-3 overflow-clip data-[side=bottom]:top-[-7px] data-[side=left]:right-[-10px] data-[side=left]:rotate-90 data-[side=right]:left-[-10px] data-[side=right]:-rotate-90 data-[side=top]:bottom-[-7px] data-[side=top]:rotate-180 before:absolute before:bottom-0 before:left-1/2 before:h-2 before:w-2 before:-translate-x-1/2 before:translate-y-1/2 before:rotate-45 before:border before:border-line before:bg-white before:content-['']" />
+            <Popover.Description>{text}</Popover.Description>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }
 

@@ -50,7 +50,9 @@ const render = async () => {
         flexDirection: "column",
         fontFamily: `"${FONT_FAMILY}", sans-serif`,
         height: "100%",
-        padding: "72px",
+        justifyContent: "center",
+        padding: "56px",
+        position: "relative",
         width: "100%",
       },
       children: [
@@ -58,14 +60,47 @@ const render = async () => {
           type: "div",
           props: {
             style: {
+              background: "#e60000",
+              display: "flex",
+              height: "100%",
+              left: "0",
+              position: "absolute",
+              top: "0",
+              width: "18px",
+            },
+          },
+        },
+        {
+          type: "div",
+          props: {
+            style: {
+              background: "#25282b",
+              display: "flex",
+              height: "100%",
+              position: "absolute",
+              right: "0",
+              top: "0",
+              width: "18px",
+            },
+          },
+        },
+        {
+          type: "div",
+          props: {
+            style: {
               alignItems: "center",
               color: "#e60000",
               display: "flex",
-              fontSize: "32px",
+              fontSize: "30px",
               fontWeight: 700,
               gap: "16px",
+              justifyContent: "center",
               letterSpacing: "0.04em",
+              marginLeft: "auto",
+              marginRight: "auto",
+              maxWidth: "610px",
               textTransform: "uppercase",
+              width: "610px",
             },
             children: [
               {
@@ -170,13 +205,16 @@ const render = async () => {
           type: "div",
           props: {
             style: {
+              alignItems: "center",
               display: "flex",
               flexDirection: "column",
-              flexGrow: 1,
               justifyContent: "center",
-              maxWidth: "980px",
-              paddingTop: "48px",
-              paddingBottom: "48px",
+              marginLeft: "auto",
+              marginRight: "auto",
+              maxWidth: "610px",
+              paddingTop: "42px",
+              textAlign: "center",
+              width: "610px",
             },
             children: [
               {
@@ -184,10 +222,10 @@ const render = async () => {
                 props: {
                   style: {
                     display: "flex",
-                    fontSize: "104px",
+                    fontSize: "76px",
                     fontWeight: 700,
-                    letterSpacing: "-0.04em",
-                    lineHeight: 1.02,
+                    letterSpacing: "-0.03em",
+                    lineHeight: 1,
                   },
                   children: "Precios de gasolina en México.",
                 },
@@ -198,11 +236,11 @@ const render = async () => {
                   style: {
                     color: "#3a3e42",
                     display: "flex",
-                    fontSize: "36px",
+                    fontSize: "27px",
                     fontWeight: 700,
-                    lineHeight: 1.3,
-                    marginTop: "32px",
-                    maxWidth: "900px",
+                    lineHeight: 1.25,
+                    marginTop: "28px",
+                    maxWidth: "590px",
                   },
                   children:
                     "Compara precios por estación, municipio y estado. Regular, premium, diésel y duba, actualizados a diario.",

@@ -53,7 +53,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         : `https://${appDomain}`
       : ''
     const ogImage = appOrigin ? `${appOrigin}/og-image.png` : '/og-image.png'
-    return { umamiWebsiteId, umamiSrc, ogImage }
+    return { umamiWebsiteId, umamiSrc, appOrigin, ogImage }
   },
   head: ({ loaderData }) => ({
     scripts: loaderData?.umamiWebsiteId
@@ -103,6 +103,10 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         content: loaderData?.ogImage ?? '/og-image.png',
       },
       {
+        property: 'og:image:type',
+        content: 'image/png',
+      },
+      {
         property: 'og:image:width',
         content: '1200',
       },
@@ -118,6 +122,14 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         property: 'og:locale',
         content: 'es_MX',
       },
+      ...(loaderData?.appOrigin
+        ? [
+            {
+              property: 'og:url',
+              content: loaderData.appOrigin,
+            },
+          ]
+        : []),
       {
         name: 'twitter:card',
         content: 'summary_large_image',

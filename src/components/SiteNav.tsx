@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import Avatar from 'boring-avatars'
-import { ChevronDown, Fuel, LogOut, MapPin, User } from 'lucide-react'
+import { ChevronDown, Fuel, LogOut, MapPin, Menu, User, X } from 'lucide-react'
 import { authClient } from '#/lib/auth-client'
 import { useUserLocation } from '#/lib/useUserLocation'
 
 const AVATAR_COLORS = ['#e60000', '#25282b', '#7e7e7e', '#bebebe', '#ffffff']
 
 export function SiteNav() {
+  const [mobileOpen, setMobileOpen] = useState(false)
+
   return (
     <header className="sticky top-0 z-[1100] border-b border-white/10 bg-ink text-on-dark">
-      <nav className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+      <nav className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2.5 text-white hover:text-white">
           <span className="flex h-9 w-9 items-center justify-center rounded-[6px] bg-brand">
             <Fuel className="h-5 w-5 text-white" />
@@ -25,9 +27,30 @@ export function SiteNav() {
 
         <div className="ml-auto flex items-center gap-2">
           <LocationPill />
+          <button
+            type="button"
+            aria-label={mobileOpen ? 'Cerrar navegación' : 'Abrir navegación'}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((value) => !value)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-white/80 transition hover:border-white/50 hover:text-white sm:hidden"
+          >
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
           <AccountMenu />
         </div>
       </nav>
+      {mobileOpen && (
+        <div className="border-t border-white/10 bg-ink px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.22)] sm:hidden">
+          <div className="mx-auto grid w-full max-w-6xl gap-2">
+            <MobileNavLink to="/" label="Inicio" onNavigate={() => setMobileOpen(false)} />
+            <MobileNavLink
+              to="/metricas"
+              label="Métricas"
+              onNavigate={() => setMobileOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </header>
   )
 }
@@ -38,6 +61,28 @@ function NavLink({ to, label }: { to: string; label: string }) {
       to={to}
       className="rounded-full px-3 py-1.5 text-sm font-bold text-white/60 transition hover:text-white"
       activeProps={{ className: 'rounded-full px-3 py-1.5 text-sm font-bold text-white' }}
+      activeOptions={{ exact: to === '/' }}
+    >
+      {label}
+    </Link>
+  )
+}
+
+function MobileNavLink({
+  to,
+  label,
+  onNavigate,
+}: {
+  to: string
+  label: string
+  onNavigate: () => void
+}) {
+  return (
+    <Link
+      to={to}
+      onClick={onNavigate}
+      className="rounded-[6px] px-3 py-2.5 text-sm font-bold text-white/70 transition hover:bg-white/[0.06] hover:text-white"
+      activeProps={{ className: 'rounded-[6px] bg-white/[0.08] px-3 py-2.5 text-sm font-bold text-white' }}
       activeOptions={{ exact: to === '/' }}
     >
       {label}
