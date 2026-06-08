@@ -429,6 +429,82 @@ async function listStationsByDistance(
   return { ...page, page: rows }
 }
 
+export const bestNearbyStations = query({
+  args: {
+    fuelType,
+    userLocation: v.object({ latitude: v.number(), longitude: v.number() }),
+    limit: v.optional(v.number()),
+    maxDistanceKm: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 10, 1), 20)
+    const maxDistanceKm = Math.min(Math.max(args.maxDistanceKm ?? 15, 1), 100)
+    const candidates = await loadNearestByLatitude(
+      ctx,
+      args.userLocation.latitude,
+      DISTANCE_SCAN_CAP,
+    )
+
+    const rows: Array<{
+      station: Doc<'stations'>
+      price: number
+      distanceKm: number
+      reportedAt?: string
+    }> = []
+
+    for (let i = 0; i < candidates.length; i += PRICE_LOOKUP_CHUNK) {
+      const batch = candidates.slice(i, i + PRICE_LOOKUP_CHUNK)
+      const prices = await Promise.all(
+        batch.map((station) =>
+          ctx.db
+            .query('fuelPricesCurrent')
+            .withIndex('by_station_fuel', (q) =>
+              q
+                .eq('stationPermitNumber', station.permitNumber)
+                .eq('fuelType', args.fuelType),
+            )
+            .unique(),
+        ),
+      )
+
+      for (let j = 0; j < batch.length; j++) {
+        const station = batch[j]
+        const price = prices[j]
+        const lat = station.latitude
+        const lon = station.longitude
+        if (
+          !price ||
+          typeof lat !== 'number' ||
+          typeof lon !== 'number'
+        ) {
+          continue
+        }
+        rows.push({
+          station,
+          price: price.price,
+          reportedAt: price.reportedAt,
+          distanceKm: haversineKm(
+            args.userLocation.latitude,
+            args.userLocation.longitude,
+            lat,
+            lon,
+          ),
+        })
+      }
+    }
+
+    return rows
+      .filter((row) => row.distanceKm <= maxDistanceKm)
+      .sort(
+        (a, b) =>
+          a.price - b.price ||
+          a.distanceKm - b.distanceKm ||
+          a.station.name.localeCompare(b.station.name),
+      )
+      .slice(0, limit)
+  },
+})
+
 export const listStations = query({
   args: {
     fuelTypes: v.optional(v.array(fuelType)),

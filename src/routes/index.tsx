@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { usePaginatedQuery, useQuery as useConvexQuery } from 'convex/react'
-import { BadgeCent, DatabaseZap, Fuel, RefreshCw, Star } from 'lucide-react'
+import { BadgeCent, DatabaseZap, Fuel, LocateFixed, MapPin, RefreshCw, Star } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
@@ -15,6 +15,7 @@ import type { MapBounds } from '../components/StationMap'
 
 const FUEL_VALUES = ['regular', 'premium', 'diesel', 'duba'] as const
 const SORT_VALUES = ['price', 'distance', 'name'] as const
+const NEARBY_RADIUS_OPTIONS = [5, 10, 15, 25, 50] as const
 
 type HomeSearch = {
   fuels?: string
@@ -134,6 +135,13 @@ type FilterOptionsResult = {
   municipalities: (FilterOption & { stateExternalId: string })[]
 }
 
+type NearbyBestRow = {
+  station: StationFromQuery['station']
+  price: number
+  distanceKm: number
+  reportedAt?: string
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-MX', {
     style: 'currency',
@@ -153,6 +161,12 @@ function formatDate(value: string | undefined): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
+}
+
+function formatDistance(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`
+  if (km < 10) return `${km.toFixed(1)} km`
+  return `${Math.round(km)} km`
 }
 
 const toRad = (d: number) => (d * Math.PI) / 180
@@ -296,6 +310,7 @@ function Home() {
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [notice, setNotice] = useState('')
+  const [nearbyRadiusKm, setNearbyRadiusKm] = useState<(typeof NEARBY_RADIUS_OPTIONS)[number]>(15)
   const userLoc = useUserLocation()
   const { favoriteSet, toggleFavorite } = useFavorites()
 
@@ -373,6 +388,20 @@ function Home() {
     | undefined
 
   const latestRun = loaderData.latestRun
+  const nearbyBest = useConvexQuery(
+    api.stations.bestNearbyStations,
+    userLoc.location
+      ? {
+          fuelType: filters.primaryFuel,
+          userLocation: {
+            latitude: userLoc.location.latitude,
+            longitude: userLoc.location.longitude,
+          },
+          limit: 10,
+          maxDistanceKm: nearbyRadiusKm,
+        }
+      : 'skip',
+  ) as NearbyBestRow[] | undefined
 
   const displayDistanceForStation = (
     row: StationFromQuery,
@@ -521,6 +550,30 @@ function Home() {
           onChange={setFilters}
           hasPreciseLocation={userLoc.hasPreciseLocation}
           onRequestPreciseLocation={userLoc.requestPrecise}
+        />
+
+        <NearbyBestPanel
+          fuelType={filters.primaryFuel}
+          rows={nearbyBest}
+          radiusKm={nearbyRadiusKm}
+          hasLocation={Boolean(userLoc.location)}
+          hasPreciseLocation={userLoc.hasPreciseLocation}
+          onRadiusChange={setNearbyRadiusKm}
+          onRequestLocation={() => {
+            track('nearby_best_location_request', {
+              fuel: filters.primaryFuel,
+            })
+            userLoc.requestPrecise()
+            setFilters((prev) => ({ ...prev, sortMode: 'distance' }))
+          }}
+          onFuelChange={(fuelType) => {
+            track('nearby_best_fuel', { fuel: fuelType })
+            setFilters((prev) => ({
+              ...prev,
+              primaryFuel: fuelType,
+              fuelTypes: [fuelType, ...prev.fuelTypes.filter((ft) => ft !== fuelType)],
+            }))
+          }}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -693,6 +746,146 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
       <div className="mt-1 text-base font-bold text-white">{value}</div>
     </div>
   )
+}
+
+function NearbyBestPanel({
+  fuelType,
+  rows,
+  radiusKm,
+  hasLocation,
+  hasPreciseLocation,
+  onRadiusChange,
+  onRequestLocation,
+  onFuelChange,
+}: {
+  fuelType: FuelType
+  rows: NearbyBestRow[] | undefined
+  radiusKm: (typeof NEARBY_RADIUS_OPTIONS)[number]
+  hasLocation: boolean
+  hasPreciseLocation: boolean
+  onRadiusChange: (radiusKm: (typeof NEARBY_RADIUS_OPTIONS)[number]) => void
+  onRequestLocation: () => void
+  onFuelChange: (fuelType: FuelType) => void
+}) {
+  return (
+    <section className="island-shell rounded-lg p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="font-display text-xl text-ink">Mejores cerca de ti</h2>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-body">
+            Elige combustible y radio para ver las estaciones cercanas con mejor
+            precio.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {FUEL_VALUES.map((fuel) => (
+            <button
+              key={fuel}
+              type="button"
+              onClick={() => onFuelChange(fuel)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                fuelType === fuel
+                  ? 'border-ink bg-ink text-white'
+                  : 'border-line bg-white text-body hover:border-ink hover:text-ink'
+              }`}
+            >
+              {fuelLabel(fuel)}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={onRequestLocation}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+              hasPreciseLocation
+                ? 'border-brand bg-[#fff0f0] text-brand'
+                : 'border-brand bg-brand text-white hover:bg-brand-dark'
+            }`}
+          >
+            <LocateFixed className="h-3.5 w-3.5" />
+            {hasPreciseLocation ? 'Ubicación activa' : 'Usar mi ubicación'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-black uppercase tracking-widest text-body">
+          Radio
+        </span>
+        {NEARBY_RADIUS_OPTIONS.map((radius) => (
+          <button
+            key={radius}
+            type="button"
+            onClick={() => onRadiusChange(radius)}
+            className={`rounded-full border px-2.5 py-1 text-xs font-bold transition ${
+              radiusKm === radius
+                ? 'border-brand bg-[#fff0f0] text-brand'
+                : 'border-line bg-white text-body hover:border-ink hover:text-ink'
+            }`}
+          >
+            {radius} km
+          </button>
+        ))}
+      </div>
+
+      {!hasLocation ? (
+        <div className="mt-4 rounded-[6px] border border-dashed border-line bg-canvas-soft px-4 py-5 text-sm font-semibold text-body">
+          Dame tu ubicación para calcular precio y distancia.
+        </div>
+      ) : rows === undefined ? (
+        <div className="mt-4 rounded-[6px] border border-line bg-canvas-soft px-4 py-5 text-sm font-semibold text-body">
+          Buscando mejores precios cerca de ti…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="mt-4 rounded-[6px] border border-line bg-canvas-soft px-4 py-5 text-sm font-semibold text-body">
+          No encontré precios de {fuelLabel(fuelType)} en {radiusKm} km. Amplía
+          el radio para buscar más lejos.
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          {rows.map((row, index) => (
+            <Link
+              key={row.station.permitNumber}
+              to="/estacion/$"
+              params={{ _splat: row.station.permitNumber }}
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-[6px] border border-line bg-white p-3 transition hover:border-ink"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-canvas-soft text-xs font-black text-body">
+                {index + 1}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-black text-ink">
+                  {row.station.name}
+                </span>
+                <span className="mt-0.5 flex items-center gap-1 truncate text-[11px] font-semibold text-body">
+                  <MapPin className="h-3 w-3 shrink-0 text-mute" />
+                  {[row.station.municipalityName, row.station.stateName]
+                    .filter(Boolean)
+                    .join(', ')}
+                  <span className="text-mute">·</span>
+                  {formatDistance(row.distanceKm)}
+                </span>
+              </span>
+              <span className="text-right">
+                <span className="block text-base font-black text-brand">
+                  {formatCurrency(row.price)}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-mute">
+                  {fuelLabel(fuelType)}
+                </span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function fuelLabel(fuel: FuelType): string {
+  if (fuel === 'regular') return 'Regular'
+  if (fuel === 'premium') return 'Premium'
+  if (fuel === 'diesel') return 'Diésel'
+  return 'DUBA'
 }
 
 function HeroFact({ label, value }: { label: string; value: string }) {

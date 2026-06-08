@@ -2,10 +2,11 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowLeft, MapPin, Navigation, Star } from 'lucide-react'
+import { ArrowLeft, Check, MapPin, Navigation, Share2, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { useFavorites } from '#/lib/useFavorites'
 import { RouteErrorFallback } from '../components/RouteError'
+import { track } from '#/lib/analytics'
 
 const StationMiniMap = lazy(() =>
   import('../components/StationMiniMap').then((m) => ({ default: m.StationMiniMap })),
@@ -19,6 +20,44 @@ function ClientOnly({ children }: { children: ReactNode }) {
 }
 
 export const Route = createFileRoute('/estacion/$')({
+  loader: async ({ context, params }) => {
+    const permitNumber = params._splat ?? ''
+    return await context.queryClient.ensureQueryData(
+      context.convexQueryClient.queryOptions(api.stations.getStationDetail, {
+        permitNumber,
+      }),
+    )
+  },
+  head: ({ loaderData, params }) => {
+    const data = loaderData as StationDetailData | null | undefined
+    const station = data?.station
+    const currentPrices = data?.currentPrices ?? {}
+    const sharePrice = pickSharePrice(currentPrices)
+    const title = station
+      ? `${station.name} - Litrito`
+      : `Estación ${params._splat ?? ''} - Litrito`
+    const description = station
+      ? [
+          sharePrice
+            ? `${FUEL_META[sharePrice.fuelType].label} a ${formatCurrency(sharePrice.price)}`
+            : 'Precios de gasolina',
+          [station.municipalityName, station.stateName].filter(Boolean).join(', '),
+        ]
+          .filter(Boolean)
+          .join(' en ')
+      : 'Consulta precios de gasolina por estación en Litrito.'
+
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { property: 'og:title', content: title },
+        { property: 'og:description', content: description },
+        { name: 'twitter:title', content: title },
+        { name: 'twitter:description', content: description },
+      ],
+    }
+  },
   component: StationDetail,
   errorComponent: ({ error, reset }) => {
     const { _splat } = Route.useParams()
@@ -91,12 +130,15 @@ type StationDetailData = {
 function StationDetail() {
   const { _splat } = Route.useParams()
   const permitNumber = _splat ?? ''
+  const initialData = Route.useLoaderData() as StationDetailData | null | undefined
   const { isFavorite, toggleFavorite } = useFavorites()
   const [favMsg, setFavMsg] = useState('')
-  const data = useQuery(api.stations.getStationDetail, { permitNumber }) as
+  const [shareMsg, setShareMsg] = useState('')
+  const queriedData = useQuery(api.stations.getStationDetail, { permitNumber }) as
     | StationDetailData
     | null
     | undefined
+  const data = queriedData === undefined ? initialData : queriedData
 
   if (data === undefined) {
     return (
@@ -130,6 +172,7 @@ function StationDetail() {
   const directionsHref = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}`
     : undefined
+  const sharePrice = pickSharePrice(currentPrices)
 
   return (
     <main className="min-h-screen">
@@ -191,9 +234,27 @@ function StationDetail() {
               />
               {isFavorite(permitNumber) ? 'Favorita' : 'Guardar'}
             </button>
+            <button
+              type="button"
+              onClick={() =>
+                void shareStation({
+                  permitNumber,
+                  stationName: station.name,
+                  price: sharePrice,
+                  onDone: setShareMsg,
+                })
+              }
+              className="btn-pill border border-white/40 text-white hover:bg-white/10"
+            >
+              {shareMsg ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+              Compartir
+            </button>
           </div>
           {favMsg && (
             <p className="mt-2 text-xs font-semibold text-white/60">{favMsg}</p>
+          )}
+          {shareMsg && (
+            <p className="mt-2 text-xs font-semibold text-white/60">{shareMsg}</p>
           )}
         </div>
       </section>
@@ -260,6 +321,56 @@ function StationDetail() {
       </section>
     </main>
   )
+}
+
+function pickSharePrice(
+  prices: Record<string, { price: number; reportedAt?: string }>,
+) {
+  const entries = Object.entries(prices)
+    .filter((entry): entry is [FuelType, { price: number; reportedAt?: string }] =>
+      ['regular', 'premium', 'diesel', 'duba'].includes(entry[0]),
+    )
+    .sort((a, b) => a[1].price - b[1].price)
+  if (entries.length === 0) return null
+  const [fuelType, value] = entries[0]
+  return { fuelType, price: value.price }
+}
+
+async function shareStation({
+  permitNumber,
+  stationName,
+  price,
+  onDone,
+}: {
+  permitNumber: string
+  stationName: string
+  price: { fuelType: FuelType; price: number } | null
+  onDone: (message: string) => void
+}) {
+  const url =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/estacion/${encodeURIComponent(permitNumber)}`
+      : ''
+  const priceText = price
+    ? `${FUEL_META[price.fuelType].label} a ${formatCurrency(price.price)}`
+    : 'Precios de gasolina'
+  const title = `${stationName} en Litrito`
+  const text = `${priceText} en ${stationName}.`
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      await navigator.share({ title, text, url })
+      track('share_station', { method: 'native', permitNumber })
+      onDone('Compartido.')
+      return
+    }
+    await navigator.clipboard.writeText(`${text} ${url}`)
+    track('share_station', { method: 'clipboard', permitNumber })
+    onDone('Link copiado.')
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    onDone('No se pudo compartir.')
+  }
 }
 
 function BackLink({ onDark = false }: { onDark?: boolean }) {
