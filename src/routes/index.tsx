@@ -383,6 +383,7 @@ function Home() {
                   initialBounds={mapBounds}
                   onMoveEnd={setMapBounds}
                   onLocateClick={() => {
+                    userLoc.requestPrecise()
                     setFilters((prev) =>
                       prev.sortMode === 'distance'
                         ? prev

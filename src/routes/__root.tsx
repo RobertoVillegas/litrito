@@ -9,6 +9,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import ConvexProvider from '../integrations/convex/provider'
 import { PromoMarquee } from '../components/PromoMarquee'
 import { SiteNav } from '../components/SiteNav'
+import { UserLocationProvider } from '../lib/useUserLocation'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -56,9 +57,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <ConvexProvider>
-          <PromoMarquee />
-          <SiteNav />
-          {children}
+          <UserLocationProvider>
+            <PromoMarquee />
+            <SiteNav />
+            {children}
+          </UserLocationProvider>
           <TanStackDevtools
             config={{
               position: 'bottom-right',
