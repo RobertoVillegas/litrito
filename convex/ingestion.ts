@@ -30,7 +30,6 @@ const GEOCODE_BATCH_SIZE = 300
 const MUNICIPALITY_BATCH_SIZE = 800
 const MUNICIPALITY_REFRESH_STAGGER_MS = 750
 const MUNICIPALITY_BATCH_START_STAGGER_MS = 2_000
-const PLACES_PATCH_CHUNK = 500
 
 type CneState = {
   EntidadFederativaId: string | number
@@ -537,47 +536,44 @@ export const recordXmlSnapshot = internalMutation({
   },
 })
 
-export const listAllStationPermits = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const all = await ctx.db.query('stations').collect()
-    return all.map((s) => ({ permitNumber: s.permitNumber, _id: s._id }))
-  },
-})
+// Chunks for the places-vs-stations matching pass. Each mutation does one
+// indexed `by_permit` lookup per place, so the chunk size has to be small
+// enough to keep the mutation under its per-call op budget. Empirically the
+// self-hosted backend fails the mutation around a few hundred lookups.
+const PLACES_MATCH_CHUNK = 50
+const PLACES_BATCH_START_STAGGER_MS = 500
 
-export const patchStationsFromPlaces = internalMutation({
+export const matchPlacesBatch = internalMutation({
   args: {
-    matches: v.array(
+    places: v.array(
       v.object({
-        stationId: v.id('stations'),
         placeId: v.string(),
+        permitNumber: v.string(),
+        name: v.string(),
         latitude: v.number(),
         longitude: v.number(),
-        name: v.optional(v.string()),
       }),
     ),
   },
   handler: async (ctx, args) => {
-    for (const m of args.matches) {
-      const patch: {
-        placeId: string
-        latitude: number
-        longitude: number
-        name?: string
-      } = {
-        placeId: m.placeId,
-        latitude: m.latitude,
-        longitude: m.longitude,
-      }
-      if (m.name) {
-        const current = await ctx.db.get(m.stationId)
-        if (current && !current.name) {
-          patch.name = m.name
-        }
-      }
-      await ctx.db.patch(m.stationId, patch)
+    if (args.places.length === 0) return { matched: 0 }
+
+    let matched = 0
+    for (const place of args.places) {
+      const existing = await ctx.db
+        .query('stations')
+        .withIndex('by_permit', (q) => q.eq('permitNumber', place.permitNumber))
+        .unique()
+      if (!existing) continue
+      await ctx.db.patch(existing._id, {
+        placeId: place.placeId,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        name: existing.name || place.name,
+      })
+      matched += 1
     }
-    return { patched: args.matches.length }
+    return { matched }
   },
 })
 
@@ -588,6 +584,7 @@ export const recordPlacesRun = internalMutation({
     sample: v.string(),
     placeCount: v.number(),
     matched: v.number(),
+    message: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = new Date().toISOString()
@@ -600,9 +597,10 @@ export const recordPlacesRun = internalMutation({
       recordsRead: args.placeCount,
       recordsWritten: args.matched,
       message:
-        args.placeCount > 0
+        args.message ??
+        (args.placeCount > 0
           ? `Se validaron ${args.placeCount} ubicaciones, ${args.matched} estaciones georreferenciadas.`
-          : 'El XML de ubicaciones no contiene places validos.',
+          : 'El XML de ubicaciones no contiene places validos.'),
     })
 
     if (args.placeCount > 0) {
@@ -716,48 +714,20 @@ export const capturePlacesSnapshot = internalAction({
       const xml = await response.text()
       const allPlaces = parsePlaceRows(xml)
 
-      // Read all known station permits in a single query and build the join
-      // client-side. The previous version did one indexed by_permit lookup per
-      // place inside a mutation — with ~15k places that easily exceeded
-      // Convex's per-mutation op budget and the whole action timed out.
-      const stationRows = await ctx.runQuery(
-        internal.ingestion.listAllStationPermits,
-        {},
-      )
-      const stationIdByPermit = new Map(
-        stationRows.map((row) => [row.permitNumber, row._id]),
-      )
-
-      type PlaceMatch = {
-        stationId: (typeof stationRows)[number]['_id']
-        placeId: string
-        latitude: number
-        longitude: number
-        name?: string
-      }
-      const matches: PlaceMatch[] = []
-      for (const place of allPlaces) {
-        const stationId = stationIdByPermit.get(place.permitNumber)
-        if (!stationId) continue
-        matches.push({
-          stationId,
-          placeId: place.placeId,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          name: place.name || undefined,
-        })
-      }
-
-      // Patch in small batches so each mutation stays well under Convex's
-      // 16k-op budget, regardless of how many stations the catalog grows to.
-      let patched = 0
-      for (let i = 0; i < matches.length; i += PLACES_PATCH_CHUNK) {
-        const slice = matches.slice(i, i + PLACES_PATCH_CHUNK)
-        const result = await ctx.runMutation(
-          internal.ingestion.patchStationsFromPlaces,
-          { matches: slice },
+      // Fan out the matching: this action does the expensive fetch + regex
+      // parse on 3.17 MB of XML, then schedules one mutation per 1000 places.
+      // Each mutation does a single collect() of all stations and a join in
+      // memory — the previous approach (one indexed lookup per place inside a
+      // single mutation) blew the per-mutation op budget.
+      const batchCount = Math.max(1, Math.ceil(allPlaces.length / PLACES_MATCH_CHUNK))
+      for (let i = 0; i < allPlaces.length; i += PLACES_MATCH_CHUNK) {
+        const slice = allPlaces.slice(i, i + PLACES_MATCH_CHUNK)
+        const batchIndex = i / PLACES_MATCH_CHUNK
+        await ctx.scheduler.runAfter(
+          batchIndex * PLACES_BATCH_START_STAGGER_MS,
+          internal.ingestion.matchPlacesBatch,
+          { places: slice },
         )
-        patched += result.patched
       }
 
       const { runId } = await ctx.runMutation(internal.ingestion.recordPlacesRun, {
@@ -765,7 +735,8 @@ export const capturePlacesSnapshot = internalAction({
         contentLength: xml.length,
         sample: xml.slice(0, 1800),
         placeCount: allPlaces.length,
-        matched: patched,
+        matched: 0, // filled in async by the batch actions
+        message: `Snapshot XML validado. ${batchCount} lote(s) de matching encolados.`,
       })
 
       return { runId, places: allPlaces.length }

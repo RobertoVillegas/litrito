@@ -719,11 +719,21 @@ const FILTER_OPTIONS_CACHE_KEY = 'default'
 async function computeFilterOptions(
   ctx: QueryCtx | MutationCtx,
 ): Promise<FilterOptionsPayload> {
-  const [states, municipalities, stations] = await Promise.all([
-    ctx.db.query('states').collect(),
-    ctx.db.query('municipalities').collect(),
-    ctx.db.query('stations').collect(),
-  ])
+  const states = await ctx.db.query('states').collect()
+  const stations = await ctx.db.query('stations').collect()
+
+  // Walk municipalities one state at a time. A single
+  // `db.query('municipalities').collect()` would read all ~2,500 rows in one
+  // shot, which trips the self-hosted backend's per-mutation system-op cap
+  // when combined with the parallel stations collect.
+  const municipalities: Doc<'municipalities'>[] = []
+  for (const state of states) {
+    const chunk = await ctx.db
+      .query('municipalities')
+      .withIndex('by_state', (q) => q.eq('stateExternalId', state.externalId))
+      .collect()
+    for (const m of chunk) municipalities.push(m)
+  }
 
   const stationsByState = new Map<string, number>()
   const stationsByMuni = new Map<string, number>()
