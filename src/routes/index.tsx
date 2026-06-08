@@ -426,7 +426,31 @@ function Home() {
               Nacional de Energia. Pueden cambiar en estacion.
             </p>
           </div>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2 md:hidden">
+            <p className="eyebrow text-white/40">
+              Hecho en Mexico
+            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-bold uppercase tracking-widest">
+              <a
+                href="https://www.cne.gob.mx/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/55 underline decoration-white/20 underline-offset-2 hover:text-brand"
+              >
+                Fuente CNE
+              </a>
+              <span className="text-white/20">·</span>
+              <a
+                href="https://athas.mx"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/55 underline decoration-white/20 underline-offset-2 hover:text-brand"
+              >
+                Hecho por athas
+              </a>
+            </div>
+          </div>
+          <div className="hidden md:flex md:items-center md:justify-between">
             <p className="eyebrow text-white/40">
               Hecho en Mexico ·{' '}
               <a
@@ -444,7 +468,7 @@ function Home() {
               rel="noopener noreferrer"
               className="eyebrow text-white/40 hover:text-brand"
             >
-              Por athas
+              Hecho por athas
             </a>
           </div>
         </div>
