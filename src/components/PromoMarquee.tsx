@@ -1,19 +1,20 @@
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight } from "lucide-react";
 
-const MESSAGE = 'Litrito es parte de athas.mx — software mexicano que sí jala'
+const MESSAGE =
+  "Litrito es parte de athas.mx — construimos soluciones digitales a la medida";
 
 function Item() {
   return (
     <a
-      href="https://athas.mx"
+      href="https://athas.mx?ref=litrito"
       target="_blank"
       rel="noopener noreferrer"
-      className="promo-marquee__link mx-6 inline-flex shrink-0 items-center gap-1.5 py-1 text-sm font-bold uppercase tracking-wide"
+      className="promo-marquee__link mx-6 inline-flex shrink-0 items-center gap-1.5 py-2 text-sm font-bold uppercase tracking-wide"
     >
       {MESSAGE}
       <ArrowUpRight className="h-3.5 w-3.5" />
     </a>
-  )
+  );
 }
 
 export function PromoMarquee() {
@@ -35,7 +36,7 @@ export function PromoMarquee() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default PromoMarquee
+export default PromoMarquee;
