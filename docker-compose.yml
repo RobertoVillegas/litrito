@@ -68,6 +68,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - APP_DOMAIN=${APP_DOMAIN:-127.0.0.1:3000}
       # Also needed at runtime: auth-server.ts reads process.env.VITE_CONVEX_*
       # during SSR (Nitro doesn't inline process.env.VITE_* server-side).
       - VITE_CONVEX_URL=${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:3210}

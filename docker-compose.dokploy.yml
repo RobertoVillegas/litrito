@@ -70,6 +70,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - APP_DOMAIN=${APP_DOMAIN}
       # Needed at RUNTIME too (not just build args): auth-server.ts reads these
       # from process.env during SSR, and Nitro doesn't inline process.env.VITE_*
       # into the server bundle.
