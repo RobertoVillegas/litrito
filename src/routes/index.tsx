@@ -9,6 +9,8 @@ import { SiteFooter } from '../components/SiteFooter'
 import { DarkSkeleton, MapSkeleton, SkeletonLine } from '../components/Skeleton'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { track } from '#/lib/analytics'
+import { slugifyLocationName } from '#/lib/slug'
+import { getConfiguredSiteOrigin } from '../lib/site-url'
 import type { FuelType } from '../components/StationFilters'
 
 const StationMap = lazy(() =>
@@ -39,7 +41,21 @@ type NearbyBestRow = {
   reportedAt?: string
 }
 
+type FilterOptionsResult = {
+  states: { externalId: string; name: string; count: number }[]
+}
+
 export const Route = createFileRoute('/')({
+  loader: async ({ context }) => {
+    const filterOptions = await context.queryClient.ensureQueryData(
+      context.convexQueryClient.queryOptions(api.stations.listFilterOptions, {}),
+    )
+    return { filterOptions }
+  },
+  head: () => {
+    const origin = getConfiguredSiteOrigin()
+    return origin ? { links: [{ rel: 'canonical', href: origin }] } : {}
+  },
   component: Home,
   errorComponent: ({ error, reset }) => (
     <RouteErrorFallback
@@ -74,6 +90,7 @@ function formatDistance(km: number): string {
 }
 
 function Home() {
+  const loaderData = Route.useLoaderData()
   const userLoc = useUserLocation()
   const [fuelType, setFuelType] = useState<FuelType>('regular')
   const [radiusKm, setRadiusKm] = useState<(typeof RADIUS_OPTIONS)[number]>(15)
@@ -92,6 +109,12 @@ function Home() {
         }
       : 'skip',
   ) as NearbyBestRow[] | undefined
+  const filterOptions = useQuery(
+    api.stations.listFilterOptions,
+    {},
+  ) as FilterOptionsResult | undefined
+  const seoFilterOptions =
+    filterOptions ?? (loaderData.filterOptions as FilterOptionsResult | undefined)
 
   const rankedRows = useMemo(
     () =>
@@ -258,6 +281,30 @@ function Home() {
               />
             </Suspense>
           </ClientOnly>
+        </section>
+      )}
+
+      {seoFilterOptions?.states && seoFilterOptions.states.length > 0 && (
+        <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="mb-4">
+            <h2 className="font-display text-2xl text-ink">
+              Precios de gasolina por estado
+            </h2>
+            <p className="mt-1 text-sm font-semibold text-body">
+              Consulta promedios, rangos y estaciones por entidad federativa.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {seoFilterOptions.states.map((state) => (
+              <a
+                key={state.externalId}
+                href={`/estado/${slugifyLocationName(state.name)}`}
+                className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-ink transition hover:border-ink"
+              >
+                {state.name}
+              </a>
+            ))}
+          </div>
         </section>
       )}
 

@@ -10,6 +10,7 @@ import ConvexProvider from '../integrations/convex/provider'
 import { PromoMarquee } from '../components/PromoMarquee'
 import { SiteNav } from '../components/SiteNav'
 import { UserLocationProvider } from '../lib/useUserLocation'
+import { getConfiguredSiteOrigin } from '../lib/site-url'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -44,16 +45,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       (import.meta.env.VITE_UMAMI_SRC as string | undefined) ||
       runtimeEnv?.VITE_UMAMI_SRC ||
       'https://umami.athas.mx/script.js'
-    const appDomain =
-      (import.meta.env.VITE_APP_DOMAIN as string | undefined) ||
-      runtimeEnv?.APP_DOMAIN ||
-      runtimeEnv?.VITE_APP_DOMAIN ||
-      ''
-    const appOrigin = appDomain
-      ? appDomain.startsWith('http')
-        ? appDomain
-        : `https://${appDomain}`
-      : ''
+    const appOrigin = getConfiguredSiteOrigin()
     const ogImage = appOrigin
       ? `${appOrigin}/og-image.png?v=${OG_IMAGE_VERSION}`
       : `/og-image.png?v=${OG_IMAGE_VERSION}`
@@ -177,14 +169,6 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
     ],
     links: [
-      ...(loaderData?.appOrigin
-        ? [
-            {
-              rel: 'canonical',
-              href: loaderData.appOrigin,
-            },
-          ]
-        : []),
       {
         rel: 'stylesheet',
         href: appCss,

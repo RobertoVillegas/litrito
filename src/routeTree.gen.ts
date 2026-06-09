@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RestablecerRouteImport } from './routes/restablecer'
 import { Route as RegistroRouteImport } from './routes/registro'
 import { Route as RecuperarRouteImport } from './routes/recuperar'
@@ -17,9 +18,16 @@ import { Route as MetricasRouteImport } from './routes/metricas'
 import { Route as ExplorarRouteImport } from './routes/explorar'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EstadoStateSlugRouteImport } from './routes/estado.$stateSlug'
 import { Route as EstacionSplatRouteImport } from './routes/estacion.$'
+import { Route as EstadoStateSlugMunicipalitySlugRouteImport } from './routes/estado.$stateSlug_.$municipalitySlug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RestablecerRoute = RestablecerRouteImport.update({
   id: '/restablecer',
   path: '/restablecer',
@@ -60,11 +68,22 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EstadoStateSlugRoute = EstadoStateSlugRouteImport.update({
+  id: '/estado/$stateSlug',
+  path: '/estado/$stateSlug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EstacionSplatRoute = EstacionSplatRouteImport.update({
   id: '/estacion/$',
   path: '/estacion/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EstadoStateSlugMunicipalitySlugRoute =
+  EstadoStateSlugMunicipalitySlugRouteImport.update({
+    id: '/estado/$stateSlug_/$municipalitySlug',
+    path: '/estado/$stateSlug/$municipalitySlug',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -80,8 +99,11 @@ export interface FileRoutesByFullPath {
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/restablecer': typeof RestablecerRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/estacion/$': typeof EstacionSplatRoute
+  '/estado/$stateSlug': typeof EstadoStateSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/estado/$stateSlug/$municipalitySlug': typeof EstadoStateSlugMunicipalitySlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -92,8 +114,11 @@ export interface FileRoutesByTo {
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/restablecer': typeof RestablecerRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/estacion/$': typeof EstacionSplatRoute
+  '/estado/$stateSlug': typeof EstadoStateSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/estado/$stateSlug/$municipalitySlug': typeof EstadoStateSlugMunicipalitySlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -105,8 +130,11 @@ export interface FileRoutesById {
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/restablecer': typeof RestablecerRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/estacion/$': typeof EstacionSplatRoute
+  '/estado/$stateSlug': typeof EstadoStateSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/estado/$stateSlug_/$municipalitySlug': typeof EstadoStateSlugMunicipalitySlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -119,8 +147,11 @@ export interface FileRouteTypes {
     | '/recuperar'
     | '/registro'
     | '/restablecer'
+    | '/sitemap.xml'
     | '/estacion/$'
+    | '/estado/$stateSlug'
     | '/api/auth/$'
+    | '/estado/$stateSlug/$municipalitySlug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -131,8 +162,11 @@ export interface FileRouteTypes {
     | '/recuperar'
     | '/registro'
     | '/restablecer'
+    | '/sitemap.xml'
     | '/estacion/$'
+    | '/estado/$stateSlug'
     | '/api/auth/$'
+    | '/estado/$stateSlug/$municipalitySlug'
   id:
     | '__root__'
     | '/'
@@ -143,8 +177,11 @@ export interface FileRouteTypes {
     | '/recuperar'
     | '/registro'
     | '/restablecer'
+    | '/sitemap.xml'
     | '/estacion/$'
+    | '/estado/$stateSlug'
     | '/api/auth/$'
+    | '/estado/$stateSlug_/$municipalitySlug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -156,12 +193,22 @@ export interface RootRouteChildren {
   RecuperarRoute: typeof RecuperarRoute
   RegistroRoute: typeof RegistroRoute
   RestablecerRoute: typeof RestablecerRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   EstacionSplatRoute: typeof EstacionSplatRoute
+  EstadoStateSlugRoute: typeof EstadoStateSlugRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  EstadoStateSlugMunicipalitySlugRoute: typeof EstadoStateSlugMunicipalitySlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/restablecer': {
       id: '/restablecer'
       path: '/restablecer'
@@ -218,11 +265,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/estado/$stateSlug': {
+      id: '/estado/$stateSlug'
+      path: '/estado/$stateSlug'
+      fullPath: '/estado/$stateSlug'
+      preLoaderRoute: typeof EstadoStateSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/estacion/$': {
       id: '/estacion/$'
       path: '/estacion/$'
       fullPath: '/estacion/$'
       preLoaderRoute: typeof EstacionSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/estado/$stateSlug_/$municipalitySlug': {
+      id: '/estado/$stateSlug_/$municipalitySlug'
+      path: '/estado/$stateSlug/$municipalitySlug'
+      fullPath: '/estado/$stateSlug/$municipalitySlug'
+      preLoaderRoute: typeof EstadoStateSlugMunicipalitySlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -244,8 +305,11 @@ const rootRouteChildren: RootRouteChildren = {
   RecuperarRoute: RecuperarRoute,
   RegistroRoute: RegistroRoute,
   RestablecerRoute: RestablecerRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   EstacionSplatRoute: EstacionSplatRoute,
+  EstadoStateSlugRoute: EstadoStateSlugRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  EstadoStateSlugMunicipalitySlugRoute: EstadoStateSlugMunicipalitySlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

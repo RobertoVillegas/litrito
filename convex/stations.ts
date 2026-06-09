@@ -65,6 +65,14 @@ type StationRow = {
   distanceKm?: number | null
 }
 
+type FuelMetric = {
+  fuelType: FuelType
+  average: number | null
+  min: number | null
+  max: number | null
+  count: number
+}
+
 function parseOffset(cursor: string | null | undefined): number {
   if (!cursor) return 0
   const value = Number.parseInt(cursor.replace(/^\D+/, ''), 10)
@@ -153,6 +161,39 @@ function pickHighlightedPrice(
     priceMap.unknown?.price ??
     null
   )
+}
+
+function slugifyLocationName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function summarizePrices(
+  prices: Doc<'fuelPricesCurrent'>[],
+  fuelType: FuelType,
+): FuelMetric {
+  if (prices.length === 0) {
+    return { fuelType, average: null, min: null, max: null, count: 0 }
+  }
+  let sum = 0
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
+  for (const price of prices) {
+    sum += price.price
+    min = Math.min(min, price.price)
+    max = Math.max(max, price.price)
+  }
+  return {
+    fuelType,
+    average: sum / prices.length,
+    min,
+    max,
+    count: prices.length,
+  }
 }
 
 async function hydrateStationRows(
@@ -540,6 +581,168 @@ export const bestNearbyStations = query({
           a.station.name.localeCompare(b.station.name),
       )
       .slice(0, limit)
+  },
+})
+
+export const seoLocationOverview = query({
+  args: {
+    stateSlug: v.string(),
+    municipalitySlug: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const [states, filterOptions] = await Promise.all([
+      ctx.db.query('states').collect(),
+      ctx.db
+        .query('filterOptionsCache')
+        .withIndex('by_key', (q) => q.eq('key', FILTER_OPTIONS_CACHE_KEY))
+        .unique(),
+    ])
+
+    const state = states.find((s) => slugifyLocationName(s.name) === args.stateSlug)
+    if (!state) return null
+
+    const municipalities = await ctx.db
+      .query('municipalities')
+      .withIndex('by_state', (q) => q.eq('stateExternalId', state.externalId))
+      .collect()
+    const municipality = args.municipalitySlug
+      ? municipalities.find((m) => slugifyLocationName(m.name) === args.municipalitySlug)
+      : null
+    if (args.municipalitySlug && !municipality) return null
+
+    const fuelTypes: FuelType[] = ['regular', 'premium', 'diesel', 'duba']
+    const priceGroups = await Promise.all(
+      fuelTypes.map((ft) =>
+        municipality
+          ? ctx.db
+              .query('fuelPricesCurrent')
+              .withIndex('by_location_fuel_price', (q) =>
+                q
+                  .eq('stateExternalId', state.externalId)
+                  .eq('municipalityExternalId', municipality.externalId)
+                  .eq('fuelType', ft),
+              )
+              .collect()
+          : ctx.db
+              .query('fuelPricesCurrent')
+              .withIndex('by_state_fuel_price', (q) =>
+                q.eq('stateExternalId', state.externalId).eq('fuelType', ft),
+              )
+              .collect(),
+      ),
+    )
+
+    const metrics = priceGroups.map((prices, i) =>
+      summarizePrices(prices, fuelTypes[i]),
+    )
+    const primaryPrices = priceGroups[0]
+      .slice()
+      .sort(
+        (a, b) =>
+          a.price - b.price ||
+          a.stationPermitNumber.localeCompare(b.stationPermitNumber),
+      )
+      .slice(0, 10)
+
+    const topRegular = (
+      await Promise.all(
+        primaryPrices.map(async (price) => {
+          const station = await ctx.db
+            .query('stations')
+            .withIndex('by_permit', (q) =>
+              q.eq('permitNumber', price.stationPermitNumber),
+            )
+            .unique()
+          return station
+            ? {
+                station,
+                price: price.price,
+                reportedAt: price.reportedAt,
+              }
+            : null
+        }),
+      )
+    ).filter((row): row is NonNullable<typeof row> => row !== null)
+
+    const stationCount = municipality
+      ? await ctx.db
+          .query('stations')
+          .withIndex('by_location', (q) =>
+            q
+              .eq('stateExternalId', state.externalId)
+              .eq('municipalityExternalId', municipality.externalId),
+          )
+          .collect()
+      : await ctx.db
+          .query('stations')
+          .withIndex('by_state', (q) => q.eq('stateExternalId', state.externalId))
+          .collect()
+
+    const nav = filterOptions
+      ? (JSON.parse(filterOptions.data) as FilterOptionsPayload)
+      : EMPTY_FILTER_OPTIONS
+    const stateMunicipalityCounts = new Map(
+      nav.municipalities
+        .filter((m) => m.stateExternalId === state.externalId)
+        .map((m) => [m.externalId, m.count]),
+    )
+
+    return {
+      state: {
+        externalId: state.externalId,
+        name: state.name,
+        slug: slugifyLocationName(state.name),
+      },
+      municipality: municipality
+        ? {
+            externalId: municipality.externalId,
+            name: municipality.name,
+            slug: slugifyLocationName(municipality.name),
+          }
+        : null,
+      metrics,
+      stationCount: stationCount.length,
+      topRegular,
+      states: nav.states.map((s) => ({
+        ...s,
+        slug: slugifyLocationName(s.name),
+      })),
+      municipalities: municipalities
+        .map((m) => ({
+          externalId: m.externalId,
+          stateExternalId: m.stateExternalId,
+          name: m.name,
+          slug: slugifyLocationName(m.name),
+          count: stateMunicipalityCounts.get(m.externalId) ?? 0,
+        }))
+        .filter((m) => m.count > 0)
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    }
+  },
+})
+
+export const seoSitemapLocations = query({
+  args: {},
+  handler: async (ctx) => {
+    const cached = await ctx.db
+      .query('filterOptionsCache')
+      .withIndex('by_key', (q) => q.eq('key', FILTER_OPTIONS_CACHE_KEY))
+      .unique()
+    const nav = cached
+      ? (JSON.parse(cached.data) as FilterOptionsPayload)
+      : EMPTY_FILTER_OPTIONS
+
+    return {
+      states: nav.states.map((s) => ({
+        externalId: s.externalId,
+        slug: slugifyLocationName(s.name),
+      })),
+      municipalities: nav.municipalities.map((m) => ({
+        externalId: m.externalId,
+        stateExternalId: m.stateExternalId,
+        slug: slugifyLocationName(m.name),
+      })),
+    }
   },
 })
 
