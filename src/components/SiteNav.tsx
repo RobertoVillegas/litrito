@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import Avatar from 'boring-avatars'
+import { useQuery } from 'convex/react'
 import { ChevronDown, Fuel, LogOut, MapPin, Menu, User, X } from 'lucide-react'
+import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 import { useUserLocation } from '#/lib/useUserLocation'
 
@@ -117,6 +119,7 @@ function LocationPill() {
 function AccountMenu() {
   const session = authClient.useSession()
   const sessionUser = session?.data?.user ?? null
+  const admin = useQuery(api.admin.me, sessionUser ? {} : 'skip')
   const [open, setOpen] = useState(false)
 
   return (
@@ -152,6 +155,7 @@ function AccountMenu() {
               <SignedInPanel
                 name={sessionUser.name ?? sessionUser.email ?? ''}
                 email={sessionUser.email ?? ''}
+                isAdmin={admin?.isAdmin === true}
                 onNavigate={() => setOpen(false)}
               />
             ) : (
@@ -185,10 +189,12 @@ function AccountMenu() {
 function SignedInPanel({
   name,
   email,
+  isAdmin,
   onNavigate,
 }: {
   name: string
   email: string
+  isAdmin: boolean
   onNavigate: () => void
 }) {
   return (
@@ -208,6 +214,15 @@ function SignedInPanel({
         <User className="h-4 w-4" />
         Mi perfil
       </Link>
+      {isAdmin && (
+        <Link
+          to="/admin/ingestion"
+          onClick={onNavigate}
+          className="btn-pill btn-pill--outline-dark w-full text-sm"
+        >
+          Auditoria
+        </Link>
+      )}
       <button
         type="button"
         onClick={() => void authClient.signOut()}

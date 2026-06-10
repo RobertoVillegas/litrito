@@ -32,6 +32,16 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
         })
       },
     },
+    user: {
+      additionalFields: {
+        isAdmin: {
+          type: 'boolean',
+          required: false,
+          defaultValue: false,
+          input: false,
+        },
+      },
+    },
     trustedOrigins: [process.env.SITE_URL ?? 'http://localhost:3000'],
     plugins: [convex({ authConfig })],
   })

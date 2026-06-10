@@ -136,6 +136,21 @@ export default defineSchema({
     data: v.string(),
     updatedAt: v.string(),
   }).index('by_key', ['key']),
+  adminAuditEvents: defineTable({
+    actorUserId: v.string(),
+    actorEmail: v.optional(v.string()),
+    action: v.union(
+      v.literal('retry_municipality_prices'),
+      v.literal('set_user_admin'),
+    ),
+    target: v.string(),
+    createdAt: v.string(),
+    status: v.union(v.literal('success'), v.literal('failed')),
+    message: v.optional(v.string()),
+    runId: v.optional(v.string()),
+  })
+    .index('by_created_at', ['createdAt'])
+    .index('by_actor', ['actorUserId']),
   stationFavorites: defineTable({
     userId: v.string(),
     stationPermitNumber: v.string(),
