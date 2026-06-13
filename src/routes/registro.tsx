@@ -7,6 +7,10 @@ import { AuthLayout, authInputClass } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/registro')({ component: SignUp })
 
+type AuthResult = {
+  error?: { message?: string } | null
+}
+
 function SignUp() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
@@ -20,11 +24,16 @@ function SignUp() {
     setSubmitting(true)
     setError('')
     try {
-      await authClient.signUp.email({
+      const result = (await authClient.signUp.email({
         email,
         password,
         name: name || email.split('@')[0] || 'Litrito',
-      })
+      })) as AuthResult
+
+      if (result.error) {
+        throw new Error(result.error.message ?? 'Sign up failed')
+      }
+
       track('signup')
       navigate({ to: '/perfil' })
     } catch {

@@ -12,7 +12,11 @@ export const Route = createFileRoute('/restablecer')({
 })
 
 type Resetter = {
-  resetPassword?: (a: { newPassword: string; token: string }) => Promise<unknown>
+  resetPassword?: (a: { newPassword: string; token: string }) => Promise<AuthResult>
+}
+
+type AuthResult = {
+  error?: { message?: string } | null
 }
 
 function ResetPassword() {
@@ -29,7 +33,12 @@ function ResetPassword() {
     setError('')
     try {
       const client = authClient as unknown as Resetter
-      await client.resetPassword?.({ newPassword: password, token })
+      const result = await client.resetPassword?.({ newPassword: password, token })
+
+      if (result?.error) {
+        throw new Error(result.error.message ?? 'Password reset failed')
+      }
+
       setDone(true)
       setTimeout(() => navigate({ to: '/entrar' }), 1500)
     } catch {

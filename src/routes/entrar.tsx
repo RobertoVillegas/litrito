@@ -7,6 +7,10 @@ import { AuthLayout, authInputClass } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/entrar')({ component: SignIn })
 
+type AuthResult = {
+  error?: { message?: string } | null
+}
+
 function SignIn() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -19,7 +23,12 @@ function SignIn() {
     setSubmitting(true)
     setError('')
     try {
-      await authClient.signIn.email({ email, password })
+      const result = (await authClient.signIn.email({ email, password })) as AuthResult
+
+      if (result.error) {
+        throw new Error(result.error.message ?? 'Sign in failed')
+      }
+
       track('login')
       navigate({ to: '/perfil' })
     } catch {

@@ -8,8 +8,12 @@ export const Route = createFileRoute('/recuperar')({ component: ForgotPassword }
 
 // Method name varies across better-auth versions; resolve defensively.
 type ResetRequester = {
-  requestPasswordReset?: (a: { email: string; redirectTo?: string }) => Promise<unknown>
-  forgetPassword?: (a: { email: string; redirectTo?: string }) => Promise<unknown>
+  requestPasswordReset?: (a: { email: string; redirectTo?: string }) => Promise<AuthResult>
+  forgetPassword?: (a: { email: string; redirectTo?: string }) => Promise<AuthResult>
+}
+
+type AuthResult = {
+  error?: { message?: string } | null
 }
 
 function ForgotPassword() {
@@ -23,10 +27,14 @@ function ForgotPassword() {
     try {
       const client = authClient as unknown as ResetRequester
       const request = client.requestPasswordReset ?? client.forgetPassword
-      await request?.({
+      const result = await request?.({
         email,
         redirectTo: `${window.location.origin}/restablecer`,
       })
+
+      if (result?.error) {
+        throw new Error(result.error.message ?? 'Password reset request failed')
+      }
     } catch {
       // Ignore — we always show the same message to avoid leaking which
       // emails are registered.
