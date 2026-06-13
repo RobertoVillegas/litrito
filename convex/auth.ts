@@ -3,16 +3,13 @@ import { convex } from '@convex-dev/better-auth/plugins'
 import { requireActionCtx } from '@convex-dev/better-auth/utils'
 import { betterAuth } from 'better-auth/minimal'
 import { query } from './_generated/server'
-import { components } from './_generated/api'
+import { components, internal } from './_generated/api'
 import type { DataModel } from './_generated/dataModel'
 import authConfig from './auth.config'
-import { sendPasswordResetEmail } from './email/useCases/sendPasswordResetEmail'
 
 declare const process: {
   env: {
     SITE_URL?: string
-    RESEND_API_KEY?: string
-    RESEND_FROM_EMAIL?: string
   }
 }
 
@@ -24,8 +21,8 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     emailAndPassword: {
       enabled: true,
       sendResetPassword: async ({ user, url }) => {
-        requireActionCtx(ctx)
-        await sendPasswordResetEmail({
+        const actionCtx = requireActionCtx(ctx)
+        await actionCtx.runAction(internal.email.sendPasswordResetEmail.send, {
           resetUrl: url,
           userEmail: user.email,
           userName: user.name,
