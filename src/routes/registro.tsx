@@ -11,7 +11,7 @@ type AuthResult = {
   error?: { message?: string } | null
 }
 
-function SignUp() {
+export function SignUp() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')

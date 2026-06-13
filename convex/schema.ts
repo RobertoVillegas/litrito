@@ -151,6 +151,15 @@ export default defineSchema({
   })
     .index('by_created_at', ['createdAt'])
     .index('by_actor', ['actorUserId']),
+  userRoles: defineTable({
+    userId: v.string(),
+    email: v.string(),
+    isAdmin: v.boolean(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_user_id', ['userId'])
+    .index('by_email', ['email']),
   stationFavorites: defineTable({
     userId: v.string(),
     stationPermitNumber: v.string(),

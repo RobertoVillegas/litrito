@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import {
   action,
+  internalQuery,
   internalMutation,
   mutation,
   query,
@@ -20,7 +21,6 @@ declare const process: {
 type AdminUser = {
   _id: string
   email?: string | null
-  isAdmin?: boolean | null
 }
 
 type IngestionRun = {
@@ -44,12 +44,59 @@ async function requireAdmin(ctx: QueryCtx | MutationCtx | ActionCtx): Promise<Ad
     throw new Error('Debes iniciar sesion para ver administracion.')
   }
 
-  if (user.isAdmin !== true) {
+  const role = await getRoleForCtx(ctx, String(user._id), user.email)
+
+  if (role?.isAdmin !== true) {
     throw new Error('No tienes permisos de administrador.')
   }
 
   return user
 }
+
+async function getRoleForCtx(
+  ctx: QueryCtx | MutationCtx | ActionCtx,
+  userId: string,
+  email?: string | null,
+) {
+  if ('db' in ctx) {
+    return await getRoleByUser(ctx, userId, email)
+  }
+
+  return await ctx.runQuery(internal.admin.getRoleByUserInternal, {
+    userId,
+    email: email ?? undefined,
+  })
+}
+
+async function getRoleByUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+  email?: string | null,
+) {
+  const roleByUserId = await ctx.db
+    .query('userRoles')
+    .withIndex('by_user_id', (q) => q.eq('userId', userId))
+    .unique()
+
+  if (roleByUserId || !email) {
+    return roleByUserId
+  }
+
+  return await ctx.db
+    .query('userRoles')
+    .withIndex('by_email', (q) => q.eq('email', email.trim().toLowerCase()))
+    .unique()
+}
+
+export const getRoleByUserInternal = internalQuery({
+  args: {
+    userId: v.string(),
+    email: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await getRoleByUser(ctx, args.userId, args.email)
+  },
+})
 
 function sameOrAfter(iso: string, since: string): boolean {
   return iso >= since
@@ -75,8 +122,10 @@ export const me = query({
   args: {},
   handler: async (ctx) => {
     const user = (await authComponent.safeGetAuthUser(ctx)) as AdminUser | null
+    const role = user ? await getRoleByUser(ctx, String(user._id), user.email) : null
+
     return {
-      isAdmin: user?.isAdmin === true,
+      isAdmin: role?.isAdmin === true,
       email: user?.email ?? null,
     }
   },
@@ -254,20 +303,34 @@ async function setUserAdmin(
     throw new Error(`No existe usuario con email ${email}.`)
   }
 
-  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
-    input: {
-      model: 'user',
-      where: [{ field: '_id', value: user._id }],
-      update: { isAdmin: args.isAdmin },
-    },
-  } as any)
+  const existingRole = await ctx.db
+    .query('userRoles')
+    .withIndex('by_user_id', (q) => q.eq('userId', String(user._id)))
+    .unique()
+  const now = new Date().toISOString()
+
+  if (existingRole) {
+    await ctx.db.patch(existingRole._id, {
+      email,
+      isAdmin: args.isAdmin,
+      updatedAt: now,
+    })
+  } else {
+    await ctx.db.insert('userRoles', {
+      userId: String(user._id),
+      email,
+      isAdmin: args.isAdmin,
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
 
   await ctx.db.insert('adminAuditEvents', {
     actorUserId: args.actorUserId,
     actorEmail: args.actorEmail,
     action: 'set_user_admin',
     target: email,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
     status: 'success',
     message: `isAdmin=${args.isAdmin}`,
   })
