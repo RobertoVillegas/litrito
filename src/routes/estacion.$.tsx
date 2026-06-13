@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import type { TooltipContentProps } from 'recharts'
 import { api } from '../../convex/_generated/api'
+import { cn } from '#/lib/utils'
 import { useFavorites } from '#/lib/useFavorites'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
@@ -561,6 +562,31 @@ type Snapshot = {
   fuels: Partial<Record<FuelType, number>>
 }
 
+function DeltaBadge({ delta }: { delta: number | null }) {
+  if (delta == null || delta === 0) return null
+  const up = delta > 0
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums',
+        up ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600',
+      )}
+    >
+      {up ? '↑' : '↓'}
+      {formatCurrency(Math.abs(delta))}
+    </span>
+  )
+}
+
+function FuelDot({ fuel }: { fuel: FuelType }) {
+  return (
+    <span
+      className="h-1.5 w-1.5 shrink-0 rounded-full"
+      style={{ background: FUEL_META[fuel].color }}
+    />
+  )
+}
+
 function PriceHistoryList({ history }: { history: HistoryEntry[] }) {
   if (history.length === 0) return null
 
@@ -575,6 +601,7 @@ function PriceHistoryList({ history }: { history: HistoryEntry[] }) {
   const snapshots = [...snapshotMap.values()].sort((a, b) => b.t - a.t)
   const activeFuels = FUEL_ORDER.filter((f) => snapshots.some((s) => f in s.fuels))
 
+  // Δ vs the previous snapshot that recorded a price for the same fuel.
   const getDelta = (rowIdx: number, fuel: FuelType): number | null => {
     const current = snapshots[rowIdx].fuels[fuel]
     if (current == null) return null
@@ -586,70 +613,105 @@ function PriceHistoryList({ history }: { history: HistoryEntry[] }) {
   }
 
   return (
-    <div className="mt-8 overflow-hidden rounded-[6px] border border-line">
-      <div className="max-h-96 overflow-auto">
-        <table className="min-w-full">
-          <thead className="sticky top-0 z-10">
-            <tr className="border-b border-line bg-canvas-soft">
-              <th className="px-4 py-2.5 text-left">
-                <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-body">
+    <div className="mt-8">
+      <div className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold text-mute">
+        <Info className="h-3.5 w-3.5 shrink-0" />
+        Los precios no cambian todos los días; solo se registra la fecha en que hubo un cambio.
+      </div>
+
+      {/* Desktop: pivot table (fecha × combustible) */}
+      <div className="hidden overflow-hidden rounded-[6px] border border-line sm:block">
+        <div className="max-h-96 overflow-auto">
+          <table className="min-w-full">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-line bg-canvas-soft">
+                <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-wider text-body">
                   Fecha
-                  <span
-                    title="Los precios no cambian todos los días; solo se registra la fecha en que hubo un cambio."
-                    className="cursor-help text-mute"
-                  >
-                    <Info className="h-3 w-3" />
-                  </span>
-                </div>
-              </th>
-              {activeFuels.map((f) => (
-                <th key={f} className="px-4 py-2.5 text-right">
-                  <div
-                    className="flex items-center justify-end gap-1 text-[10px] font-black uppercase tracking-wider"
-                    style={{ color: FUEL_META[f].color }}
-                  >
-                    <span
-                      className="h-1.5 w-1.5 rounded-full"
-                      style={{ background: FUEL_META[f].color }}
-                    />
-                    {FUEL_META[f].label}
-                  </div>
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {snapshots.map((snap, rowIdx) => (
-              <tr key={snap.t} className="border-b border-line last:border-b-0">
-                <td className="whitespace-nowrap px-4 py-2.5 text-sm text-body">
-                  {formatDate(snap.ingestedAt, true)}
-                </td>
-                {activeFuels.map((f) => {
-                  const price = snap.fuels[f]
-                  const delta = getDelta(rowIdx, f)
-                  return (
-                    <td key={f} className="whitespace-nowrap px-4 py-2.5 text-right">
-                      {price != null ? (
-                        <div className="inline-flex items-baseline gap-1.5">
-                          <span className="font-bold text-ink">{formatCurrency(price)}</span>
-                          {delta != null && delta !== 0 && (
-                            <span
-                              className={`text-[10px] font-bold ${delta > 0 ? 'text-red-500' : 'text-emerald-600'}`}
-                            >
-                              {delta > 0 ? '↑' : '↓'} {formatCurrency(Math.abs(delta))}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-mute">—</span>
-                      )}
-                    </td>
-                  )
-                })}
+                {activeFuels.map((f) => (
+                  <th key={f} className="px-4 py-2.5 text-right">
+                    <div
+                      className="flex items-center justify-end gap-1 text-[10px] font-black uppercase tracking-wider"
+                      style={{ color: FUEL_META[f].color }}
+                    >
+                      <FuelDot fuel={f} />
+                      {FUEL_META[f].label}
+                    </div>
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {snapshots.map((snap, rowIdx) => (
+                <tr key={snap.t} className="border-b border-line last:border-b-0">
+                  <td className="whitespace-nowrap px-4 py-2.5 text-sm text-body">
+                    {formatDate(snap.ingestedAt, true)}
+                  </td>
+                  {activeFuels.map((f) => {
+                    const price = snap.fuels[f]
+                    const delta = getDelta(rowIdx, f)
+                    return (
+                      <td key={f} className="whitespace-nowrap px-4 py-2.5">
+                        {price != null ? (
+                          // Fixed-width delta slot keeps every price right-aligned
+                          // at the same column position regardless of the badge.
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="font-bold tabular-nums text-ink">
+                              {formatCurrency(price)}
+                            </span>
+                            <span className="flex w-16 justify-start">
+                              <DeltaBadge delta={delta} />
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-mute">—</span>
+                            <span className="w-16" />
+                          </div>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Mobile: one card per snapshot */}
+      <div className="space-y-3 sm:hidden">
+        {snapshots.map((snap, rowIdx) => (
+          <div key={snap.t} className="rounded-[6px] border border-line p-4">
+            <div className="text-xs font-black text-ink">
+              {formatDate(snap.ingestedAt, true)}
+            </div>
+            <div className="mt-3 space-y-1.5">
+              {activeFuels.map((f) => {
+                const price = snap.fuels[f]
+                if (price == null) return null
+                const delta = getDelta(rowIdx, f)
+                return (
+                  <div
+                    key={f}
+                    className="flex items-center justify-between gap-2 rounded-[6px] border border-line bg-canvas-soft px-2.5 py-1.5"
+                  >
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-body">
+                      <FuelDot fuel={f} />
+                      {FUEL_META[f].label}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-bold tabular-nums text-ink">
+                        {formatCurrency(price)}
+                      </span>
+                      <DeltaBadge delta={delta} />
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

@@ -8,13 +8,18 @@ import {
   Bar,
   BarChart,
   Cell,
+  ComposedChart,
+  ReferenceLine,
   ResponsiveContainer,
+  Scatter,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
+import type { TooltipContentProps } from 'recharts'
 import { api } from '../../convex/_generated/api'
 import { FUEL_META } from '#/lib/fuel'
+import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
 import { Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
@@ -40,6 +45,20 @@ function formatCurrency(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value)
+}
+
+function formatAxisMXN(value: number): string {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+function formatSignedMXN(value: number): string {
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${formatCurrency(value)}`
 }
 
 type Extreme = {
@@ -205,46 +224,223 @@ function Metrics() {
               />
             </div>
 
-            {/* Avg by state bar chart */}
-            <div>
-              <h2 className="eyebrow text-body">Promedio Regular por estado</h2>
-              <div className="mt-4 rounded-[6px] border border-line p-4">
-                <ClientOnly
-                  fallback={<div className="h-[360px]" />}
-                >
-                  <ResponsiveContainer width="100%" height={Math.max(360, data.avgByState.length * 26)}>
-                    <BarChart
-                      data={data.avgByState}
-                      layout="vertical"
-                      margin={{ top: 4, right: 24, bottom: 4, left: 8 }}
-                    >
-                      <XAxis type="number" domain={['dataMin - 0.5', 'dataMax + 0.5']} hide />
-                      <YAxis
-                        type="category"
-                        dataKey="name"
-                        width={150}
-                        tick={{ fontSize: 11, fill: '#25282b' }}
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <Tooltip
-                        cursor={{ fill: '#f2f2f2' }}
-                        formatter={(value) => [formatCurrency(Number(value)), 'Promedio']}
-                      />
-                      <Bar dataKey="avg" radius={[0, 4, 4, 0]}>
-                        {data.avgByState.map((_, i) => (
-                          <Cell key={i} fill="#e60000" />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ClientOnly>
-              </div>
-            </div>
+            {/* Per-fuel price spread */}
+            <FuelSpreadChart data={data} />
+
+            {/* Avg Regular by state, as delta vs national */}
+            <StateDeltaChart data={data} />
           </div>
         )}
       </section>
     </main>
+  )
+}
+
+type SpreadRow = {
+  fuel: FuelType
+  label: string
+  range: [number, number]
+  avg: number
+  cheapestName: string
+  expensiveName: string
+  count: number
+}
+
+function SpreadTooltip({ active, payload }: TooltipContentProps) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload as SpreadRow
+  const [min, max] = d.range
+  return (
+    <div className="min-w-[200px] rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
+      <div
+        className="mb-2 flex items-center gap-1.5 font-black"
+        style={{ color: FUEL_META[d.fuel].color }}
+      >
+        <span className="h-2 w-2 rounded-full" style={{ background: FUEL_META[d.fuel].color }} />
+        {d.label}
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-6">
+          <span className="text-emerald-600">Más barata</span>
+          <span className="font-bold text-ink">{formatCurrency(min)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-6 text-body">
+          <span>Promedio</span>
+          <span className="font-bold text-ink">{formatCurrency(d.avg)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-6">
+          <span className="text-brand">Más cara</span>
+          <span className="font-bold text-ink">{formatCurrency(max)}</span>
+        </div>
+      </div>
+      <div className="mt-2 border-t border-line pt-1.5 text-[11px] text-mute">
+        Rango {formatCurrency(max - min)} · {d.count.toLocaleString('es-MX')} precios
+      </div>
+    </div>
+  )
+}
+
+function FuelSpreadChart({ data }: { data: MetricsData }) {
+  const rows: SpreadRow[] = FUELS.filter((f) => {
+    const m = data.perFuel[f]
+    return m?.count > 0 && m.cheapest && m.expensive
+  }).map((f) => {
+    const m = data.perFuel[f]
+    return {
+      fuel: f,
+      label: FUEL_META[f].label,
+      range: [m.cheapest!.price, m.expensive!.price],
+      avg: m.avg,
+      cheapestName: m.cheapest!.name,
+      expensiveName: m.expensive!.name,
+      count: m.count,
+    }
+  })
+
+  if (rows.length === 0) return null
+
+  return (
+    <div>
+      <h2 className="eyebrow text-body">Rango de precios por combustible</h2>
+      <p className="mt-1 text-sm text-body">
+        De la estación más barata a la más cara del país; el punto marca el promedio.
+      </p>
+      <div className="mt-4 rounded-[6px] border border-line p-4">
+        <ClientOnly fallback={<div className="h-[220px]" />}>
+          <ResponsiveContainer width="100%" height={Math.max(200, rows.length * 52)}>
+            <ComposedChart
+              data={rows}
+              layout="vertical"
+              margin={{ top: 8, right: 24, bottom: 8, left: 8 }}
+            >
+              <XAxis
+                type="number"
+                domain={['dataMin - 1', 'dataMax + 1']}
+                tickFormatter={formatAxisMXN}
+                tick={{ fontSize: 10, fill: '#7e7e7e' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="label"
+                width={120}
+                tick={{ fontSize: 12, fontWeight: 700, fill: '#25282b' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip cursor={{ fill: '#f5f5f5' }} content={SpreadTooltip} />
+              <Bar dataKey="range" barSize={12} radius={6}>
+                {rows.map((r) => (
+                  <Cell key={r.fuel} fill={FUEL_META[r.fuel].color} fillOpacity={0.28} />
+                ))}
+              </Bar>
+              <Scatter dataKey="avg">
+                {rows.map((r) => (
+                  <Cell key={r.fuel} fill={FUEL_META[r.fuel].color} />
+                ))}
+              </Scatter>
+            </ComposedChart>
+          </ResponsiveContainer>
+        </ClientOnly>
+      </div>
+    </div>
+  )
+}
+
+type StateDeltaRow = {
+  stateExternalId: string
+  name: string
+  avg: number
+  count: number
+  delta: number
+}
+
+function StateDeltaTooltip({ active, payload }: TooltipContentProps) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload as StateDeltaRow
+  const pricier = d.delta >= 0
+  return (
+    <div className="min-w-[180px] rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
+      <div className="mb-1.5 font-black text-ink">{d.name}</div>
+      <div className="flex items-center justify-between gap-6 text-body">
+        <span>Promedio Regular</span>
+        <span className="font-bold text-ink">{formatCurrency(d.avg)}</span>
+      </div>
+      <div
+        className={`mt-0.5 flex items-center justify-between gap-6 font-bold ${
+          pricier ? 'text-brand' : 'text-emerald-600'
+        }`}
+      >
+        <span>vs. nacional</span>
+        <span>{formatSignedMXN(d.delta)}</span>
+      </div>
+      <div className="mt-1.5 border-t border-line pt-1.5 text-[11px] text-mute">
+        {d.count.toLocaleString('es-MX')} estaciones
+      </div>
+    </div>
+  )
+}
+
+function StateDeltaChart({ data }: { data: MetricsData }) {
+  const national = data.nationalAvgRegular
+  if (national == null || data.avgByState.length === 0) return null
+
+  // avgByState arrives sorted desc by avg (pricier first), which keeps the
+  // diverging bars ordered from most expensive at the top to cheapest below.
+  const rows: StateDeltaRow[] = data.avgByState.map((s) => ({
+    stateExternalId: s.stateExternalId,
+    name: s.name,
+    avg: s.avg,
+    count: s.count,
+    delta: s.avg - national,
+  }))
+
+  return (
+    <div>
+      <h2 className="eyebrow text-body">Regular vs. promedio nacional</h2>
+      <p className="mt-1 text-sm text-body">
+        Diferencia del promedio estatal contra el nacional ({formatCurrency(national)}).
+        Verde = más barato, rojo = más caro.
+      </p>
+      <div className="mt-4 rounded-[6px] border border-line p-4">
+        <ClientOnly fallback={<div className="h-[360px]" />}>
+          <ResponsiveContainer width="100%" height={Math.max(360, rows.length * 26)}>
+            <BarChart
+              data={rows}
+              layout="vertical"
+              margin={{ top: 4, right: 24, bottom: 4, left: 8 }}
+            >
+              <XAxis
+                type="number"
+                tickFormatter={formatSignedMXN}
+                tick={{ fontSize: 10, fill: '#7e7e7e' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={140}
+                tick={{ fontSize: 11, fill: '#25282b' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <ReferenceLine x={0} stroke="#25282b" strokeWidth={1.5} />
+              <Tooltip cursor={{ fill: '#f5f5f5' }} content={StateDeltaTooltip} />
+              <Bar dataKey="delta" radius={2}>
+                {rows.map((r) => (
+                  <Cell
+                    key={r.stateExternalId}
+                    fill={r.delta >= 0 ? '#e60000' : '#10b981'}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ClientOnly>
+      </div>
+    </div>
   )
 }
 
