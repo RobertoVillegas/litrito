@@ -2,7 +2,17 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowLeft, Check, MapPin, Navigation, Share2, Star } from 'lucide-react'
+import { ArrowLeft, Check, Info, MapPin, Navigation, Share2, Star } from 'lucide-react'
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import type { TooltipContentProps } from 'recharts'
 import { api } from '../../convex/_generated/api'
 import { useFavorites } from '#/lib/useFavorites'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
@@ -15,10 +25,10 @@ const StationMiniMap = lazy(() =>
   import('../components/StationMiniMap').then((m) => ({ default: m.StationMiniMap })),
 )
 
-function ClientOnly({ children }: { children: ReactNode }) {
+function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
-  if (!mounted) return null
+  if (!mounted) return <>{fallback ?? null}</>
   return <>{children}</>
 }
 
@@ -436,20 +446,48 @@ function BackLink({ onDark = false }: { onDark?: boolean }) {
   )
 }
 
+type ChartRow = { t: number } & Partial<Record<FuelType, number>>
+
+function HistoryTooltip({ active, payload, label }: TooltipContentProps) {
+  if (!active || !payload?.length) return null
+  const date = new Date(label as number)
+  return (
+    <div className="min-w-[156px] rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
+      <div className="mb-2 font-black text-ink">{formatDate(date.toISOString(), true)}</div>
+      {payload.map((entry) => {
+        const fuel = entry.dataKey as FuelType
+        const meta = FUEL_META[fuel]
+        if (!meta || entry.value == null) return null
+        return (
+          <div key={fuel} className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-body">
+              <span className="h-2 w-2 rounded-full" style={{ background: meta.color }} />
+              {meta.label}
+            </span>
+            <span className="font-bold text-ink">{formatCurrency(entry.value as number)}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function PriceHistoryChart({ history }: { history: HistoryEntry[] }) {
-  // Group history into per-fuel series, ascending by time.
-  const series = new Map<FuelType, { t: number; price: number }[]>()
+  const snapshotMap = new Map<number, Partial<Record<FuelType, number>>>()
   for (const h of history) {
     const t = new Date(h.ingestedAt).getTime()
     if (Number.isNaN(t)) continue
-    const arr = series.get(h.fuelType) ?? []
-    arr.push({ t, price: h.price })
-    series.set(h.fuelType, arr)
+    if (!snapshotMap.has(t)) snapshotMap.set(t, {})
+    snapshotMap.get(t)![h.fuelType] = h.price
   }
-  for (const arr of series.values()) arr.sort((a, b) => a.t - b.t)
 
-  const allPoints = [...series.values()].flat()
-  if (allPoints.length === 0) {
+  const chartData: ChartRow[] = [...snapshotMap.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([t, prices]) => ({ t, ...prices }))
+
+  const activeFuels = FUEL_ORDER.filter((f) => chartData.some((row) => f in row))
+
+  if (chartData.length === 0) {
     return (
       <p className="mt-3 text-sm text-body">
         Aún no hay suficiente historial. Se registrará cada vez que cambie un precio.
@@ -457,103 +495,58 @@ function PriceHistoryChart({ history }: { history: HistoryEntry[] }) {
     )
   }
 
-  const W = 640
-  const H = 240
-  const padL = 48
-  const padR = 16
-  const padT = 16
-  const padB = 28
-
-  let minT = Math.min(...allPoints.map((p) => p.t))
-  let maxT = Math.max(...allPoints.map((p) => p.t))
-  let minP = Math.min(...allPoints.map((p) => p.price))
-  let maxP = Math.max(...allPoints.map((p) => p.price))
-  if (minT === maxT) {
-    minT -= 1
-    maxT += 1
-  }
-  const pPad = (maxP - minP) * 0.15 || 0.5
-  minP -= pPad
-  maxP += pPad
-
-  const x = (t: number) => padL + ((t - minT) / (maxT - minT)) * (W - padL - padR)
-  const y = (p: number) => padT + (1 - (p - minP) / (maxP - minP)) * (H - padT - padB)
-
-  const yTicks = 4
-  const ticks = Array.from({ length: yTicks + 1 }, (_, i) => minP + ((maxP - minP) * i) / yTicks)
-
-  const orderedFuels = FUEL_ORDER.filter((f) => series.has(f))
-
   return (
     <div className="mt-4 rounded-[6px] border border-line p-4">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full"
-        role="img"
-        aria-label="Histórico de precios"
-      >
-        {/* Y grid + labels */}
-        {ticks.map((tk, i) => (
-          <g key={i}>
-            <line
-              x1={padL}
-              x2={W - padR}
-              y1={y(tk)}
-              y2={y(tk)}
-              stroke="#e6e6e6"
-              strokeWidth={1}
+      <ClientOnly fallback={<div className="h-[240px]" />}>
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e6e6e6" vertical={false} />
+            <XAxis
+              dataKey="t"
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              scale="time"
+              tickFormatter={(t: number) => formatDate(new Date(t).toISOString())}
+              tick={{ fontSize: 10, fill: '#7e7e7e' }}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={60}
             />
-            <text
-              x={padL - 8}
-              y={y(tk) + 3}
-              textAnchor="end"
-              fontSize={10}
-              fill="#7e7e7e"
-            >
-              {tk.toFixed(2)}
-            </text>
-          </g>
-        ))}
-        {/* X axis date labels */}
-        <text x={padL} y={H - 8} textAnchor="start" fontSize={10} fill="#7e7e7e">
-          {formatDate(new Date(minT).toISOString())}
-        </text>
-        <text x={W - padR} y={H - 8} textAnchor="end" fontSize={10} fill="#7e7e7e">
-          {formatDate(new Date(maxT).toISOString())}
-        </text>
-        {/* Series */}
-        {orderedFuels.map((f) => {
-          const pts = series.get(f)!
-          const color = FUEL_META[f].color
-          const d = pts
-            .map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.t).toFixed(1)} ${y(p.price).toFixed(1)}`)
-            .join(' ')
-          return (
-            <g key={f}>
-              {pts.length > 1 && (
-                <path d={d} fill="none" stroke={color} strokeWidth={2} />
-              )}
-              {pts.map((p, i) => (
-                <circle
-                  key={i}
-                  cx={x(p.t)}
-                  cy={y(p.price)}
-                  r={3}
-                  fill={color}
-                />
-              ))}
-            </g>
-          )
-        })}
-      </svg>
-      {/* Legend */}
+            <YAxis
+              domain={['dataMin - 0.5', 'dataMax + 0.5']}
+              tickFormatter={(v: number) =>
+                new Intl.NumberFormat('es-MX', {
+                  style: 'currency',
+                  currency: 'MXN',
+                  minimumFractionDigits: 0,
+                }).format(v)
+              }
+              tick={{ fontSize: 10, fill: '#7e7e7e' }}
+              tickLine={false}
+              axisLine={false}
+              width={44}
+            />
+            <Tooltip content={HistoryTooltip} />
+            {activeFuels.map((f) => (
+              <Line
+                key={f}
+                type="stepAfter"
+                dataKey={f}
+                name={FUEL_META[f].label}
+                stroke={FUEL_META[f].color}
+                strokeWidth={2}
+                dot={{ r: 3, fill: FUEL_META[f].color, strokeWidth: 0 }}
+                activeDot={{ r: 5, strokeWidth: 0 }}
+                connectNulls
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </ClientOnly>
       <div className="mt-3 flex flex-wrap gap-3">
-        {orderedFuels.map((f) => (
+        {activeFuels.map((f) => (
           <div key={f} className="flex items-center gap-1.5 text-xs font-semibold text-body">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ background: FUEL_META[f].color }}
-            />
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: FUEL_META[f].color }} />
             {FUEL_META[f].label}
           </div>
         ))}
@@ -562,38 +555,101 @@ function PriceHistoryChart({ history }: { history: HistoryEntry[] }) {
   )
 }
 
+type Snapshot = {
+  t: number
+  ingestedAt: string
+  fuels: Partial<Record<FuelType, number>>
+}
+
 function PriceHistoryList({ history }: { history: HistoryEntry[] }) {
   if (history.length === 0) return null
-  // Already desc by creation; show as a chronological change log.
-  const rows = [...history].sort(
-    (a, b) => new Date(b.ingestedAt).getTime() - new Date(a.ingestedAt).getTime(),
-  )
+
+  const snapshotMap = new Map<number, Snapshot>()
+  for (const h of history) {
+    const t = new Date(h.ingestedAt).getTime()
+    if (Number.isNaN(t)) continue
+    if (!snapshotMap.has(t)) snapshotMap.set(t, { t, ingestedAt: h.ingestedAt, fuels: {} })
+    snapshotMap.get(t)!.fuels[h.fuelType] = h.price
+  }
+
+  const snapshots = [...snapshotMap.values()].sort((a, b) => b.t - a.t)
+  const activeFuels = FUEL_ORDER.filter((f) => snapshots.some((s) => f in s.fuels))
+
+  const getDelta = (rowIdx: number, fuel: FuelType): number | null => {
+    const current = snapshots[rowIdx].fuels[fuel]
+    if (current == null) return null
+    for (let i = rowIdx + 1; i < snapshots.length; i++) {
+      const prev = snapshots[i].fuels[fuel]
+      if (prev != null) return current - prev
+    }
+    return null
+  }
+
   return (
     <div className="mt-8 overflow-hidden rounded-[6px] border border-line">
-      <div className="grid grid-cols-[1fr_auto_auto] gap-4 border-b border-line bg-canvas-soft px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-body">
-        <span>Fecha</span>
-        <span>Combustible</span>
-        <span className="text-right">Precio</span>
-      </div>
       <div className="max-h-96 overflow-auto">
-        {rows.map((h, i) => (
-          <div
-            key={i}
-            className="grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-line px-4 py-2.5 text-sm last:border-b-0"
-          >
-            <span className="text-body">{formatDate(h.ingestedAt, true)}</span>
-            <span className="flex items-center gap-1.5 font-semibold text-ink">
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ background: FUEL_META[h.fuelType].color }}
-              />
-              {FUEL_META[h.fuelType].label}
-            </span>
-            <span className="text-right font-bold text-ink">
-              {formatCurrency(h.price)}
-            </span>
-          </div>
-        ))}
+        <table className="min-w-full">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-line bg-canvas-soft">
+              <th className="px-4 py-2.5 text-left">
+                <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-body">
+                  Fecha
+                  <span
+                    title="Los precios no cambian todos los días; solo se registra la fecha en que hubo un cambio."
+                    className="cursor-help text-mute"
+                  >
+                    <Info className="h-3 w-3" />
+                  </span>
+                </div>
+              </th>
+              {activeFuels.map((f) => (
+                <th key={f} className="px-4 py-2.5 text-right">
+                  <div
+                    className="flex items-center justify-end gap-1 text-[10px] font-black uppercase tracking-wider"
+                    style={{ color: FUEL_META[f].color }}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ background: FUEL_META[f].color }}
+                    />
+                    {FUEL_META[f].label}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {snapshots.map((snap, rowIdx) => (
+              <tr key={snap.t} className="border-b border-line last:border-b-0">
+                <td className="whitespace-nowrap px-4 py-2.5 text-sm text-body">
+                  {formatDate(snap.ingestedAt, true)}
+                </td>
+                {activeFuels.map((f) => {
+                  const price = snap.fuels[f]
+                  const delta = getDelta(rowIdx, f)
+                  return (
+                    <td key={f} className="whitespace-nowrap px-4 py-2.5 text-right">
+                      {price != null ? (
+                        <div className="inline-flex items-baseline gap-1.5">
+                          <span className="font-bold text-ink">{formatCurrency(price)}</span>
+                          {delta != null && delta !== 0 && (
+                            <span
+                              className={`text-[10px] font-bold ${delta > 0 ? 'text-red-500' : 'text-emerald-600'}`}
+                            >
+                              {delta > 0 ? '↑' : '↓'} {formatCurrency(Math.abs(delta))}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-mute">—</span>
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
