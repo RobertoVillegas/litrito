@@ -55,6 +55,8 @@ const NEARBY_SCAN_CAP = 2000
 // 'too many system operations'. Small parallel batches keep the in-flight
 // count well under the cap while still finishing an 800-station view quickly.
 const PRICE_LOOKUP_CHUNK = 16
+const MIN_PLAUSIBLE_PRICE = 15
+const MAX_PLAUSIBLE_PRICE = 50
 
 type FuelType = Doc<'fuelPricesCurrent'>['fuelType']
 type ParsedMunicipality = { state: string | null; muni: string }
@@ -194,6 +196,10 @@ function summarizePrices(
     max,
     count: prices.length,
   }
+}
+
+function isPlausiblePrice(price: number): boolean {
+  return price >= MIN_PLAUSIBLE_PRICE && price <= MAX_PLAUSIBLE_PRICE
 }
 
 async function hydrateStationRows(
@@ -632,37 +638,55 @@ export const seoLocationOverview = query({
       ),
     )
 
-    const metrics = priceGroups.map((prices, i) =>
+    const curatedPriceGroups = priceGroups.map((prices) =>
+      prices.filter((price) => isPlausiblePrice(price.price)),
+    )
+    const rawMetrics = priceGroups.map((prices, i) =>
       summarizePrices(prices, fuelTypes[i]),
     )
-    const primaryPrices = priceGroups[0]
-      .slice()
-      .sort(
-        (a, b) =>
-          a.price - b.price ||
-          a.stationPermitNumber.localeCompare(b.stationPermitNumber),
-      )
-      .slice(0, 10)
+    const curatedMetrics = curatedPriceGroups.map((prices, i) =>
+      summarizePrices(prices, fuelTypes[i]),
+    )
+    const excludedPriceRows = priceGroups.reduce(
+      (total, prices) =>
+        total + prices.filter((price) => !isPlausiblePrice(price.price)).length,
+      0,
+    )
+    const buildTopRegular = async (prices: Doc<'fuelPricesCurrent'>[]) => {
+      const primaryPrices = prices
+        .slice()
+        .sort(
+          (a, b) =>
+            a.price - b.price ||
+            a.stationPermitNumber.localeCompare(b.stationPermitNumber),
+        )
+        .slice(0, 10)
 
-    const topRegular = (
-      await Promise.all(
-        primaryPrices.map(async (price) => {
-          const station = await ctx.db
-            .query('stations')
-            .withIndex('by_permit', (q) =>
-              q.eq('permitNumber', price.stationPermitNumber),
-            )
-            .unique()
-          return station
-            ? {
-                station,
-                price: price.price,
-                reportedAt: price.reportedAt,
-              }
-            : null
-        }),
-      )
-    ).filter((row): row is NonNullable<typeof row> => row !== null)
+      return (
+        await Promise.all(
+          primaryPrices.map(async (price) => {
+            const station = await ctx.db
+              .query('stations')
+              .withIndex('by_permit', (q) =>
+                q.eq('permitNumber', price.stationPermitNumber),
+              )
+              .unique()
+            return station
+              ? {
+                  station,
+                  price: price.price,
+                  reportedAt: price.reportedAt,
+                }
+              : null
+          }),
+        )
+      ).filter((row): row is NonNullable<typeof row> => row !== null)
+    }
+
+    const [curatedTopRegular, rawTopRegular] = await Promise.all([
+      buildTopRegular(curatedPriceGroups[0]),
+      buildTopRegular(priceGroups[0]),
+    ])
 
     const stationCount = municipality
       ? await ctx.db
@@ -700,9 +724,21 @@ export const seoLocationOverview = query({
             slug: slugifyLocationName(municipality.name),
           }
         : null,
-      metrics,
+      metrics: curatedMetrics,
       stationCount: stationCount.length,
-      topRegular,
+      topRegular: curatedTopRegular,
+      views: {
+        curated: {
+          metrics: curatedMetrics,
+          topRegular: curatedTopRegular,
+        },
+        raw: {
+          metrics: rawMetrics,
+          topRegular: rawTopRegular,
+        },
+      },
+      priceBand: { min: MIN_PLAUSIBLE_PRICE, max: MAX_PLAUSIBLE_PRICE },
+      excludedPriceRows,
       states: nav.states.map((s) => ({
         ...s,
         slug: slugifyLocationName(s.name),

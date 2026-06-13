@@ -1,4 +1,6 @@
-import { ArrowRight, BarChart3, Fuel, MapPin } from 'lucide-react'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+import { ArrowRight, BarChart3, Fuel, Info, MapPin } from 'lucide-react'
 import { SiteFooter } from './SiteFooter'
 
 type FuelType = 'regular' | 'premium' | 'diesel' | 'duba' | 'unknown'
@@ -11,22 +13,35 @@ type FuelMetric = {
   count: number
 }
 
+type MetricsView = 'curated' | 'raw'
+
+type TopRegularRow = {
+  station: {
+    permitNumber: string
+    name: string
+    address: string
+    municipalityName?: string
+    stateName?: string
+  }
+  price: number
+  reportedAt?: string
+}
+
 type LocationOverview = {
   state: { externalId: string; name: string; slug: string }
   municipality: { externalId: string; name: string; slug: string } | null
   metrics: FuelMetric[]
   stationCount: number
-  topRegular: {
-    station: {
-      permitNumber: string
-      name: string
-      address: string
-      municipalityName?: string
-      stateName?: string
+  topRegular: TopRegularRow[]
+  views?: Record<
+    MetricsView,
+    {
+      metrics: FuelMetric[]
+      topRegular: TopRegularRow[]
     }
-    price: number
-    reportedAt?: string
-  }[]
+  >
+  priceBand?: { min: number; max: number }
+  excludedPriceRows?: number
   states: { externalId: string; name: string; slug: string; count: number }[]
   municipalities: {
     externalId: string
@@ -60,10 +75,15 @@ function formatNumber(value: number): string {
 }
 
 export function LocationSeoPage({ data }: { data: LocationOverview }) {
+  const [view, setView] = useState<MetricsView>('curated')
+  const activeData = data.views?.[view] ?? {
+    metrics: data.metrics,
+    topRegular: data.topRegular,
+  }
   const placeName = data.municipality
     ? `${data.municipality.name}, ${data.state.name}`
     : data.state.name
-  const regularMetric = data.metrics.find((m) => m.fuelType === 'regular')
+  const regularMetric = activeData.metrics.find((m) => m.fuelType === 'regular')
   const exploreSearch = data.municipality
     ? `?state=${data.state.externalId}&municipality=${data.state.externalId}:${data.municipality.externalId}&fuels=regular&primary=regular&sort=price`
     : `?state=${data.state.externalId}&fuels=regular&primary=regular&sort=price`
@@ -101,6 +121,33 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
                 </a>
               )}
             </div>
+            <div className="mt-6 flex items-center gap-2">
+              <div className="inline-flex rounded-full border border-white/15 bg-white/[0.04] p-1">
+                <ViewButton
+                  active={view === 'curated'}
+                  onClick={() => setView('curated')}
+                >
+                  Curada
+                </ViewButton>
+                <ViewButton
+                  active={view === 'raw'}
+                  onClick={() => setView('raw')}
+                >
+                  Sin filtrar
+                </ViewButton>
+              </div>
+              {data.priceBand && (
+                <InfoTooltip
+                  text={`La vista curada excluye ${formatNumber(
+                    data.excludedPriceRows ?? 0,
+                  )} precios fuera de ${formatCurrency(
+                    data.priceBand.min,
+                  )}–${formatCurrency(
+                    data.priceBand.max,
+                  )} por litro en esta ubicación. "Sin filtrar" muestra los datos tal cual llegan.`}
+                />
+              )}
+            </div>
           </div>
 
           <div className="rounded-[6px] border border-white/15 bg-white/[0.04] p-5">
@@ -127,7 +174,7 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
           <h2 className="font-display text-2xl text-ink">Métricas por combustible</h2>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
-          {data.metrics.map((metric) => (
+          {activeData.metrics.map((metric) => (
             <article
               key={metric.fuelType}
               className="rounded-[6px] border border-line bg-white p-4"
@@ -166,13 +213,13 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
             Explorar más
           </a>
         </div>
-        {data.topRegular.length === 0 ? (
+        {activeData.topRegular.length === 0 ? (
           <div className="rounded-[6px] border border-line p-5 text-sm font-semibold text-body">
             No hay precios de regular vigentes para esta ubicación.
           </div>
         ) : (
           <div className="grid gap-2">
-            {data.topRegular.map((row, index) => (
+            {activeData.topRegular.map((row, index) => (
               <a
                 key={row.station.permitNumber}
                 href={`/estacion/${encodeURIComponent(row.station.permitNumber)}`}
@@ -242,6 +289,42 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
 
       <SiteFooter />
     </main>
+  )
+}
+
+function ViewButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1.5 text-xs font-black transition ${
+        active
+          ? 'bg-white text-ink'
+          : 'text-white/60 hover:bg-white/10 hover:text-white'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span
+      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 text-white/60"
+      title={text}
+      aria-label={text}
+    >
+      <Info className="h-4 w-4" />
+    </span>
   )
 }
 
