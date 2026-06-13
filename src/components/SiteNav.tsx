@@ -226,7 +226,7 @@ function SignedInPanel({
       <button
         type="button"
         onClick={() => void authClient.signOut()}
-        className="btn-pill w-full border border-line text-sm text-body hover:text-ink"
+        className="btn-pill btn-pill--outline-red w-full text-sm"
       >
         <LogOut className="h-4 w-4" />
         Cerrar sesion
