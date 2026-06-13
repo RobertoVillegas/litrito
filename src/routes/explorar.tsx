@@ -13,7 +13,8 @@ import { MapSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
-import type { MapBounds } from '../components/StationMap'
+import { boundsOfLatLngs } from '../components/StationMap'
+import type { MapBounds, MapFocus } from '../components/StationMap'
 
 const FUEL_VALUES = ['regular', 'premium', 'diesel', 'duba'] as const
 const SORT_VALUES = ['price', 'distance', 'name'] as const
@@ -354,16 +355,19 @@ function Explore() {
     loadMore: (n: number) => void
   }
 
-  const boundsArgs = mapBounds
-    ? {
-        fuelTypes: filters.fuelTypes.length > 0 ? filters.fuelTypes : undefined,
-        swLat: mapBounds.swLat,
-        swLon: mapBounds.swLon,
-        neLat: mapBounds.neLat,
-        neLon: mapBounds.neLon,
-        limit: 800,
-      }
-    : 'skip' as const
+  // In favorites-only mode the map is driven by the favorite stations directly
+  // (see below), so the viewport query is skipped to avoid wasted reads.
+  const boundsArgs =
+    mapBounds && !showFavoritesOnly
+      ? {
+          fuelTypes: filters.fuelTypes.length > 0 ? filters.fuelTypes : undefined,
+          swLat: mapBounds.swLat,
+          swLon: mapBounds.swLon,
+          neLat: mapBounds.neLat,
+          neLon: mapBounds.neLon,
+          limit: 800,
+        }
+      : ('skip' as const)
   const boundsResult = useConvexQuery(
     api.stations.listStationsInBounds,
     boundsArgs,
@@ -373,6 +377,29 @@ function Explore() {
         truncated: boolean
       }
     | undefined
+
+  // All favorite stations (with coords + prices), regardless of viewport.
+  // Powers both the favorites-only map and table so nothing is missed just
+  // because it falls outside the loaded pages or the current bounds.
+  // `favoriteSet` is a fresh Set each render; derive a content key so the query
+  // args stay referentially stable. Without this, the map's frequent re-renders
+  // hand Convex a new args object every time and the subscription never settles.
+  const favoriteKey = useMemo(() => [...favoriteSet].sort().join('|'), [favoriteSet])
+  const favoritePermits = useMemo(
+    () => (favoriteKey ? favoriteKey.split('|') : []),
+    [favoriteKey],
+  )
+  const favoriteArgs = useMemo(
+    () =>
+      favoritePermits.length
+        ? { permitNumbers: favoritePermits }
+        : ('skip' as const),
+    [favoritePermits],
+  )
+  const favoriteStations = useConvexQuery(
+    api.stations.getStationsByPermits,
+    favoriteArgs,
+  ) as StationFromQuery[] | undefined
 
   const latestRun = loaderData.latestRun
 
@@ -405,7 +432,26 @@ function Explore() {
     }))
   }, [paginated.results, filters.sortMode, userLoc.location])
 
+  const favoriteRows = useMemo<StationRow[]>(() => {
+    if (!favoriteStations) return []
+    return favoriteStations.map((row) => ({
+      station: {
+        permitNumber: row.station.permitNumber,
+        name: row.station.name,
+        address: row.station.address,
+        municipalityName: row.station.municipalityName,
+        stateName: row.station.stateName,
+        latitude: row.station.latitude,
+        longitude: row.station.longitude,
+      },
+      prices: row.prices as Partial<Record<FuelType, { price: number }>>,
+      highlightedPrice: row.highlightedPrice,
+      distanceKm: row.distanceKm,
+    }))
+  }, [favoriteStations])
+
   const mapRows = useMemo<StationRow[]>(() => {
+    if (showFavoritesOnly) return favoriteRows
     if (!boundsResult) return []
     return boundsResult.stations.map((row) => ({
       station: {
@@ -421,12 +467,41 @@ function Explore() {
       highlightedPrice: row.highlightedPrice,
       distanceKm: row.distanceKm,
     }))
-  }, [boundsResult])
+  }, [boundsResult, showFavoritesOnly, favoriteRows])
 
-  const tableRows = useMemo(() => {
-    if (!showFavoritesOnly) return visibleRows
-    return visibleRows.filter((r) => favoriteSet.has(r.station.permitNumber))
-  }, [visibleRows, showFavoritesOnly, favoriteSet])
+  const tableRows = showFavoritesOnly ? favoriteRows : visibleRows
+
+  // Map framing priority: an explicit favorites view, then your own location,
+  // then the selected state's footprint. Each yields a stable key so the map
+  // re-frames only when the intent actually changes.
+  const mapFocus = useMemo<MapFocus | null>(() => {
+    if (showFavoritesOnly) {
+      const b = boundsOfLatLngs(favoriteRows.map((r) => r.station))
+      return b ? { key: 'favorites', type: 'bounds', bounds: b } : null
+    }
+    if (userLoc.hasPreciseLocation && userLoc.location) {
+      const { latitude, longitude } = userLoc.location
+      return {
+        key: `user:${latitude.toFixed(3)},${longitude.toFixed(3)}`,
+        type: 'point',
+        lat: latitude,
+        lon: longitude,
+      }
+    }
+    const stateId = filters.stateIds[0]
+    if (stateId) {
+      const b = boundsOfLatLngs(visibleRows.map((r) => r.station))
+      if (b) return { key: `state:${stateId}`, type: 'bounds', bounds: b }
+    }
+    return null
+  }, [
+    showFavoritesOnly,
+    favoriteRows,
+    userLoc.hasPreciseLocation,
+    userLoc.location,
+    filters.stateIds,
+    visibleRows,
+  ])
 
   async function handleToggleFavorite(permitNumber: string) {
     const result = await toggleFavorite(permitNumber)
@@ -559,9 +634,17 @@ function Explore() {
           <div className="border-b border-line bg-canvas-soft p-4">
             <h3 className="font-display text-lg text-ink">Mapa</h3>
             <p className="mt-1 text-xs font-semibold text-body">
-              {boundsResult
-                ? `${boundsResult.stations.length} estaciones visibles${boundsResult.truncated ? ' (acércate para más)' : ''}`
-                : <Skeleton className="h-4 w-44" />}
+              {showFavoritesOnly ? (
+                favoriteStations || favoritePermits.length === 0 ? (
+                  `${mapRows.length} ${mapRows.length === 1 ? 'favorita' : 'favoritas'} en el mapa`
+                ) : (
+                  <Skeleton className="h-4 w-44" />
+                )
+              ) : boundsResult ? (
+                `${boundsResult.stations.length} estaciones visibles${boundsResult.truncated ? ' (acércate para más)' : ''}`
+              ) : (
+                <Skeleton className="h-4 w-44" />
+              )}
             </p>
           </div>
           <ClientOnly
@@ -580,8 +663,8 @@ function Explore() {
                   primaryFuel={filters.primaryFuel}
                   fuelTypes={filters.fuelTypes}
                   userLocation={userLoc.location}
-                  truncated={boundsResult?.truncated}
-                  autoCenterOnUserLocation={userLoc.hasPreciseLocation}
+                  truncated={!showFavoritesOnly && boundsResult?.truncated}
+                  focus={mapFocus}
                   initialBounds={mapBounds}
                   onMoveEnd={setMapBounds}
                   onLocateClick={() => {
@@ -602,9 +685,13 @@ function Explore() {
           rows={tableRows}
           fuelTypes={filters.fuelTypes}
           sortMode={filters.sortMode}
-          isLoading={!paginated.results}
-          canLoadMore={paginated.status === 'CanLoadMore'}
-          isLoadingMore={paginated.status === 'LoadingMore'}
+          isLoading={
+            showFavoritesOnly
+              ? favoriteStations === undefined && favoritePermits.length > 0
+              : !paginated.results
+          }
+          canLoadMore={!showFavoritesOnly && paginated.status === 'CanLoadMore'}
+          isLoadingMore={!showFavoritesOnly && paginated.status === 'LoadingMore'}
           onLoadMore={() => paginated.loadMore(PAGE_SIZE)}
           onSortModeChange={(sortMode) => setFilters((prev) => ({ ...prev, sortMode }))}
           onFuelSortChange={(fuelType) =>

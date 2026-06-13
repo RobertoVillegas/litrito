@@ -35,6 +35,48 @@ export type MapBounds = {
   neLon: number
 }
 
+// A one-shot view target the map applies whenever its `key` changes: either a
+// point (center + zoom in) or a bounding box to fit. Drives "focus on you",
+// "focus on the selected state", and "focus on your favorites".
+export type MapFocus =
+  | { key: string; type: 'point'; lat: number; lon: number }
+  | { key: string; type: 'bounds'; bounds: MapBounds }
+
+// Bounding box around a set of coordinates; null when none have lat/lng.
+export function boundsOfLatLngs(
+  coords: { latitude?: number; longitude?: number }[],
+): MapBounds | null {
+  let swLat = Infinity
+  let swLon = Infinity
+  let neLat = -Infinity
+  let neLon = -Infinity
+  let count = 0
+  for (const c of coords) {
+    if (typeof c.latitude !== 'number' || typeof c.longitude !== 'number') continue
+    count += 1
+    swLat = Math.min(swLat, c.latitude)
+    neLat = Math.max(neLat, c.latitude)
+    swLon = Math.min(swLon, c.longitude)
+    neLon = Math.max(neLon, c.longitude)
+  }
+  if (count === 0) return null
+  if (swLat === neLat && swLon === neLon) {
+    // Single point: pad so fitBounds zooms to a neighbourhood, not max zoom.
+    swLat -= 0.03
+    neLat += 0.03
+    swLon -= 0.03
+    neLon += 0.03
+  }
+  return { swLat, swLon, neLat, neLon }
+}
+
+function boundsExpr(b: MapBounds): LatLngBoundsExpression {
+  return [
+    [b.swLat, b.swLon],
+    [b.neLat, b.neLon],
+  ]
+}
+
 type UserLocation = {
   latitude: number
   longitude: number
@@ -47,6 +89,7 @@ type Props = {
   userLocation?: UserLocation | null
   truncated?: boolean
   autoCenterOnUserLocation?: boolean
+  focus?: MapFocus | null
   initialBounds?: MapBounds | null
   markerMode?: 'price' | 'rank'
   onMoveEnd?: (bounds: MapBounds) => void
@@ -169,23 +212,25 @@ function FitInitialBounds({ bounds }: { bounds: LatLngBoundsExpression | null })
   return null
 }
 
-function AutoCenterOnUserLocation({
-  location,
-  enabled,
-}: {
-  location: LatLngTuple | null
-  enabled: boolean
-}) {
+// Applies a focus target once per distinct `key`. Selecting a state, toggling
+// favorites, or obtaining your precise location each produce a new key, so the
+// map re-frames exactly once for that intent and then leaves the user in
+// control of panning/zooming.
+function FocusController({ focus }: { focus: MapFocus | null }) {
   const map = useMap()
-  const lastCenteredRef = useRef<string | null>(null)
+  const lastKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!enabled || !location) return
-    const key = `${location[0].toFixed(6)},${location[1].toFixed(6)}`
-    if (lastCenteredRef.current === key) return
-    lastCenteredRef.current = key
-    map.flyTo(location, Math.max(map.getZoom(), 14), { duration: 0.7 })
-  }, [enabled, location, map])
+    if (!focus || lastKeyRef.current === focus.key) return
+    lastKeyRef.current = focus.key
+    if (focus.type === 'point') {
+      map.flyTo([focus.lat, focus.lon], Math.max(map.getZoom(), 14), {
+        duration: 0.7,
+      })
+    } else {
+      map.fitBounds(boundsExpr(focus.bounds), { padding: [24, 24], maxZoom: 13 })
+    }
+  }, [focus, map])
 
   return null
 }
@@ -281,6 +326,7 @@ export function StationMap({
   userLocation,
   truncated,
   autoCenterOnUserLocation,
+  focus,
   initialBounds,
   markerMode = 'price',
   onMoveEnd,
@@ -321,6 +367,20 @@ export function StationMap({
     ? [userLocation.latitude, userLocation.longitude]
     : null
 
+  // An explicit `focus` wins; otherwise `autoCenterOnUserLocation` falls back to
+  // framing the user. The coordinate-derived key re-centers if the location
+  // sharpens (IP → precise) but ignores sub-100m GPS jitter.
+  const effectiveFocus: MapFocus | null =
+    focus ??
+    (autoCenterOnUserLocation && userLatLng
+      ? {
+          key: `user:${userLatLng[0].toFixed(3)},${userLatLng[1].toFixed(3)}`,
+          type: 'point',
+          lat: userLatLng[0],
+          lon: userLatLng[1],
+        }
+      : null)
+
   return (
     <div className="relative">
       <div className="h-[55vh] min-h-[320px] max-h-[640px] overflow-hidden rounded-md border border-slate-200">
@@ -339,13 +399,12 @@ export function StationMap({
             subdomains={['a', 'b', 'c', 'd']}
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
-          {bounds && <FitInitialBounds bounds={bounds} />}
-          <AutoCenterOnUserLocation
-            location={userLatLng}
-            enabled={Boolean(autoCenterOnUserLocation)}
-          />
+          {bounds && !effectiveFocus && <FitInitialBounds bounds={bounds} />}
+          <FocusController focus={effectiveFocus} />
           {onMoveEnd && <MoveWatcher onMoveEnd={onMoveEnd} />}
-          <LocateControl location={userLatLng} onClick={onLocateClick} />
+          {(userLatLng || onLocateClick) && (
+            <LocateControl location={userLatLng} onClick={onLocateClick} />
+          )}
           <LegendControl primaryFuel={primaryFuel} hasFuelPrices={allPrices.length > 0} />
           {userLatLng && <Marker position={userLatLng} icon={USER_ICON} />}
           <MarkerClusterGroup
@@ -360,6 +419,7 @@ export function StationMap({
               const displayPrice = hasFuelPrice ? fuelPrice : row.highlightedPrice
               const station = row.station
               const directionsHref = `https://www.google.com/maps/dir/?api=1&destination=${row.latLng[0]},${row.latLng[1]}`
+              const detailHref = `/estacion/${encodeURIComponent(station.permitNumber)}`
               const visibleFuels = fuelTypes.filter((ft) => row.prices[ft]?.price != null)
               return (
                 <Marker
@@ -374,7 +434,9 @@ export function StationMap({
                 >
                   <Popup>
                     <div className="litrito-popup">
-                      <div className="litrito-popup__title">{station.name}</div>
+                      <a className="litrito-popup__title" href={detailHref}>
+                        {station.name}
+                      </a>
                       <div className="litrito-popup__addr">{station.address}</div>
                       {(station.municipalityName || station.stateName) && (
                         <div className="litrito-popup__loc">
@@ -401,14 +463,19 @@ export function StationMap({
                           <span className="litrito-popup__amount">Sin precios</span>
                         </div>
                       )}
-                      <a
-                        className="litrito-popup__cta"
-                        href={directionsHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Cómo llegar
-                      </a>
+                      <div className="litrito-popup__actions">
+                        <a className="litrito-popup__cta litrito-popup__cta--ghost" href={detailHref}>
+                          Ver detalle
+                        </a>
+                        <a
+                          className="litrito-popup__cta"
+                          href={directionsHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Cómo llegar
+                        </a>
+                      </div>
                     </div>
                   </Popup>
                 </Marker>

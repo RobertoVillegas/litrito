@@ -326,14 +326,16 @@ function ResultsPanel({
 }) {
   return (
     <div className="self-start rounded-[6px] border border-white/15 bg-white/[0.04] p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <div className="eyebrow text-white/45">Top 10</div>
-          <h2 className="font-display mt-1 text-2xl text-white">
+          {/* clamp keeps the heading on a single line across device widths;
+              tweak the min/preferred/max here to adjust the fit. */}
+          <h2 className="font-display mt-1 whitespace-nowrap text-[clamp(1.05rem,4.5vw,1.5rem)] text-white">
             Mejores cerca de ti
           </h2>
         </div>
-        <div className="rounded-full border border-white/15 px-3 py-1 text-xs font-black text-white/70">
+        <div className="shrink-0 rounded-full border border-white/15 px-3 py-1 text-xs font-black text-white/70">
           {fuelLabel(fuelType)}
         </div>
       </div>

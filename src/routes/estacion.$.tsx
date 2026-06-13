@@ -205,10 +205,10 @@ function StationDetail() {
           <p className="mt-3 text-xs font-semibold tracking-wide text-white/40">
             Actualizado {formatDate(station.lastSeenAt, true)}
           </p>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
             {directionsHref && (
               <a
-                className="btn-pill btn-pill--primary"
+                className="btn-pill btn-pill--primary w-full sm:w-auto"
                 href={directionsHref}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -223,11 +223,11 @@ function StationDetail() {
                 const result = await toggleFavorite(permitNumber)
                 setFavMsg(result.message)
               }}
-              className={
+              className={`w-full sm:w-auto ${
                 isFavorite(permitNumber)
                   ? 'btn-pill btn-pill--primary'
                   : 'btn-pill border border-white/40 text-white hover:bg-white/10'
-              }
+              }`}
             >
               <Star
                 className="h-4 w-4"
@@ -245,7 +245,7 @@ function StationDetail() {
                   onDone: setShareMsg,
                 })
               }
-              className="btn-pill border border-white/40 text-white hover:bg-white/10"
+              className="btn-pill col-span-2 w-full border border-white/40 text-white hover:bg-white/10 sm:col-auto sm:w-auto"
             >
               {shareMsg ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
               Compartir

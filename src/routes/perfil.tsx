@@ -1,13 +1,28 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { useMemo } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import Avatar from 'boring-avatars'
-import { LogOut, Star } from 'lucide-react'
+import { LogOut, MapPin, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 import { useFavorites } from '#/lib/useFavorites'
+import { MapSkeleton } from '../components/Skeleton'
 import { StationTable, type StationRow } from '../components/StationTable'
+import { boundsOfLatLngs } from '../components/StationMap'
+import type { MapFocus } from '../components/StationMap'
 import type { FuelType } from '../components/StationFilters'
+
+const StationMap = lazy(() =>
+  import('../components/StationMap').then((m) => ({ default: m.StationMap })),
+)
+
+function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return <>{fallback ?? null}</>
+  return <>{children}</>
+}
 
 export const Route = createFileRoute('/perfil')({ component: Profile })
 
@@ -56,6 +71,21 @@ function Profile() {
       })),
     [favoriteRows],
   )
+
+  const mappableRows = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          typeof r.station.latitude === 'number' &&
+          typeof r.station.longitude === 'number',
+      ),
+    [rows],
+  )
+
+  const mapFocus = useMemo<MapFocus | null>(() => {
+    const b = boundsOfLatLngs(mappableRows.map((r) => r.station))
+    return b ? { key: `fav:${mappableRows.length}`, type: 'bounds', bounds: b } : null
+  }, [mappableRows])
 
   return (
     <main className="min-h-screen">
@@ -124,17 +154,42 @@ function Profile() {
             </Link>
           </div>
         ) : (
-          <StationTable
-            rows={rows}
-            fuelTypes={FUEL_TYPES}
-            sortMode="price"
-            isLoading={favoriteRows === undefined}
-            canLoadMore={false}
-            isLoadingMore={false}
-            onLoadMore={() => undefined}
-            onToggleFavorite={(p) => void toggleFavorite(p)}
-            favoriteSet={favoriteSet}
-          />
+          <>
+            {mappableRows.length > 0 && (
+              <div className="overflow-hidden rounded-[6px] border border-line bg-white">
+                <div className="flex items-center gap-2 border-b border-line bg-canvas-soft p-4">
+                  <MapPin className="h-4 w-4 text-brand" />
+                  <h3 className="font-display text-lg text-ink">
+                    Tus favoritas en el mapa
+                  </h3>
+                </div>
+                <ClientOnly fallback={<MapSkeleton className="m-3" />}>
+                  <Suspense fallback={<MapSkeleton className="m-3" />}>
+                    <div className="p-3">
+                      <StationMap
+                        rows={rows}
+                        primaryFuel="regular"
+                        fuelTypes={FUEL_TYPES}
+                        focus={mapFocus}
+                      />
+                    </div>
+                  </Suspense>
+                </ClientOnly>
+              </div>
+            )}
+
+            <StationTable
+              rows={rows}
+              fuelTypes={FUEL_TYPES}
+              sortMode="price"
+              isLoading={favoriteRows === undefined}
+              canLoadMore={false}
+              isLoadingMore={false}
+              onLoadMore={() => undefined}
+              onToggleFavorite={(p) => void toggleFavorite(p)}
+              favoriteSet={favoriteSet}
+            />
+          </>
         )}
       </section>
     </main>
