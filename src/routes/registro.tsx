@@ -47,26 +47,36 @@ function SignUp() {
         </span>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-3">
+      <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
         <input
+          id="signup-name"
+          name="name"
           type="text"
+          autoComplete="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Nombre (opcional)"
           className={authInputClass}
         />
         <input
+          id="signup-email"
+          name="email"
           type="email"
           required
+          autoComplete="email"
+          inputMode="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
           className={authInputClass}
         />
         <input
+          id="signup-password"
+          name="password"
           type="password"
           required
           minLength={8}
+          autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Contraseña (mínimo 8 caracteres)"

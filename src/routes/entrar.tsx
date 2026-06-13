@@ -47,18 +47,25 @@ function SignIn() {
         </>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-3">
+      <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
         <input
+          id="signin-email"
+          name="email"
           type="email"
           required
+          autoComplete="username"
+          inputMode="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
           className={authInputClass}
         />
         <input
+          id="signin-password"
+          name="password"
           type="password"
           required
+          autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Contraseña"

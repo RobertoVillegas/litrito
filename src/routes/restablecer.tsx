@@ -59,11 +59,14 @@ function ResetPassword() {
           Contraseña actualizada. Te llevamos a iniciar sesión…
         </p>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
           <input
+            id="reset-password"
+            name="new-password"
             type="password"
             required
             minLength={8}
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Nueva contraseña (mínimo 8)"

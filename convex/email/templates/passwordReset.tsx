@@ -51,6 +51,10 @@ export function PasswordResetEmail({
             Si no solicitaste este cambio, puedes ignorar este correo.
           </Text>
           <Text style={styles.small}>
+            Litrito es parte de athas.mx, donde construimos soluciones digitales
+            a la medida.
+          </Text>
+          <Text style={styles.small}>
             Si el botón no funciona, abre este enlace: {resetUrl}
           </Text>
         </Container>

@@ -52,10 +52,14 @@ function ForgotPassword() {
           llegará un correo con el enlace para restablecer tu contraseña.
         </p>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
           <input
+            id="recover-email"
+            name="email"
             type="email"
             required
+            autoComplete="username"
+            inputMode="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
