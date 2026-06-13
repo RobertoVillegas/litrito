@@ -653,20 +653,20 @@ function PriceHistoryList({ history }: { history: HistoryEntry[] }) {
                     return (
                       <td key={f} className="whitespace-nowrap px-4 py-2.5">
                         {price != null ? (
-                          // Fixed-width delta slot keeps every price right-aligned
-                          // at the same column position regardless of the badge.
+                          // Fixed-width delta slot on the left keeps every price
+                          // right-aligned at the same column position.
                           <div className="flex items-center justify-end gap-2">
+                            <span className="flex w-16 justify-end">
+                              <DeltaBadge delta={delta} />
+                            </span>
                             <span className="font-bold tabular-nums text-ink">
                               {formatCurrency(price)}
-                            </span>
-                            <span className="flex w-16 justify-start">
-                              <DeltaBadge delta={delta} />
                             </span>
                           </div>
                         ) : (
                           <div className="flex items-center justify-end gap-2">
-                            <span className="text-mute">—</span>
                             <span className="w-16" />
+                            <span className="text-mute">—</span>
                           </div>
                         )}
                       </td>
@@ -701,10 +701,10 @@ function PriceHistoryList({ history }: { history: HistoryEntry[] }) {
                       {FUEL_META[f].label}
                     </span>
                     <span className="flex items-center gap-1.5">
+                      <DeltaBadge delta={delta} />
                       <span className="font-bold tabular-nums text-ink">
                         {formatCurrency(price)}
                       </span>
-                      <DeltaBadge delta={delta} />
                     </span>
                   </div>
                 )
