@@ -70,13 +70,6 @@ export function boundsOfLatLngs(
   return { swLat, swLon, neLat, neLon }
 }
 
-function boundsExpr(b: MapBounds): LatLngBoundsExpression {
-  return [
-    [b.swLat, b.swLon],
-    [b.neLat, b.neLon],
-  ]
-}
-
 type UserLocation = {
   latitude: number
   longitude: number
@@ -216,19 +209,33 @@ function FitInitialBounds({ bounds }: { bounds: LatLngBoundsExpression | null })
 // favorites, or obtaining your precise location each produce a new key, so the
 // map re-frames exactly once for that intent and then leaves the user in
 // control of panning/zooming.
+//
+// For bounds targets the re-frame is conditional ("fit-if-needed"): if the
+// target box is already within the current viewport, the map stays put. This
+// avoids the jarring zoom-out when, say, your favorite is already on screen.
 function FocusController({ focus }: { focus: MapFocus | null }) {
   const map = useMap()
   const lastKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!focus || lastKeyRef.current === focus.key) return
+    // The very first focus always frames its target (e.g. the default Mexico
+    // view contains everything, so a "contains" check would wrongly skip it).
+    const isInitialFocus = lastKeyRef.current === null
     lastKeyRef.current = focus.key
     if (focus.type === 'point') {
       map.flyTo([focus.lat, focus.lon], Math.max(map.getZoom(), 14), {
         duration: 0.7,
       })
     } else {
-      map.fitBounds(boundsExpr(focus.bounds), { padding: [24, 24], maxZoom: 13 })
+      const target = L.latLngBounds(
+        [focus.bounds.swLat, focus.bounds.swLon],
+        [focus.bounds.neLat, focus.bounds.neLon],
+      )
+      // On later focus changes, skip the re-frame when the target is already
+      // fully on screen — avoids zooming out just to "fit" what you can see.
+      if (!isInitialFocus && map.getBounds().contains(target)) return
+      map.fitBounds(target, { padding: [24, 24], maxZoom: 13 })
     }
   }, [focus, map])
 
