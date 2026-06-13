@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts'
 import { api } from '../../convex/_generated/api'
+import { FUEL_META } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
 import { Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
@@ -31,12 +32,6 @@ export const Route = createFileRoute('/metricas')({
 })
 
 const FUELS = ['regular', 'premium', 'diesel', 'duba'] as const
-const FUEL_META: Record<string, { label: string; color: string }> = {
-  regular: { label: 'Regular', color: '#10b981' },
-  premium: { label: 'Premium', color: '#f59e0b' },
-  diesel: { label: 'Diésel', color: '#475569' },
-  duba: { label: 'Diésel bajo azufre', color: '#0284c7' },
-}
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-MX', {

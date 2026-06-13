@@ -1,9 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ArrowRight, BarChart3, Fuel, Info, MapPin } from 'lucide-react'
+import {
+  Bar,
+  BarChart,
+  Cell,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import type { TooltipContentProps } from 'recharts'
+import { FUEL_META } from '#/lib/fuel'
+import type { FuelType } from '#/lib/fuel'
 import { SiteFooter } from './SiteFooter'
-
-type FuelType = 'regular' | 'premium' | 'diesel' | 'duba' | 'unknown'
 
 type FuelMetric = {
   fuelType: FuelType
@@ -52,13 +63,6 @@ type LocationOverview = {
   }[]
 }
 
-const fuelLabels: Record<FuelType, string> = {
-  regular: 'Regular',
-  premium: 'Premium',
-  diesel: 'Diésel',
-  duba: 'DUBA',
-  unknown: 'Otro',
-}
 
 function formatCurrency(value: number | null): string {
   if (value == null) return 'Sin datos'
@@ -178,10 +182,11 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
             <article
               key={metric.fuelType}
               className="rounded-[6px] border border-line bg-white p-4"
+              style={{ borderTopColor: FUEL_META[metric.fuelType].color, borderTopWidth: 3 }}
             >
               <div className="flex items-center gap-2 text-sm font-black text-ink">
-                <Fuel className="h-4 w-4 text-brand" />
-                {fuelLabels[metric.fuelType]}
+                <Fuel className="h-4 w-4" style={{ color: FUEL_META[metric.fuelType].color }} />
+                {FUEL_META[metric.fuelType].label}
               </div>
               <div className="mt-3 text-2xl font-black text-ink">
                 {formatCurrency(metric.average)}
@@ -194,6 +199,7 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
             </article>
           ))}
         </div>
+        <FuelChart metrics={activeData.metrics} />
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-4 pb-10 sm:px-6 lg:px-8">
@@ -218,32 +224,35 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
             No hay precios de regular vigentes para esta ubicación.
           </div>
         ) : (
-          <div className="grid gap-2">
-            {activeData.topRegular.map((row, index) => (
-              <a
-                key={row.station.permitNumber}
-                href={`/estacion/${encodeURIComponent(row.station.permitNumber)}`}
-                className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-[6px] border border-line p-3 transition hover:border-ink"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-sm font-black text-white">
-                  {index + 1}
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-black text-ink">
-                    {row.station.name}
+          <>
+            <StationsChart stations={activeData.topRegular} />
+            <div className="mt-3 grid gap-2">
+              {activeData.topRegular.map((row, index) => (
+                <a
+                  key={row.station.permitNumber}
+                  href={`/estacion/${encodeURIComponent(row.station.permitNumber)}`}
+                  className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-[6px] border border-line p-3 transition hover:border-ink"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-sm font-black text-white">
+                    {index + 1}
                   </div>
-                  <div className="mt-0.5 truncate text-xs font-semibold text-body">
-                    {[row.station.municipalityName, row.station.stateName]
-                      .filter(Boolean)
-                      .join(', ')}
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-black text-ink">
+                      {row.station.name}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs font-semibold text-body">
+                      {[row.station.municipalityName, row.station.stateName]
+                        .filter(Boolean)
+                        .join(', ')}
+                    </div>
                   </div>
-                </div>
-                <div className="text-right text-base font-black text-ink">
-                  {formatCurrency(row.price)}
-                </div>
-              </a>
-            ))}
-          </div>
+                  <div className="text-right text-base font-black text-ink">
+                    {formatCurrency(row.price)}
+                  </div>
+                </a>
+              ))}
+            </div>
+          </>
         )}
       </section>
 
@@ -289,6 +298,168 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
 
       <SiteFooter />
     </main>
+  )
+}
+
+function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return <>{fallback ?? null}</>
+  return <>{children}</>
+}
+
+type FuelChartEntry = {
+  label: string
+  fuelType: FuelType
+  avg: number | null
+  min: number | null
+  max: number | null
+  count: number
+}
+
+function FuelTooltip({ active, payload }: TooltipContentProps) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload as FuelChartEntry
+  return (
+    <div className="rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
+      <div className="mb-1.5 font-black" style={{ color: FUEL_META[d.fuelType].color }}>
+        {d.label}
+      </div>
+      <div className="space-y-0.5 text-body">
+        <div>
+          Promedio: <span className="font-bold text-ink">{formatCurrency(d.avg)}</span>
+        </div>
+        {d.min != null && (
+          <div>
+            Mínimo: <span className="font-bold text-ink">{formatCurrency(d.min)}</span>
+          </div>
+        )}
+        {d.max != null && (
+          <div>
+            Máximo: <span className="font-bold text-ink">{formatCurrency(d.max)}</span>
+          </div>
+        )}
+        <div>
+          Reportes: <span className="font-bold text-ink">{formatNumber(d.count)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FuelChart({ metrics }: { metrics: FuelMetric[] }) {
+  const chartData: FuelChartEntry[] = metrics
+    .filter((m) => m.average != null)
+    .map((m) => ({
+      label: FUEL_META[m.fuelType].label,
+      fuelType: m.fuelType,
+      avg: m.average,
+      min: m.min,
+      max: m.max,
+      count: m.count,
+    }))
+
+  if (chartData.length === 0) return null
+
+  return (
+    <div className="mt-4 rounded-[6px] border border-line p-4">
+      <div className="eyebrow mb-3 text-body">Comparativa de precios promedio</div>
+      <ClientOnly fallback={<div className="h-[180px]" />}>
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={chartData} margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 12, fill: '#25282b', fontWeight: 700 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              domain={['dataMin - 1', 'dataMax + 1']}
+              tick={{ fontSize: 10, fill: '#8c8c8c' }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v: number) =>
+                new Intl.NumberFormat('es-MX', {
+                  style: 'currency',
+                  currency: 'MXN',
+                  minimumFractionDigits: 0,
+                }).format(v)
+              }
+              width={44}
+            />
+            <Tooltip cursor={{ fill: '#f5f5f5' }} content={FuelTooltip} />
+            <Bar dataKey="avg" radius={[4, 4, 0, 0]}>
+              {chartData.map((entry, i) => (
+                <Cell key={i} fill={FUEL_META[entry.fuelType].color} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </ClientOnly>
+    </div>
+  )
+}
+
+type StationChartEntry = {
+  name: string
+  fullName: string
+  price: number
+  address: string
+}
+
+function StationTooltip({ active, payload }: TooltipContentProps) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload as StationChartEntry
+  return (
+    <div className="rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
+      <div className="mb-1 font-black text-ink">{d.fullName}</div>
+      <div className="text-body">
+        Precio: <span className="font-bold text-ink">{formatCurrency(d.price)}</span>
+      </div>
+      {d.address && <div className="mt-0.5 text-body">{d.address}</div>}
+    </div>
+  )
+}
+
+function StationsChart({ stations }: { stations: TopRegularRow[] }) {
+  const chartData: StationChartEntry[] = stations.map((s) => ({
+    name: s.station.name.length > 24 ? `${s.station.name.slice(0, 24)}…` : s.station.name,
+    fullName: s.station.name,
+    price: s.price,
+    address: s.station.address,
+  }))
+
+  return (
+    <div className="rounded-[6px] border border-line p-4">
+      <ClientOnly fallback={<div style={{ height: Math.max(160, stations.length * 42) }} />}>
+        <ResponsiveContainer width="100%" height={Math.max(160, stations.length * 42)}>
+          <BarChart
+            data={chartData}
+            layout="vertical"
+            margin={{ top: 4, right: 72, bottom: 4, left: 8 }}
+          >
+            <XAxis type="number" domain={['dataMin - 0.3', 'dataMax + 0.3']} hide />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={180}
+              tick={{ fontSize: 11, fill: '#25282b' }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip cursor={{ fill: '#f5f5f5' }} content={StationTooltip} />
+            <Bar dataKey="price" fill="#e60000" radius={[0, 4, 4, 0]}>
+              <LabelList
+                dataKey="price"
+                position="right"
+                formatter={(v) => formatCurrency(v as number)}
+                style={{ fontSize: 11, fill: '#25282b', fontWeight: 700 }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </ClientOnly>
+    </div>
   )
 }
 

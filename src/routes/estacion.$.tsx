@@ -5,6 +5,8 @@ import type { ReactNode } from 'react'
 import { ArrowLeft, Check, MapPin, Navigation, Share2, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { useFavorites } from '#/lib/useFavorites'
+import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
+import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
 import { DarkSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
@@ -73,17 +75,6 @@ export const Route = createFileRoute('/estacion/$')({
   },
 })
 
-type FuelType = 'regular' | 'premium' | 'diesel' | 'duba' | 'unknown'
-
-const FUEL_META: Record<FuelType, { label: string; color: string }> = {
-  regular: { label: 'Regular', color: '#10b981' },
-  premium: { label: 'Premium', color: '#f59e0b' },
-  diesel: { label: 'Diésel', color: '#475569' },
-  duba: { label: 'Diésel bajo azufre', color: '#0284c7' },
-  unknown: { label: 'Otro', color: '#bebebe' },
-}
-
-const FUEL_ORDER: FuelType[] = ['regular', 'premium', 'diesel', 'duba', 'unknown']
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-MX', {
