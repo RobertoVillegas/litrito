@@ -1,7 +1,6 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import Avatar from 'boring-avatars'
 import { LogOut, MapPin, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
@@ -17,13 +16,6 @@ import type { FuelType } from '../components/StationFilters'
 const StationMap = lazy(() =>
   import('../components/StationMap').then((m) => ({ default: m.StationMap })),
 )
-
-function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  if (!mounted) return <>{fallback ?? null}</>
-  return <>{children}</>
-}
 
 export const Route = createFileRoute('/perfil')({
   head: () => ({

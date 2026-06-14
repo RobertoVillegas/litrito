@@ -1,7 +1,6 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { ArrowRight, Fuel, LocateFixed, MapPin, Navigation } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
@@ -67,13 +66,6 @@ export const Route = createFileRoute('/')({
     />
   ),
 })
-
-function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  if (!mounted) return <>{fallback ?? null}</>
-  return <>{children}</>
-}
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-MX', {

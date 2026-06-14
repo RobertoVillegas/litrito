@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute } from '@tanstack/react-router'
 import { usePaginatedQuery, useQuery as useConvexQuery } from 'convex/react'
 import { BadgeCent, DatabaseZap, Fuel, RefreshCw, Star } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
@@ -111,13 +111,6 @@ function ExploreErrorBoundary({
 const StationMap = lazy(() =>
   import('../components/StationMap').then((m) => ({ default: m.StationMap })),
 )
-
-function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  if (!mounted) return <>{fallback ?? null}</>
-  return <>{children}</>
-}
 
 const PAGE_SIZE = 50
 

@@ -1,7 +1,7 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
 import { Popover } from '@base-ui/react/popover'
 import { useQuery } from 'convex/react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { ArrowLeft, Info, TrendingDown, TrendingUp } from 'lucide-react'
 import {
@@ -106,13 +106,6 @@ type MetricsBundle = {
 }
 
 type MetricsView = 'curated' | 'raw'
-
-function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  if (!mounted) return <>{fallback ?? null}</>
-  return <>{children}</>
-}
 
 function Metrics() {
   const bundle = useQuery(api.metrics.getMetrics, {}) as MetricsBundle | undefined

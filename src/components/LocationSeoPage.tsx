@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { ClientOnly } from '@tanstack/react-router'
 import { ArrowRight, BarChart3, Fuel, Info, MapPin } from 'lucide-react'
 import {
   Bar,
@@ -297,13 +298,6 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
       <SiteFooter />
     </main>
   )
-}
-
-function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  if (!mounted) return <>{fallback ?? null}</>
-  return <>{children}</>
 }
 
 type FuelChartEntry = {

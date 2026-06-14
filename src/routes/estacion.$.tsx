@@ -1,7 +1,6 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { lazy, Suspense, useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { ArrowLeft, Check, Info, MapPin, Navigation, Share2, Star } from 'lucide-react'
 import {
   CartesianGrid,
@@ -27,13 +26,6 @@ import { track } from '#/lib/analytics'
 const StationMiniMap = lazy(() =>
   import('../components/StationMiniMap').then((m) => ({ default: m.StationMiniMap })),
 )
-
-function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  if (!mounted) return <>{fallback ?? null}</>
-  return <>{children}</>
-}
 
 export const Route = createFileRoute('/estacion/$')({
   loader: async ({ context, params }) => {
