@@ -24,6 +24,7 @@ import type * as metrics from "../metrics.js";
 import type * as normalization from "../normalization.js";
 import type * as prices from "../prices.js";
 import type * as stations from "../stations.js";
+import type * as validators from "../validators.js";
 
 import type {
   ApiFromModules,
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   normalization: typeof normalization;
   prices: typeof prices;
   stations: typeof stations;
+  validators: typeof validators;
 }>;
 
 /**
