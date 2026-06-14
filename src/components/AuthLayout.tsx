@@ -2,8 +2,10 @@ import { Link } from '@tanstack/react-router'
 import { Fuel } from 'lucide-react'
 import type { ReactNode } from 'react'
 
+// text-base (16px) on mobile prevents iOS Safari from auto-zooming on focus;
+// drop back to 14px from sm: up where zoom isn't a concern.
 export const authInputClass =
-  'h-11 w-full rounded-[6px] border border-line bg-white px-3.5 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand'
+  'h-11 w-full rounded-[6px] border border-line bg-white px-3.5 text-base sm:text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand'
 
 export function AuthLayout({
   title,
