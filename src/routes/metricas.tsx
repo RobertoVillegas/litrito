@@ -144,30 +144,38 @@ function Metrics() {
             la gasolina más cara y más barata del país.
           </p>
           {bundle && (
-            <div className="mt-6 flex items-center gap-2">
-              <div className="inline-flex rounded-full border border-white/15 bg-white/[0.04] p-1">
-                <ViewButton
-                  active={view === 'curated'}
-                  onClick={() => changeView('curated')}
-                >
-                  Curada
-                </ViewButton>
-                <ViewButton
-                  active={view === 'raw'}
-                  onClick={() => changeView('raw')}
-                >
-                  Sin filtrar
-                </ViewButton>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-full border border-white/15 bg-white/[0.04] p-1">
+                  <ViewButton
+                    active={view === 'curated'}
+                    onClick={() => changeView('curated')}
+                  >
+                    Curada
+                  </ViewButton>
+                  <ViewButton
+                    active={view === 'raw'}
+                    onClick={() => changeView('raw')}
+                  >
+                    Sin filtrar
+                  </ViewButton>
+                </div>
+                <InfoTooltip
+                  text={`La vista curada excluye ${bundle.excludedPriceRows.toLocaleString(
+                    'es-MX',
+                  )} precios fuera de ${formatCurrency(
+                    bundle.priceBand.min,
+                  )}–${formatCurrency(
+                    bundle.priceBand.max,
+                  )} por litro: montos que la fuente (CNE) reporta por error y que distorsionan los extremos y promedios. "Sin filtrar" muestra los datos tal cual llegan.`}
+                />
               </div>
-              <InfoTooltip
-                text={`La vista curada excluye ${bundle.excludedPriceRows.toLocaleString(
-                  'es-MX',
-                )} precios fuera de ${formatCurrency(
-                  bundle.priceBand.min,
-                )}–${formatCurrency(
-                  bundle.priceBand.max,
-                )} por litro: montos que la fuente (CNE) reporta por error y que distorsionan los extremos y promedios. "Sin filtrar" muestra los datos tal cual llegan.`}
-              />
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-white/50">
+                  Combustible
+                </div>
+                <FuelSelector value={stateFuel} onChange={changeStateFuel} />
+              </div>
             </div>
           )}
           {data && (
@@ -253,7 +261,6 @@ function Metrics() {
             <StateDeltaChart
               data={data}
               fuel={stateFuel}
-              onFuelChange={changeStateFuel}
             />
           </div>
         )}
@@ -435,11 +442,9 @@ function StateDeltaTooltip({ active, payload }: TooltipContentProps) {
 function StateDeltaChart({
   data,
   fuel,
-  onFuelChange,
 }: {
   data: MetricsData
   fuel: FuelType
-  onFuelChange: (fuel: FuelType) => void
 }) {
   const national = getNationalAvg(data, fuel)
   const stateRows = getStateRows(data, fuel)
@@ -458,17 +463,14 @@ function StateDeltaChart({
 
   return (
     <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="eyebrow text-body">
-            {FUEL_META[fuel].label} vs. promedio nacional
-          </h2>
-          <p className="mt-1 text-sm text-body">
-            Diferencia del promedio estatal contra el nacional ({formatCurrency(national)}).
-            Verde = más barato, rojo = más caro.
-          </p>
-        </div>
-        <FuelSelector value={fuel} onChange={onFuelChange} />
+      <div>
+        <h2 className="eyebrow text-body">
+          {FUEL_META[fuel].label} vs. promedio nacional
+        </h2>
+        <p className="mt-1 text-sm text-body">
+          Diferencia del promedio estatal contra el nacional ({formatCurrency(national)}).
+          Verde = más barato, rojo = más caro.
+        </p>
       </div>
       <div className="mt-4 rounded-[6px] border border-line p-4">
         <ClientOnly fallback={<ChartSkeleton height={360} />}>
