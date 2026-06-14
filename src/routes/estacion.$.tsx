@@ -196,7 +196,6 @@ function StationDetail() {
   const directionsHref = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}`
     : undefined
-  const sharePrice = pickSharePrice(currentPrices)
 
   return (
     <main className="min-h-screen">
@@ -279,7 +278,7 @@ function StationDetail() {
                 void shareStation({
                   permitNumber,
                   stationName: station.name,
-                  price: sharePrice,
+                  prices: currentPrices,
                   onDone: setShareMsg,
                 })
               }
@@ -436,23 +435,26 @@ function pickSharePrice(
 async function shareStation({
   permitNumber,
   stationName,
-  price,
+  prices,
   onDone,
 }: {
   permitNumber: string
   stationName: string
-  price: { fuelType: FuelType; price: number } | null
+  prices: Record<string, { price: number; reportedAt?: string }>
   onDone: (message: string) => void
 }) {
   const url =
     typeof window !== 'undefined'
       ? `${window.location.origin}/estacion/${encodeURIComponent(permitNumber)}`
       : ''
-  const priceText = price
-    ? `${FUEL_META[price.fuelType].label} a ${formatCurrency(price.price)}`
-    : 'Precios de gasolina'
+  const priceLines = formatSharePriceLines(prices)
   const title = `${stationName} en Litrito`
-  const text = `${priceText} en ${stationName}.`
+  const text = [
+    `Mira esta estación en Litrito: ${stationName}.`,
+    priceLines.length ? ['', ...priceLines].join('\n') : 'Consulta sus precios de gasolina.',
+    '',
+    'Compara antes de cargar.',
+  ].join('\n')
 
   try {
     if (typeof navigator !== 'undefined' && navigator.share) {
@@ -468,6 +470,16 @@ async function shareStation({
     if (error instanceof DOMException && error.name === 'AbortError') return
     onDone('No se pudo compartir.')
   }
+}
+
+function formatSharePriceLines(
+  prices: Record<string, { price: number; reportedAt?: string }>,
+) {
+  return FUEL_ORDER.flatMap((fuelType) => {
+    const value = prices[fuelType]
+    if (!value) return []
+    return `${FUEL_META[fuelType].label}: ${formatCurrency(value.price)}`
+  })
 }
 
 function BackLink({ onDark = false }: { onDark?: boolean }) {
