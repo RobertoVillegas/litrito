@@ -1,6 +1,6 @@
 import { ClientOnly, createFileRoute } from '@tanstack/react-router'
 import { usePaginatedQuery, useQuery as useConvexQuery } from 'convex/react'
-import { BadgeCent, DatabaseZap, Fuel, RefreshCw, Star } from 'lucide-react'
+import { BadgeCent, DatabaseZap, Fuel, Loader2, RefreshCw, Star } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
@@ -522,6 +522,15 @@ function Explore() {
     }
     return min
   }, [visibleRows])
+
+  // Keep the previous best price visible while new data loads so the metric
+  // doesn't flash to a placeholder.
+  const [lastBestPrice, setLastBestPrice] = useState<number | null>(null)
+  if (bestPrice != null && bestPrice !== lastBestPrice) {
+    setLastBestPrice(bestPrice)
+  }
+  const staleBestPrice = bestPrice ?? lastBestPrice
+
   const updatedAt = latestRun?.finishedAt ?? latestRun?.startedAt
 
   const statesForFilter = useMemo(
@@ -567,12 +576,15 @@ function Explore() {
                 icon={<BadgeCent className="h-5 w-5" />}
                 label="Mejor precio"
                 value={
-                  paginated.status === 'LoadingFirstPage' ? (
-                    '—'
-                  ) : bestPrice ? (
-                    <AnimatedPrice value={bestPrice} />
+                  staleBestPrice ? (
+                    <span className="inline-flex items-center gap-2">
+                      <AnimatedPrice value={staleBestPrice} />
+                      {paginated.status === 'LoadingFirstPage' && (
+                        <Loader2 className="h-4 w-4 animate-spin text-white/70" />
+                      )}
+                    </span>
                   ) : (
-                    'Sin datos'
+                    '—'
                   )
                 }
               />
