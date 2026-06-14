@@ -22,6 +22,9 @@ function parseBoolean(value?: string) {
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())
 }
 
+export const PASSWORD_RESET_EXPIRES_IN_SECONDS = 60 * 60
+export const PASSWORD_RESET_EXPIRES_LABEL = '1 hora'
+
 export const emailConfig = {
   appName: 'Litrito',
   smtp: {

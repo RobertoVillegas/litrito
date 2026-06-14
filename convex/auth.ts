@@ -6,6 +6,7 @@ import { query } from './_generated/server'
 import { components, internal } from './_generated/api'
 import type { DataModel } from './_generated/dataModel'
 import authConfig from './auth.config'
+import { PASSWORD_RESET_EXPIRES_IN_SECONDS } from './email/config'
 
 declare const process: {
   env: {
@@ -29,6 +30,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
           userName: user.name,
         })
       },
+      resetPasswordTokenExpiresIn: PASSWORD_RESET_EXPIRES_IN_SECONDS,
     },
     trustedOrigins: [process.env.SITE_URL ?? 'http://localhost:3000'],
     plugins: [convex({ authConfig })],
