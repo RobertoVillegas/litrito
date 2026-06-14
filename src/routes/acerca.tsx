@@ -109,8 +109,7 @@ function AboutPage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
           <div className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
             <div>
-              <p className="eyebrow text-brand">Hecho por Athas</p>
-              <h2 className="font-display mt-3 text-4xl text-white sm:text-5xl">
+              <h2 className="font-display text-4xl text-white sm:text-5xl">
                 Litrito es un proyecto de Athas
               </h2>
               <p className="mt-5 text-lg font-light leading-8 text-white/70">
