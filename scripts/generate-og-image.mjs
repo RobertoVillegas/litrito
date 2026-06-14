@@ -15,6 +15,7 @@ const FONT_FAMILY = "Inter";
 const FONT_WEIGHT = 700;
 
 const FONT_CANDIDATES = [
+  join(root, "public", "fonts", `inter-latin-${FONT_WEIGHT}-normal.woff`),
   join(root, "node_modules", "@fontsource", "inter", "files", `inter-latin-${FONT_WEIGHT}-normal.woff`),
   join(root, "node_modules", "@fontsource-variable", "inter", "files", `inter-latin-wght-normal.woff`),
 ];
@@ -31,7 +32,7 @@ const loadFont = async () => {
   }
   throw new Error(
     `Could not find a local Inter font. Tried:\n${FONT_CANDIDATES.join("\n")}\n` +
-      `Install @fontsource/inter or @fontsource-variable/inter as a devDependency.`,
+      `Add the font to public/fonts or install @fontsource/inter as a devDependency.`,
   );
 };
 

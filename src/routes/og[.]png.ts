@@ -1,12 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Resvg } from '@resvg/resvg-js'
 import satori from 'satori'
 
 const OG_SIZE = { width: 1200, height: 630 }
 const FONT_FAMILY = 'Inter'
 const FONT_WEIGHT = 700
+const CURRENT_DIR = dirname(fileURLToPath(import.meta.url))
 
 let assetsPromise:
   | Promise<{
@@ -16,18 +18,29 @@ let assetsPromise:
   | undefined
 
 async function loadAssets() {
+  const readPublicAsset = async (path: string) => {
+    const candidates = [
+      join(process.cwd(), 'public', path),
+      join(process.cwd(), '.output', 'public', path),
+      join(CURRENT_DIR, '..', '..', 'public', path),
+      join(CURRENT_DIR, '..', '..', '..', 'public', path),
+    ]
+
+    let lastError: unknown
+    for (const candidate of candidates) {
+      try {
+        return await readFile(candidate)
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    throw lastError
+  }
+
   assetsPromise ??= Promise.all([
-    readFile(
-      join(
-        process.cwd(),
-        'node_modules',
-        '@fontsource',
-        'inter',
-        'files',
-        `inter-latin-${FONT_WEIGHT}-normal.woff`,
-      ),
-    ),
-    readFile(join(process.cwd(), 'public', 'litrito-logo-full-res.png')),
+    readPublicAsset(`fonts/inter-latin-${FONT_WEIGHT}-normal.woff`),
+    readPublicAsset('litrito-logo-full-res.png'),
   ]).then(([font, logo]) => ({
     font,
     logoSrc: `data:image/png;base64,${logo.toString('base64')}`,
