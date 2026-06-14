@@ -10,6 +10,7 @@ import {
 import { ArrowDownUp, Loader2, Star } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '../lib/utils'
+import { AnimatedPrice } from './AnimatedNumber'
 import { Skeleton, SkeletonLine } from './Skeleton'
 import { formatCurrency, formatDistance } from '#/lib/format'
 import type { FuelType, SortMode } from './StationFilters'
@@ -127,7 +128,7 @@ function StationCard({
                 <span className="text-[10px] uppercase tracking-wide text-body">
                   {FUEL_LABEL[ft]}
                 </span>
-                {price != null ? formatCurrency(price) : '–'}
+                {price != null ? <AnimatedPrice value={price} /> : '–'}
               </span>
             )
           })}

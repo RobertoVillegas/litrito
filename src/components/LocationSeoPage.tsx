@@ -15,6 +15,7 @@ import {
 import type { TooltipContentProps } from 'recharts'
 import { FUEL_META } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
+import { AnimatedCount, AnimatedPrice } from './AnimatedNumber'
 import { Button } from '#/components/ui/button'
 import { SiteFooter } from './SiteFooter'
 
@@ -156,16 +157,16 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
           <div className="rounded-[6px] border border-white/15 bg-white/[0.04] p-5">
             <div className="eyebrow text-white/45">Promedio regular</div>
             <div className="mt-3 text-5xl font-black text-white">
-              {formatCurrency(regularMetric?.average ?? null)}
+              <AnimatedPrice value={regularMetric?.average ?? null} fallback="Sin datos" />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <MetricPill label="Estaciones" value={formatNumber(data.stationCount)} />
+              <MetricPill label="Estaciones" value={<AnimatedCount value={data.stationCount} />} />
               <MetricPill
                 label="Reportes"
-                value={formatNumber(regularMetric?.count ?? 0)}
+                value={<AnimatedCount value={regularMetric?.count ?? 0} />}
               />
-              <MetricPill label="Mínimo" value={formatCurrency(regularMetric?.min ?? null)} />
-              <MetricPill label="Máximo" value={formatCurrency(regularMetric?.max ?? null)} />
+              <MetricPill label="Mínimo" value={<AnimatedPrice value={regularMetric?.min ?? null} fallback="Sin datos" />} />
+              <MetricPill label="Máximo" value={<AnimatedPrice value={regularMetric?.max ?? null} fallback="Sin datos" />} />
             </div>
           </div>
         </div>
@@ -188,12 +189,12 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
                 {FUEL_META[metric.fuelType].label}
               </div>
               <div className="mt-3 text-2xl font-black text-ink">
-                {formatCurrency(metric.average)}
+                <AnimatedPrice value={metric.average} />
               </div>
               <div className="mt-3 space-y-1 text-xs font-bold text-body">
-                <div>Mínimo: {formatCurrency(metric.min)}</div>
-                <div>Máximo: {formatCurrency(metric.max)}</div>
-                <div>Reportes: {formatNumber(metric.count)}</div>
+                <div>Mínimo: <AnimatedPrice value={metric.min} /></div>
+                <div>Máximo: <AnimatedPrice value={metric.max} /></div>
+                <div>Reportes: <AnimatedCount value={metric.count} /></div>
               </div>
             </article>
           ))}
@@ -246,7 +247,7 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
                     </div>
                   </div>
                   <div className="text-right text-base font-black text-ink">
-                    {formatCurrency(row.price)}
+                    <AnimatedPrice value={row.price} />
                   </div>
                 </a>
               ))}
@@ -269,7 +270,7 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
                     : 'border-line text-ink hover:border-ink'
                 }`}
               >
-                {municipality.name} · {formatNumber(municipality.count)}
+                {municipality.name} · <AnimatedCount value={municipality.count} />
               </a>
             ))}
           </div>
@@ -319,20 +320,20 @@ function FuelTooltip({ active, payload }: TooltipContentProps) {
       </div>
       <div className="space-y-0.5 text-body">
         <div>
-          Promedio: <span className="font-bold text-ink">{formatCurrency(d.avg)}</span>
+          Promedio: <span className="font-bold text-ink"><AnimatedPrice value={d.avg} /></span>
         </div>
         {d.min != null && (
           <div>
-            Mínimo: <span className="font-bold text-ink">{formatCurrency(d.min)}</span>
+            Mínimo: <span className="font-bold text-ink"><AnimatedPrice value={d.min} /></span>
           </div>
         )}
         {d.max != null && (
           <div>
-            Máximo: <span className="font-bold text-ink">{formatCurrency(d.max)}</span>
+            Máximo: <span className="font-bold text-ink"><AnimatedPrice value={d.max} /></span>
           </div>
         )}
         <div>
-          Reportes: <span className="font-bold text-ink">{formatNumber(d.count)}</span>
+          Reportes: <span className="font-bold text-ink"><AnimatedCount value={d.count} /></span>
         </div>
       </div>
     </div>
@@ -406,7 +407,7 @@ function StationTooltip({ active, payload }: TooltipContentProps) {
     <div className="rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
       <div className="mb-1 font-black text-ink">{d.fullName}</div>
       <div className="text-body">
-        Precio: <span className="font-bold text-ink">{formatCurrency(d.price)}</span>
+        Precio: <span className="font-bold text-ink"><AnimatedPrice value={d.price} /></span>
       </div>
       {d.address && <div className="mt-0.5 text-body">{d.address}</div>}
     </div>
@@ -491,7 +492,7 @@ function InfoTooltip({ text }: { text: string }) {
   )
 }
 
-function MetricPill({ label, value }: { label: string; value: string }) {
+function MetricPill({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-[6px] border border-white/10 bg-white/[0.04] p-3">
       <div className="text-[10px] font-black uppercase tracking-wider text-white/40">

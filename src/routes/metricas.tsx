@@ -27,6 +27,7 @@ import { api } from '../../convex/_generated/api'
 import { FUEL_META } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
+import { AnimatedCount, AnimatedPrice } from '../components/AnimatedNumber'
 import { ChartSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
@@ -140,11 +141,11 @@ function Metrics() {
           {data && (
             <div className="mt-6 flex flex-col gap-2 text-xs text-white/55 sm:flex-row sm:items-center sm:gap-3">
               <span>
-                {data.pricedStations.toLocaleString('es-MX')} estaciones con precio actualizado
+                <AnimatedCount value={data.pricedStations} /> estaciones con precio actualizado
                 {data.totalStations !== data.pricedStations && (
                   <>
                     {' '}
-                    de {data.totalStations.toLocaleString('es-MX')} registradas
+                    de <AnimatedCount value={data.totalStations} /> registradas
                   </>
                 )}
               </span>
@@ -173,7 +174,7 @@ function Metrics() {
                   return (
                     <div
                       key={f}
-                      className="rounded-[6px] border border-line p-5"
+                      className="rounded-[6px] border border-line p-5 transition-colors duration-300"
                       style={{ borderTopColor: FUEL_META[f].color, borderTopWidth: 3 }}
                     >
                       <div className="flex items-center justify-between">
@@ -185,7 +186,7 @@ function Metrics() {
                           {FUEL_META[f].label}
                         </div>
                         <span className="text-xs text-mute">
-                          prom. {formatCurrency(m.avg)}
+                          prom. <AnimatedPrice value={m.avg} />
                         </span>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-4">
@@ -217,9 +218,10 @@ function Metrics() {
                 <SnapshotCard
                   label={`Promedio nacional ${FUEL_META[stateFuel].label}`}
                   value={
-                    getNationalAvg(data, stateFuel)
-                      ? formatCurrency(getNationalAvg(data, stateFuel)!)
-                      : '—'
+                    <AnimatedPrice
+                      value={getNationalAvg(data, stateFuel)}
+                      className="tabular-nums"
+                    />
                   }
                   tone="neutral"
                   highlight
@@ -229,9 +231,10 @@ function Metrics() {
                   label="Estado más caro"
                   value={getMostExpensiveState(data, stateFuel)?.name ?? '—'}
                   subvalue={
-                    getMostExpensiveState(data, stateFuel)
-                      ? formatCurrency(getMostExpensiveState(data, stateFuel)!.avg)
-                      : undefined
+                    <AnimatedPrice
+                      value={getMostExpensiveState(data, stateFuel)?.avg}
+                      className="tabular-nums"
+                    />
                   }
                   tone="exp"
                   accent={COLORS.brand}
@@ -240,9 +243,10 @@ function Metrics() {
                   label="Estado más barato"
                   value={getCheapestState(data, stateFuel)?.name ?? '—'}
                   subvalue={
-                    getCheapestState(data, stateFuel)
-                      ? formatCurrency(getCheapestState(data, stateFuel)!.avg)
-                      : undefined
+                    <AnimatedPrice
+                      value={getCheapestState(data, stateFuel)?.avg}
+                      className="tabular-nums"
+                    />
                   }
                   tone="cheap"
                   accent={COLORS.cheap}
@@ -307,19 +311,19 @@ function SpreadTooltip({ active, payload }: TooltipContentProps) {
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-6">
           <span className="text-emerald-600">Más barata</span>
-          <span className="font-bold text-ink">{formatCurrency(min)}</span>
+          <span className="font-bold text-ink"><AnimatedPrice value={min} /></span>
         </div>
         <div className="flex items-center justify-between gap-6 text-body">
           <span>Promedio</span>
-          <span className="font-bold text-ink">{formatCurrency(d.avg)}</span>
+          <span className="font-bold text-ink"><AnimatedPrice value={d.avg} /></span>
         </div>
         <div className="flex items-center justify-between gap-6">
           <span className="text-brand">Más cara</span>
-          <span className="font-bold text-ink">{formatCurrency(max)}</span>
+          <span className="font-bold text-ink"><AnimatedPrice value={max} /></span>
         </div>
       </div>
       <div className="mt-2 border-t border-line pt-1.5 text-[11px] text-mute">
-        Rango {formatCurrency(max - min)} · {d.count.toLocaleString('es-MX')} precios
+        Rango <AnimatedPrice value={max - min} /> · <AnimatedCount value={d.count} /> precios
       </div>
     </div>
   )
@@ -412,7 +416,7 @@ function StateDeltaTooltip({ active, payload }: TooltipContentProps) {
       <div className="mb-1.5 font-black text-ink">{d.name}</div>
       <div className="flex items-center justify-between gap-6 text-body">
         <span>Promedio {fuelLabel}</span>
-        <span className="font-bold text-ink">{formatCurrency(d.avg)}</span>
+        <span className="font-bold text-ink"><AnimatedPrice value={d.avg} /></span>
       </div>
       <div
         className={`mt-0.5 flex items-center justify-between gap-6 font-bold ${
@@ -420,10 +424,10 @@ function StateDeltaTooltip({ active, payload }: TooltipContentProps) {
         }`}
       >
         <span>vs. nacional</span>
-        <span>{formatSignedMXN(d.delta)}</span>
+        <span><AnimatedPrice value={d.delta} className="tabular-nums" /></span>
       </div>
       <div className="mt-1.5 border-t border-line pt-1.5 text-[11px] text-mute">
-        {d.count.toLocaleString('es-MX')} estaciones
+        <AnimatedCount value={d.count} /> estaciones
       </div>
     </div>
   )
@@ -459,7 +463,7 @@ function StateDeltaChart({
         </h2>
         <div className="mt-1 space-y-1 text-sm text-body">
           <p>
-            Cada barra muestra la diferencia entre el precio promedio del estado y el nacional ({formatCurrency(national)}).
+            Cada barra muestra la diferencia entre el precio promedio del estado y el nacional (<AnimatedPrice value={national} />).
           </p>
           <p>
             Verde indica estados más baratos que el promedio; rojo, estados más caros.
@@ -525,7 +529,7 @@ function FuelPicker({
               key={fuel}
               type="button"
               onClick={() => onChange(fuel)}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-black transition ${
+              className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-black transition-colors duration-300 ${
                 active
                   ? 'border-transparent text-white'
                   : 'border-line bg-white text-body hover:text-ink'
@@ -548,7 +552,7 @@ function FuelPicker({
               key={fuel}
               type="button"
               onClick={() => onChange(fuel)}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition ${
+              className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition-colors duration-300 ${
                 active ? 'text-white' : 'text-body hover:text-ink'
               }`}
               style={active ? { backgroundColor: FUEL_META[fuel].color } : undefined}
@@ -723,7 +727,7 @@ function ExtremeCell({ kind, e }: { kind: 'cheap' | 'exp'; e: Extreme }) {
         {cheap ? <TrendingDown className="h-3 w-3" /> : <TrendingUp className="h-3 w-3" />}
         {cheap ? 'Más barata' : 'Más cara'}
       </div>
-      <div className="font-display mt-1 text-2xl text-ink">{formatCurrency(e.price)}</div>
+      <div className="font-display mt-1 text-2xl text-ink"><AnimatedPrice value={e.price} className="tabular-nums" /></div>
       <Link
         to="/estacion/$"
         params={{ _splat: e.permitNumber }}
@@ -748,8 +752,8 @@ function SnapshotCard({
   accent,
 }: {
   label: string
-  value: string
-  subvalue?: string
+  value: ReactNode
+  subvalue?: ReactNode
   tone: 'neutral' | 'cheap' | 'exp'
   highlight?: boolean
   accent?: string
@@ -758,11 +762,16 @@ function SnapshotCard({
     tone === 'cheap' ? 'text-emerald-600' : tone === 'exp' ? 'text-brand' : 'text-ink'
   return (
     <div
-      className="flex h-full flex-col rounded-[6px] border border-line bg-white p-4"
+      className="flex h-full flex-col rounded-[6px] border border-line bg-white p-4 transition-colors duration-300"
       style={accent ? { borderTopColor: accent, borderTopWidth: 3 } : undefined}
     >
       <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-body">
-        {accent && <span className="h-2 w-2 rounded-full" style={{ background: accent }} />}
+        {accent && (
+          <span
+            className="h-2 w-2 rounded-full transition-colors duration-300"
+            style={{ background: accent }}
+          />
+        )}
         {label}
       </div>
       <div

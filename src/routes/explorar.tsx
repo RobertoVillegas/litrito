@@ -12,7 +12,8 @@ import { SiteFooter } from '../components/SiteFooter'
 import { MapSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
-import { formatCurrency } from '#/lib/format'
+import { AnimatedPrice } from '../components/AnimatedNumber'
+
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
 import { boundsOfLatLngs } from '../components/mapGeo'
@@ -565,7 +566,7 @@ function Explore() {
               <Metric
                 icon={<BadgeCent className="h-5 w-5" />}
                 label="Mejor precio"
-                value={bestPrice ? formatCurrency(bestPrice) : 'Sin datos'}
+                value={bestPrice ? <AnimatedPrice value={bestPrice} /> : 'Sin datos'}
               />
             </div>
           </div>
@@ -715,7 +716,7 @@ function Explore() {
   )
 }
 
-function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
   return (
     <div className="rounded-[6px] border border-white/15 bg-white/[0.04] p-3">
       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/50">

@@ -10,7 +10,7 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { FuelType } from './StationFilters'
-import { formatCurrency } from '#/lib/format'
+import { AnimatedPrice } from './AnimatedNumber'
 
 type Station = {
   permitNumber: string
@@ -415,7 +415,7 @@ export function StationMap({
                                 {FUEL_LABEL[ft]}
                               </span>
                               <span className="litrito-popup__amount">
-                                {formatCurrency(row.prices[ft]!.price)}
+                                <AnimatedPrice value={row.prices[ft]!.price} />
                               </span>
                             </div>
                           ))}

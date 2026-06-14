@@ -10,7 +10,8 @@ import { DarkSkeleton, MapSkeleton, SkeletonLine } from '../components/Skeleton'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { track } from '#/lib/analytics'
 import { slugifyLocationName } from '#/lib/slug'
-import { formatCurrency, formatDistance } from '#/lib/format'
+import { AnimatedPrice } from '../components/AnimatedNumber'
+import { formatDistance } from '#/lib/format'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 import type { FuelType } from '../components/StationFilters'
 
@@ -408,7 +409,7 @@ function StationRankCard({
       </Link>
       <div className="text-right">
         <div className="text-base font-black text-white">
-          {formatCurrency(row.price)}
+          <AnimatedPrice value={row.price} />
         </div>
         {directionsHref ? (
           <a

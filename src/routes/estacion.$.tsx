@@ -20,6 +20,7 @@ import { Button } from '#/components/ui/button'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
+import { AnimatedPrice } from '../components/AnimatedNumber'
 import { ChartSkeleton, DarkSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { formatCurrency } from '#/lib/format'
@@ -334,7 +335,7 @@ function StationDetail() {
                   {FUEL_META[f].label}
                 </div>
                 <div className="font-display mt-2 text-3xl text-ink">
-                  {formatCurrency(currentPrices[f].price)}
+                  <AnimatedPrice value={currentPrices[f].price} />
                 </div>
                 <div className="mt-1 text-[11px] text-mute">
                   {currentPrices[f].reportedAt
@@ -498,7 +499,7 @@ function HistoryTooltip({ active, payload, label }: TooltipContentProps) {
               <span className="h-2 w-2 rounded-full" style={{ background: meta.color }} />
               {meta.label}
             </span>
-            <span className="font-bold text-ink">{formatCurrency(entry.value as number)}</span>
+            <span className="font-bold text-ink"><AnimatedPrice value={entry.value as number} /></span>
           </div>
         )
       })}
@@ -606,7 +607,7 @@ function DeltaBadge({ delta }: { delta: number | null }) {
       )}
     >
       {up ? '↑' : '↓'}
-      {formatCurrency(Math.abs(delta))}
+      <AnimatedPrice value={Math.abs(delta)} />
     </span>
   )
 }
@@ -693,7 +694,7 @@ function PriceHistoryList({ history }: { history: HistoryEntry[] }) {
                               <DeltaBadge delta={delta} />
                             </span>
                             <span className="font-bold tabular-nums text-ink">
-                              {formatCurrency(price)}
+                              <AnimatedPrice value={price} />
                             </span>
                           </div>
                         ) : (
@@ -736,7 +737,7 @@ function PriceHistoryList({ history }: { history: HistoryEntry[] }) {
                     <span className="flex items-center gap-1.5">
                       <DeltaBadge delta={delta} />
                       <span className="font-bold tabular-nums text-ink">
-                        {formatCurrency(price)}
+                        <AnimatedPrice value={price} />
                       </span>
                     </span>
                   </div>
