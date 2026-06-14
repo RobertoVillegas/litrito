@@ -13,6 +13,7 @@ import { slugifyLocationName } from '#/lib/slug'
 import { AnimatedPrice } from '../components/AnimatedNumber'
 import { formatDistance } from '#/lib/format'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
+import { useLocationPermissionFlow } from '../components/LocationPermissionDialog'
 import type { FuelType } from '../components/StationFilters'
 
 const StationMap = lazy(() =>
@@ -72,6 +73,7 @@ export const Route = createFileRoute('/')({
 function Home() {
   const loaderData = Route.useLoaderData()
   const userLoc = useUserLocation()
+  const { requestWithExplanation, dialogElement } = useLocationPermissionFlow()
   const [fuelType, setFuelType] = useState<FuelType>('regular')
   const [radiusKm, setRadiusKm] = useState<(typeof RADIUS_OPTIONS)[number]>(15)
 
@@ -185,7 +187,7 @@ function Home() {
                   className="justify-center"
                   onClick={() => {
                     track('home_location_request', { fuel: fuelType, radiusKm })
-                    userLoc.requestPrecise()
+                    void requestWithExplanation()
                   }}
                 >
                   <LocateFixed className="h-4 w-4" />
@@ -224,6 +226,8 @@ function Home() {
           />
         </div>
       </section>
+
+      {dialogElement}
 
       {hasLocation && rows && rows.length > 0 && (
         <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">

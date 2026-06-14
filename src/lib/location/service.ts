@@ -5,6 +5,18 @@ import {
   type UserLocation,
 } from './store'
 
+export type PreciseLocationPermissionState =
+  | 'granted'
+  | 'prompt'
+  | 'denied'
+  | 'unsupported'
+  | 'insecure'
+  | 'unknown'
+
+export type PreciseLocationRequestResult =
+  | { status: 'requesting'; permission: PreciseLocationPermissionState }
+  | { status: 'blocked'; permission: PreciseLocationPermissionState; message: string }
+
 export async function loadApproximateLocation() {
   try {
     const approx = await getApproximateLocation({ data: {} })
@@ -24,7 +36,28 @@ export function restoreRememberedPreciseLocation(location: UserLocation) {
   useUserLocationStore.getState().setPreciseLocation(location)
 }
 
-export function readFreshPreciseLocation() {
+export async function getPreciseLocationPermissionState(): Promise<PreciseLocationPermissionState> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return 'unsupported'
+  }
+  if (typeof window !== 'undefined' && !window.isSecureContext) {
+    return 'insecure'
+  }
+  if (!navigator.permissions?.query) {
+    return 'unknown'
+  }
+
+  try {
+    const status = await navigator.permissions.query({
+      name: 'geolocation' as PermissionName,
+    })
+    return status.state
+  } catch {
+    return 'unknown'
+  }
+}
+
+export async function readFreshPreciseLocation(): Promise<PreciseLocationRequestResult> {
   const {
     markPreciseAttempted,
     setPreciseError,
@@ -33,14 +66,22 @@ export function readFreshPreciseLocation() {
   } = useUserLocationStore.getState()
 
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
-    setPreciseError('Tu navegador no soporta geolocalización.')
-    return
+    const message = 'Tu navegador no soporta geolocalización.'
+    setPreciseError(message)
+    return { status: 'blocked', permission: 'unsupported', message }
   }
   if (typeof window !== 'undefined' && !window.isSecureContext) {
-    setPreciseError(
-      'La ubicación precisa requiere HTTPS (o localhost). Ábrela sobre HTTPS.',
-    )
-    return
+    const message =
+      'La ubicación precisa requiere HTTPS (o localhost). Ábrela sobre HTTPS.'
+    setPreciseError(message)
+    return { status: 'blocked', permission: 'insecure', message }
+  }
+
+  const permission = await getPreciseLocationPermissionState()
+  if (permission === 'denied') {
+    const message = 'Permiso de ubicación denegado.'
+    setPreciseError(message)
+    return { status: 'blocked', permission, message }
   }
 
   markPreciseAttempted()
@@ -77,4 +118,5 @@ export function readFreshPreciseLocation() {
     },
     { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
   )
+  return { status: 'requesting', permission }
 }

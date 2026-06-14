@@ -1,7 +1,7 @@
 import { ClientOnly, createFileRoute } from '@tanstack/react-router'
 import { usePaginatedQuery, useQuery as useConvexQuery } from 'convex/react'
 import { BadgeCent, DatabaseZap, Fuel, Loader2, RefreshCw, Star } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
@@ -526,9 +526,9 @@ function Explore() {
   // Keep the previous best price visible while new data loads so the metric
   // doesn't flash to a placeholder.
   const [lastBestPrice, setLastBestPrice] = useState<number | null>(null)
-  if (bestPrice != null && bestPrice !== lastBestPrice) {
-    setLastBestPrice(bestPrice)
-  }
+  useEffect(() => {
+    if (bestPrice != null) setLastBestPrice(bestPrice)
+  }, [bestPrice])
   const staleBestPrice = bestPrice ?? lastBestPrice
 
   const updatedAt = latestRun?.finishedAt ?? latestRun?.startedAt

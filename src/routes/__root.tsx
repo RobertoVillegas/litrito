@@ -8,6 +8,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import ConvexProvider from '../integrations/convex/provider'
 import { PromoMarquee } from '../components/PromoMarquee'
+import { ServiceWorkerRegistration } from '../components/ServiceWorkerRegistration'
 import { SiteNav } from '../components/SiteNav'
 import { ToastProvider } from '../components/ui/toast'
 import { UserLocationProvider } from '../lib/useUserLocation'
@@ -69,6 +70,26 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       {
         name: 'viewport',
         content: 'width=device-width, initial-scale=1',
+      },
+      {
+        name: 'theme-color',
+        content: '#25282b',
+      },
+      {
+        name: 'mobile-web-app-capable',
+        content: 'yes',
+      },
+      {
+        name: 'apple-mobile-web-app-capable',
+        content: 'yes',
+      },
+      {
+        name: 'apple-mobile-web-app-title',
+        content: 'Litrito',
+      },
+      {
+        name: 'apple-mobile-web-app-status-bar-style',
+        content: 'black-translucent',
       },
       {
         title: 'Litrito - precios de gasolina en Mexico',
@@ -176,7 +197,23 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
       {
         rel: 'icon',
-        href: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛽</text></svg>",
+        href: '/favicon.ico',
+        sizes: 'any',
+      },
+      {
+        rel: 'icon',
+        type: 'image/png',
+        sizes: '32x32',
+        href: '/favicon-32x32.png',
+      },
+      {
+        rel: 'apple-touch-icon',
+        sizes: '180x180',
+        href: '/apple-touch-icon.png',
+      },
+      {
+        rel: 'manifest',
+        href: '/manifest.json',
       },
     ],
   }),
@@ -193,6 +230,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <ConvexProvider>
           <ToastProvider>
             <UserLocationProvider>
+              <ServiceWorkerRegistration />
               <PromoMarquee />
               <SiteNav />
               {children}

@@ -7,6 +7,7 @@ import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { Button } from '#/components/ui/button'
+import { useLocationPermissionFlow } from './LocationPermissionDialog'
 
 const AVATAR_COLORS = ['#e60000', '#25282b', '#7e7e7e', '#bebebe', '#ffffff']
 
@@ -101,19 +102,23 @@ function MobileNavLink({
 
 function LocationPill() {
   const userLoc = useUserLocation()
+  const { requestWithExplanation, dialogElement } = useLocationPermissionFlow()
   const loc = userLoc.location
   const label = loc?.city ?? (loc ? 'Ubicación' : 'Detectando…')
   const precise = loc?.source === 'precise'
   return (
+    <>
     <button
       type="button"
-      onClick={userLoc.requestPrecise}
+      onClick={requestWithExplanation}
       title={precise ? 'Ubicación precisa activa' : 'Usar mi ubicación precisa'}
       className="hidden items-center gap-1.5 rounded-full border border-white/20 px-3 py-1.5 text-xs font-bold text-white/80 transition hover:border-white/50 hover:text-white md:inline-flex"
     >
       <MapPin className={`h-3.5 w-3.5 ${precise ? 'text-brand' : 'text-white/50'}`} />
       <span className="max-w-[140px] truncate">{label}</span>
     </button>
+    {dialogElement}
+    </>
   )
 }
 
