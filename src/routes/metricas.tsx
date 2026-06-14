@@ -3,7 +3,13 @@ import { Popover } from '@base-ui/react/popover'
 import { useQuery } from 'convex/react'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowLeft, Fuel, Info, TrendingDown, TrendingUp } from 'lucide-react'
+import {
+  ArrowLeft,
+  Fuel,
+  Info,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -24,7 +30,8 @@ import { RouteErrorFallback } from '../components/RouteError'
 import { ChartSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
-import { formatCurrency } from '#/lib/format'
+import { formatCurrency, formatAxisMXN, formatSignedMXN } from '#/lib/format'
+import { COLORS } from '#/lib/colors'
 
 export const Route = createFileRoute('/metricas')({
   head: () => {
@@ -56,20 +63,6 @@ export const Route = createFileRoute('/metricas')({
 })
 
 const FUELS = ['regular', 'premium', 'diesel', 'duba'] as const
-
-function formatAxisMXN(value: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
-}
-
-function formatSignedMXN(value: number): string {
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${formatCurrency(value)}`
-}
 
 type Extreme = {
   price: number
@@ -143,60 +136,20 @@ function Metrics() {
             Precios extremos por combustible, promedios por estado y dónde está
             la gasolina más cara y más barata del país.
           </p>
-          {bundle && (
-            <div className="mt-7 rounded-[6px] border border-white/10 bg-white/[0.035] p-3">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-white/45 sm:w-16">
-                    Vista
-                  </div>
-                  <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <div className="inline-flex w-full rounded-full border border-white/15 bg-black/10 p-1 sm:w-auto">
-                      <ViewButton
-                        active={view === 'curated'}
-                        onClick={() => changeView('curated')}
-                      >
-                        Curada
-                      </ViewButton>
-                      <ViewButton
-                        active={view === 'raw'}
-                        onClick={() => changeView('raw')}
-                      >
-                        Sin filtrar
-                      </ViewButton>
-                    </div>
-                    <InfoTooltip
-                      text={`La vista curada excluye ${bundle.excludedPriceRows.toLocaleString(
-                        'es-MX',
-                      )} precios fuera de ${formatCurrency(
-                        bundle.priceBand.min,
-                      )}–${formatCurrency(
-                        bundle.priceBand.max,
-                      )} por litro: montos que la fuente (CNE) reporta por error y que distorsionan los extremos y promedios. "Sin filtrar" muestra los datos tal cual llegan.`}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-white/45 sm:w-24 lg:text-right">
-                    Combustible
-                  </div>
-                  <FuelSelector value={stateFuel} onChange={changeStateFuel} tone="dark" />
-                </div>
-              </div>
-            </div>
-          )}
+
           {data && (
-            <div className="mt-6 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap">
-              <Stat label="Estaciones" value={data.totalStations.toLocaleString('es-MX')} />
-              <Stat label="Con precio" value={data.pricedStations.toLocaleString('es-MX')} />
-              <Stat
-                label={`Promedio ${FUEL_META[stateFuel].label}`}
-                value={
-                  getNationalAvg(data, stateFuel)
-                    ? formatCurrency(getNationalAvg(data, stateFuel)!)
-                    : '—'
-                }
-              />
+            <div className="mt-6 flex flex-col gap-2 text-xs text-white/55 sm:flex-row sm:items-center sm:gap-3">
+              <span>
+                {data.pricedStations.toLocaleString('es-MX')} estaciones con precio actualizado
+                {data.totalStations !== data.pricedStations && (
+                  <>
+                    {' '}
+                    de {data.totalStations.toLocaleString('es-MX')} registradas
+                  </>
+                )}
+              </span>
+              <span className="hidden sm:inline">·</span>
+              <ViewToggle bundle={bundle} view={view} onChange={changeView} />
             </div>
           )}
         </div>
@@ -245,30 +198,60 @@ function Metrics() {
               </div>
             </div>
 
-            {/* Most / least expensive state */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <StateCard
-                kind="exp"
-                title="Estado más caro"
-                fuel={stateFuel}
-                state={getMostExpensiveState(data, stateFuel)}
-              />
-              <StateCard
-                kind="cheap"
-                title="Estado más barato"
-                fuel={stateFuel}
-                state={getCheapestState(data, stateFuel)}
-              />
-            </div>
-
             {/* Per-fuel price spread */}
             <FuelSpreadChart data={data} />
 
+            {/* Fuel selector + national/state snapshot */}
+            <div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="eyebrow text-body">Promedio nacional y estados extremos</h2>
+                  <p className="mt-1 text-sm text-body">
+                    Selecciona un combustible.
+                  </p>
+                </div>
+                <FuelPicker value={stateFuel} onChange={changeStateFuel} />
+              </div>
+
+              <div className="mt-4 grid auto-rows-fr gap-3 sm:grid-cols-3">
+                <SnapshotCard
+                  label={`Promedio nacional ${FUEL_META[stateFuel].label}`}
+                  value={
+                    getNationalAvg(data, stateFuel)
+                      ? formatCurrency(getNationalAvg(data, stateFuel)!)
+                      : '—'
+                  }
+                  tone="neutral"
+                  highlight
+                  accent={FUEL_META[stateFuel].color}
+                />
+                <SnapshotCard
+                  label="Estado más caro"
+                  value={getMostExpensiveState(data, stateFuel)?.name ?? '—'}
+                  subvalue={
+                    getMostExpensiveState(data, stateFuel)
+                      ? formatCurrency(getMostExpensiveState(data, stateFuel)!.avg)
+                      : undefined
+                  }
+                  tone="exp"
+                  accent={COLORS.brand}
+                />
+                <SnapshotCard
+                  label="Estado más barato"
+                  value={getCheapestState(data, stateFuel)?.name ?? '—'}
+                  subvalue={
+                    getCheapestState(data, stateFuel)
+                      ? formatCurrency(getCheapestState(data, stateFuel)!.avg)
+                      : undefined
+                  }
+                  tone="cheap"
+                  accent={COLORS.cheap}
+                />
+              </div>
+            </div>
+
             {/* Avg by state, as delta vs national */}
-            <StateDeltaChart
-              data={data}
-              fuel={stateFuel}
-            />
+            <StateDeltaChart data={data} fuel={stateFuel} />
           </div>
         )}
       </section>
@@ -313,7 +296,7 @@ function SpreadTooltip({ active, payload }: TooltipContentProps) {
   const d = payload[0].payload as SpreadRow
   const [min, max] = d.range
   return (
-    <div className="min-w-[200px] rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
+    <div className="min-w-[200px] rounded-[6px] border border-line bg-white p-3 text-xs">
       <div
         className="mb-2 flex items-center gap-1.5 font-black"
         style={{ color: FUEL_META[d.fuel].color }}
@@ -379,7 +362,7 @@ function FuelSpreadChart({ data }: { data: MetricsData }) {
                 type="number"
                 domain={['dataMin - 1', 'dataMax + 1']}
                 tickFormatter={formatAxisMXN}
-                tick={{ fontSize: 10, fill: '#7e7e7e' }}
+                tick={{ fontSize: 10, fill: COLORS.body }}
                 tickLine={false}
                 axisLine={false}
               />
@@ -387,11 +370,11 @@ function FuelSpreadChart({ data }: { data: MetricsData }) {
                 type="category"
                 dataKey="label"
                 width={120}
-                tick={{ fontSize: 12, fontWeight: 700, fill: '#25282b' }}
+                tick={{ fontSize: 12, fontWeight: 700, fill: COLORS.ink }}
                 tickLine={false}
                 axisLine={false}
               />
-              <Tooltip cursor={{ fill: '#f5f5f5' }} content={SpreadTooltip} />
+              <Tooltip cursor={{ fill: COLORS.canvasSoft }} content={SpreadTooltip} />
               <Bar dataKey="range" barSize={12} radius={6}>
                 {rows.map((r) => (
                   <Cell key={r.fuel} fill={FUEL_META[r.fuel].color} fillOpacity={0.28} />
@@ -425,7 +408,7 @@ function StateDeltaTooltip({ active, payload }: TooltipContentProps) {
   const pricier = d.delta >= 0
   const fuelLabel = FUEL_META[d.fuel].label
   return (
-    <div className="min-w-[180px] rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
+    <div className="min-w-[180px] rounded-[6px] border border-line bg-white p-3 text-xs">
       <div className="mb-1.5 font-black text-ink">{d.name}</div>
       <div className="flex items-center justify-between gap-6 text-body">
         <span>Promedio {fuelLabel}</span>
@@ -472,12 +455,16 @@ function StateDeltaChart({
     <div>
       <div>
         <h2 className="eyebrow text-body">
-          {FUEL_META[fuel].label} vs. promedio nacional
+          {FUEL_META[fuel].label} contra el promedio nacional
         </h2>
-        <p className="mt-1 text-sm text-body">
-          Diferencia del promedio estatal contra el nacional ({formatCurrency(national)}).
-          Verde = más barato, rojo = más caro.
-        </p>
+        <div className="mt-1 space-y-1 text-sm text-body">
+          <p>
+            Cada barra muestra la diferencia entre el precio promedio del estado y el nacional ({formatCurrency(national)}).
+          </p>
+          <p>
+            Verde indica estados más baratos que el promedio; rojo, estados más caros.
+          </p>
+        </div>
       </div>
       <div className="mt-4 rounded-[6px] border border-line p-4">
         <ClientOnly fallback={<ChartSkeleton height={360} />}>
@@ -490,7 +477,7 @@ function StateDeltaChart({
               <XAxis
                 type="number"
                 tickFormatter={formatSignedMXN}
-                tick={{ fontSize: 10, fill: '#7e7e7e' }}
+                tick={{ fontSize: 10, fill: COLORS.body }}
                 tickLine={false}
                 axisLine={false}
               />
@@ -498,17 +485,17 @@ function StateDeltaChart({
                 type="category"
                 dataKey="name"
                 width={140}
-                tick={{ fontSize: 11, fill: '#25282b' }}
+                tick={{ fontSize: 11, fill: COLORS.ink }}
                 tickLine={false}
                 axisLine={false}
               />
-              <ReferenceLine x={0} stroke="#25282b" strokeWidth={1.5} />
-              <Tooltip cursor={{ fill: '#f5f5f5' }} content={StateDeltaTooltip} />
+              <ReferenceLine x={0} stroke={COLORS.ink} strokeWidth={1.5} />
+              <Tooltip cursor={{ fill: COLORS.canvasSoft }} content={StateDeltaTooltip} />
               <Bar dataKey="delta" radius={2}>
                 {rows.map((r) => (
                   <Cell
                     key={r.stateExternalId}
-                    fill={r.delta >= 0 ? '#e60000' : '#10b981'}
+                    fill={r.delta >= 0 ? COLORS.brand : COLORS.cheap}
                   />
                 ))}
               </Bar>
@@ -520,44 +507,58 @@ function StateDeltaChart({
   )
 }
 
-function FuelSelector({
+function FuelPicker({
   value,
   onChange,
-  tone = 'light',
 }: {
   value: FuelType
   onChange: (fuel: FuelType) => void
-  tone?: 'light' | 'dark'
 }) {
   return (
-    <div
-      className={`inline-flex w-full rounded-full border p-1 sm:w-auto ${
-        tone === 'dark'
-          ? 'border-white/15 bg-black/10'
-          : 'border-line bg-white'
-      }`}
-    >
-      {FUELS.map((fuel) => {
-        const active = value === fuel
-        return (
-          <button
-            key={fuel}
-            type="button"
-            onClick={() => onChange(fuel)}
-            className={`inline-flex flex-1 items-center justify-center gap-1 rounded-full px-2 py-1.5 text-xs font-black transition sm:flex-none sm:gap-1.5 sm:px-3 ${
-              active
-                ? 'text-white shadow-[0_6px_18px_rgba(0,0,0,0.22)]'
-                : tone === 'dark'
-                  ? 'text-white/60 hover:text-white'
-                  : 'text-body hover:text-ink'
-            }`}
-            style={active ? { backgroundColor: FUEL_META[fuel].color } : undefined}
-          >
-            <Fuel className="h-3.5 w-3.5" />
-            {FUEL_META[fuel].label}
-          </button>
-        )
-      })}
+    <div className="w-full sm:w-auto">
+      {/* Mobile: 2x2 pill grid */}
+      <div className="grid grid-cols-2 gap-2 md:hidden">
+        {FUELS.map((fuel) => {
+          const active = value === fuel
+          return (
+            <button
+              key={fuel}
+              type="button"
+              onClick={() => onChange(fuel)}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-black transition ${
+                active
+                  ? 'border-transparent text-white'
+                  : 'border-line bg-white text-body hover:text-ink'
+              }`}
+              style={active ? { backgroundColor: FUEL_META[fuel].color } : undefined}
+            >
+              <Fuel className="h-3.5 w-3.5" />
+              {FUEL_META[fuel].label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Desktop: segmented control */}
+      <div className="hidden md:inline-flex rounded-full border border-line bg-white p-1">
+        {FUELS.map((fuel) => {
+          const active = value === fuel
+          return (
+            <button
+              key={fuel}
+              type="button"
+              onClick={() => onChange(fuel)}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition ${
+                active ? 'text-white' : 'text-body hover:text-ink'
+              }`}
+              style={active ? { backgroundColor: FUEL_META[fuel].color } : undefined}
+            >
+              <Fuel className="h-3.5 w-3.5" />
+              {FUEL_META[fuel].label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -572,7 +573,7 @@ function MetricsSkeleton() {
             <div
               key={index}
               className="rounded-[6px] border border-line p-5"
-              style={{ borderTopColor: '#e6e6e6', borderTopWidth: 3 }}
+              style={{ borderTopColor: COLORS.line, borderTopWidth: 3 }}
             >
               <div className="flex items-center justify-between gap-4">
                 <SkeletonLine lead="h-5" bar="h-3.5" width="w-28" />
@@ -592,14 +593,26 @@ function MetricsSkeleton() {
           ))}
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {[0, 1].map((index) => (
-          <div key={index} className="rounded-[6px] border border-line p-5">
-            <SkeletonLine lead="h-[15px]" bar="h-3" width="w-28" />
-            <SkeletonLine lead="h-7" bar="h-6" width="w-40" className="mt-2" />
-            <SkeletonLine lead="h-5" bar="h-3.5" width="w-48" className="mt-1" />
-          </div>
-        ))}
+      <div>
+        <SkeletonLine lead="h-[1.125rem]" bar="h-3" width="w-48" />
+        <div className="mt-4 rounded-[6px] border border-line p-4">
+          <Skeleton className="h-[220px] w-full" />
+        </div>
+      </div>
+      <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <SkeletonLine lead="h-[1.125rem]" bar="h-3" width="w-56" />
+          <SkeletonLine lead="h-11" bar="h-11" width="w-full sm:w-64" />
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={index} className="rounded-[6px] border border-line bg-white p-4">
+              <SkeletonLine lead="h-[15px]" bar="h-3" width="w-24" />
+              <SkeletonLine lead="h-7" bar="h-6" width="w-32" className="mt-2" />
+              <SkeletonLine lead="h-5" bar="h-3.5" width="w-20" className="mt-1" />
+            </div>
+          ))}
+        </div>
       </div>
       <div>
         <SkeletonLine lead="h-[1.125rem]" bar="h-3" width="w-48" />
@@ -611,14 +624,36 @@ function MetricsSkeleton() {
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function ViewToggle({
+  bundle,
+  view,
+  onChange,
+}: {
+  bundle: MetricsBundle | undefined
+  view: MetricsView
+  onChange: (next: MetricsView) => void
+}) {
+  const text =
+    bundle && view === 'curated'
+      ? `La vista curada excluye ${bundle.excludedPriceRows.toLocaleString(
+          'es-MX',
+        )} precios fuera de ${formatCurrency(bundle.priceBand.min)}–${formatCurrency(
+          bundle.priceBand.max,
+        )} por litro: montos que la fuente (CNE) reporta por error y que distorsionan los extremos y promedios. "Sin filtrar" muestra los datos tal cual llegan.`
+      : 'Vista sin filtrar: incluye todos los precios reportados por la CNE, incluso los que parecen errores.'
+
   return (
-    <div className="rounded-[6px] border border-white/15 bg-white/[0.04] px-4 py-2.5 last:col-span-2 lg:last:col-span-1">
-      <div className="text-[10px] font-black uppercase tracking-widest text-white/50">
-        {label}
-      </div>
-      <div className="mt-0.5 text-base font-bold text-white">{value}</div>
-    </div>
+    <span className="flex w-full flex-row flex-wrap items-center gap-2 sm:inline-flex sm:w-auto">
+      <span className="flex flex-1 rounded-full border border-white/15 bg-black/10 p-1 sm:flex-none">
+        <ViewButton active={view === 'curated'} onClick={() => onChange('curated')}>
+          Curada
+        </ViewButton>
+        <ViewButton active={view === 'raw'} onClick={() => onChange('raw')}>
+          Sin filtrar
+        </ViewButton>
+      </span>
+      <InfoTooltip text={text} tone="dark" />
+    </span>
   )
 }
 
@@ -644,21 +679,28 @@ function ViewButton({
   )
 }
 
-function InfoTooltip({ text }: { text: string }) {
+type InfoTooltipTone = 'dark' | 'light'
+
+function InfoTooltip({ text, tone = 'light' }: { text: string; tone?: InfoTooltipTone }) {
+  const isDark = tone === 'dark'
   return (
     <Popover.Root>
       <Popover.Trigger
-        aria-label="Por qué hay dos vistas"
-        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:text-white data-popup-open:border-white/40 data-popup-open:text-white"
+        aria-label="Más información"
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] transition ${
+          isDark
+            ? 'border-white/15 text-white/60 hover:text-white data-popup-open:border-white/40 data-popup-open:text-white'
+            : 'border-line text-body hover:text-ink data-popup-open:border-ink data-popup-open:text-ink'
+        }`}
       >
-        <Info className="h-3.5 w-3.5" />
+        <Info className="h-3 w-3" />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner
           sideOffset={8}
           className="z-[1400] max-w-[calc(100vw-2rem)]"
         >
-          <Popover.Popup className="relative w-[min(18rem,calc(100vw-2rem))] origin-[var(--transform-origin)] rounded-lg border border-line bg-white p-3 text-left text-xs font-medium leading-5 text-ink shadow-[0_12px_40px_rgba(37,40,43,0.16)] outline-none transition-[opacity,transform] duration-150 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0">
+          <Popover.Popup className="relative w-[min(18rem,calc(100vw-2rem))] origin-[var(--transform-origin)] rounded-lg border border-line bg-white p-3 text-left text-xs font-medium leading-5 text-ink outline-none transition-[opacity,transform] duration-150 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0">
             <Popover.Arrow className="relative block h-2 w-3 overflow-clip data-[side=bottom]:top-[-7px] data-[side=left]:right-[-10px] data-[side=left]:rotate-90 data-[side=right]:left-[-10px] data-[side=right]:-rotate-90 data-[side=top]:bottom-[-7px] data-[side=top]:rotate-180 before:absolute before:bottom-0 before:left-1/2 before:h-2 before:w-2 before:-translate-x-1/2 before:translate-y-1/2 before:rotate-45 before:border before:border-line before:bg-white before:content-['']" />
             <Popover.Description>{text}</Popover.Description>
           </Popover.Popup>
@@ -697,37 +739,43 @@ function ExtremeCell({ kind, e }: { kind: 'cheap' | 'exp'; e: Extreme }) {
   )
 }
 
-function StateCard({
-  kind,
-  title,
-  fuel,
-  state,
+function SnapshotCard({
+  label,
+  value,
+  subvalue,
+  tone,
+  highlight = false,
+  accent,
 }: {
-  kind: 'cheap' | 'exp'
-  title: string
-  fuel: FuelType
-  state: { name: string; avg: number } | null
+  label: string
+  value: string
+  subvalue?: string
+  tone: 'neutral' | 'cheap' | 'exp'
+  highlight?: boolean
+  accent?: string
 }) {
-  const cheap = kind === 'cheap'
+  const toneClass =
+    tone === 'cheap' ? 'text-emerald-600' : tone === 'exp' ? 'text-brand' : 'text-ink'
   return (
-    <div className="rounded-[6px] border border-line p-5">
+    <div
+      className="flex h-full flex-col rounded-[6px] border border-line bg-white p-4"
+      style={accent ? { borderTopColor: accent, borderTopWidth: 3 } : undefined}
+    >
+      <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-body">
+        {accent && <span className="h-2 w-2 rounded-full" style={{ background: accent }} />}
+        {label}
+      </div>
       <div
-        className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider ${
-          cheap ? 'text-emerald-600' : 'text-brand'
+        className={`mt-1 flex min-w-0 flex-1 items-center truncate font-black ${toneClass} ${
+          highlight
+            ? 'font-display text-[clamp(2rem,5vw,3rem)] leading-[1]'
+            : 'text-xl'
         }`}
       >
-        {cheap ? <TrendingDown className="h-3.5 w-3.5" /> : <TrendingUp className="h-3.5 w-3.5" />}
-        {title}
+        {value}
       </div>
-      {state ? (
-        <>
-          <div className="font-display mt-2 text-3xl text-ink">{state.name}</div>
-          <div className="mt-1 text-sm font-semibold text-body">
-            Promedio {FUEL_META[fuel].label} {formatCurrency(state.avg)}
-          </div>
-        </>
-      ) : (
-        <div className="mt-2 text-sm text-mute">Sin datos</div>
+      {subvalue && (
+        <div className="mt-auto pt-1 text-sm font-semibold text-body">{subvalue}</div>
       )}
     </div>
   )

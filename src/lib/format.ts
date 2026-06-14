@@ -17,3 +17,17 @@ export function formatDistance(km: number): string {
   if (km < 10) return `${km.toFixed(1)} km`
   return `${Math.round(km)} km`
 }
+
+export function formatAxisMXN(value: number): string {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+export function formatSignedMXN(value: number): string {
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${formatCurrency(value)}`
+}
