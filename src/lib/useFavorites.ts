@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
@@ -26,12 +26,13 @@ function parse(raw: string | null): string[] {
 }
 
 function getSnapshot(): string[] {
-  let raw: string | null = null
-  try {
-    raw = window.localStorage.getItem(LOCAL_FAVORITES_KEY)
-  } catch {
-    raw = null
-  }
+  const raw = (() => {
+    try {
+      return window.localStorage.getItem(LOCAL_FAVORITES_KEY)
+    } catch {
+      return null
+    }
+  })()
   // Cache by raw string so the snapshot ref is stable between unchanged reads.
   if (raw === snapshotCache.raw) return snapshotCache.value
   snapshotCache = { raw, value: parse(raw) }
@@ -97,9 +98,9 @@ export function useFavorites() {
   const sessionUser = session?.data?.user ?? null
   const localFavorites = useLocalFavorites()
   const hydrated = useIsHydrated()
-  const [syncedUserId, setSyncedUserId] = useState<string | null>(null)
+  const syncedUserIdRef = useRef<string | null>(null)
   const remoteQuery = useQuery(api.favorites.list, sessionUser ? {} : 'skip')
-  const remoteFavorites = (remoteQuery ?? []) as string[]
+  const remoteFavorites = useMemo(() => remoteQuery ?? [], [remoteQuery])
   const setFavorite = useMutation(api.favorites.set)
 
   const favoriteSet = useMemo(
@@ -116,22 +117,24 @@ export function useFavorites() {
   useEffect(() => {
     const userId = sessionUser?.id ?? null
     if (!userId) {
-      setSyncedUserId(null)
+      syncedUserIdRef.current = null
       return
     }
-    if (syncedUserId === userId) return
+    if (syncedUserIdRef.current === userId) return
     const remote = new Set(remoteFavorites)
     const unsynced = localFavorites.filter((p) => !remote.has(p))
     if (!unsynced.length) {
-      setSyncedUserId(userId)
+      syncedUserIdRef.current = userId
       return
     }
     Promise.all(
       unsynced.map((p) => setFavorite({ stationPermitNumber: p, favorited: true })),
     )
-      .then(() => setSyncedUserId(userId))
+      .then(() => {
+        syncedUserIdRef.current = userId
+      })
       .catch(() => undefined)
-  }, [remoteFavorites, localFavorites, sessionUser?.id, setFavorite, syncedUserId])
+  }, [remoteFavorites, localFavorites, sessionUser?.id, setFavorite])
 
   async function toggleFavorite(permitNumber: string): Promise<ToggleResult> {
     const favorited = !favoriteSet.has(permitNumber)

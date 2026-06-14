@@ -1,5 +1,12 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
+import {
+  adminAuditActionValidator,
+  adminAuditStatusValidator,
+  fuelTypeValidator,
+  ingestionRunKindValidator,
+  runStatusValidator,
+} from './validators'
 
 export default defineSchema({
   states: defineTable({
@@ -43,13 +50,7 @@ export default defineSchema({
     stationPermitNumber: v.string(),
     product: v.string(),
     subproduct: v.string(),
-    fuelType: v.union(
-      v.literal('regular'),
-      v.literal('premium'),
-      v.literal('diesel'),
-      v.literal('duba'),
-      v.literal('unknown'),
-    ),
+    fuelType: fuelTypeValidator,
     price: v.number(),
     currency: v.literal('MXN'),
     unit: v.literal('litro'),
@@ -72,13 +73,7 @@ export default defineSchema({
     stationPermitNumber: v.string(),
     product: v.string(),
     subproduct: v.string(),
-    fuelType: v.union(
-      v.literal('regular'),
-      v.literal('premium'),
-      v.literal('diesel'),
-      v.literal('duba'),
-      v.literal('unknown'),
-    ),
+    fuelType: fuelTypeValidator,
     price: v.number(),
     currency: v.literal('MXN'),
     unit: v.literal('litro'),
@@ -92,19 +87,8 @@ export default defineSchema({
     .index('by_station', ['stationPermitNumber'])
     .index('by_run', ['runId']),
   ingestionRuns: defineTable({
-    kind: v.union(
-      v.literal('catalog'),
-      v.literal('municipality_prices'),
-      v.literal('xml_snapshot'),
-      v.literal('daily_queue'),
-      v.literal('geocoding'),
-    ),
-    status: v.union(
-      v.literal('running'),
-      v.literal('success'),
-      v.literal('failed'),
-      v.literal('skipped'),
-    ),
+    kind: ingestionRunKindValidator,
+    status: runStatusValidator,
     startedAt: v.string(),
     finishedAt: v.optional(v.string()),
     stateExternalId: v.optional(v.string()),
@@ -139,13 +123,10 @@ export default defineSchema({
   adminAuditEvents: defineTable({
     actorUserId: v.string(),
     actorEmail: v.optional(v.string()),
-    action: v.union(
-      v.literal('retry_municipality_prices'),
-      v.literal('set_user_admin'),
-    ),
+    action: adminAuditActionValidator,
     target: v.string(),
     createdAt: v.string(),
-    status: v.union(v.literal('success'), v.literal('failed')),
+    status: adminAuditStatusValidator,
     message: v.optional(v.string()),
     runId: v.optional(v.string()),
   })

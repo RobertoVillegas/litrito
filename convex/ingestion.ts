@@ -15,6 +15,7 @@ import {
   stateId,
   type FuelType,
 } from './normalization'
+import { fuelTypeValidator, runStatusValidator } from './validators'
 
 const CNE_CATALOG_URL = 'https://api-catalogo.cne.gob.mx/api/utiles'
 const CNE_REPORT_URL = 'https://api-reportediario.cne.gob.mx/api/EstacionServicio/Petroliferos'
@@ -305,13 +306,7 @@ export const applyMunicipalityPrices = internalMutation({
         address: v.string(),
         product: v.string(),
         subproduct: v.string(),
-        fuelType: v.union(
-          v.literal('regular'),
-          v.literal('premium'),
-          v.literal('diesel'),
-          v.literal('duba'),
-          v.literal('unknown'),
-        ),
+        fuelType: fuelTypeValidator,
         price: v.number(),
         stateExternalId: v.string(),
         municipalityExternalId: v.string(),
@@ -979,7 +974,7 @@ export const patchStationCoordinates = internalMutation({
 
 export const recordGeocodingRun = internalMutation({
   args: {
-    status: v.union(v.literal('running'), v.literal('success'), v.literal('failed'), v.literal('skipped')),
+    status: runStatusValidator,
     processed: v.number(),
     geocoded: v.number(),
     failed: v.number(),

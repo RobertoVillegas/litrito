@@ -5,5 +5,15 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      include: ['src/**/*.{ts,tsx}', 'convex/**/*.ts'],
+      exclude: [
+        'src/routeTree.gen.ts',
+        'src/routes/api/**',
+        'convex/_generated/**',
+      ],
+    },
   },
 })

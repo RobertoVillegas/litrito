@@ -1,7 +1,7 @@
 import { ClientOnly, createFileRoute } from '@tanstack/react-router'
 import { usePaginatedQuery, useQuery as useConvexQuery } from 'convex/react'
 import { BadgeCent, DatabaseZap, Fuel, RefreshCw, Star } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../../convex/_generated/api'
@@ -406,7 +406,7 @@ function Explore() {
 
   const latestRun = loaderData.latestRun
 
-  const displayDistanceForStation = (
+  const displayDistanceForStation = useCallback((
     row: StationFromQuery,
   ): number | null | undefined => {
     if (row.distanceKm != null) return row.distanceKm
@@ -415,7 +415,7 @@ function Explore() {
     const lon = row.station.longitude
     if (typeof lat !== 'number' || typeof lon !== 'number') return row.distanceKm
     return distanceKm(userLoc.location, { latitude: lat, longitude: lon })
-  }
+  }, [filters.sortMode, userLoc.location])
 
   const visibleRows = useMemo<StationRow[]>(() => {
     if (!paginated.results) return []
@@ -433,7 +433,7 @@ function Explore() {
       highlightedPrice: row.highlightedPrice,
       distanceKm: displayDistanceForStation(row),
     }))
-  }, [paginated.results, filters.sortMode, userLoc.location])
+  }, [paginated.results, displayDistanceForStation])
 
   const favoriteRows = useMemo<StationRow[]>(() => {
     if (!favoriteStations) return []

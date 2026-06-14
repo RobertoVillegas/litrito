@@ -99,18 +99,20 @@ export const Route = createFileRoute('/estacion/$')({
     }
   },
   component: StationDetail,
-  errorComponent: ({ error, reset }) => {
-    const { _splat } = Route.useParams()
-    return (
-      <RouteErrorFallback
-        error={error}
-        reset={reset}
-        screen="station-detail"
-        context={{ route: '/estacion/$', permitNumber: _splat }}
-      />
-    )
-  },
+  errorComponent: StationDetailError,
 })
+
+function StationDetailError({ error, reset }: { error: Error; reset: () => void }) {
+  const { _splat } = Route.useParams()
+  return (
+    <RouteErrorFallback
+      error={error}
+      reset={reset}
+      screen="station-detail"
+      context={{ route: '/estacion/$', permitNumber: _splat }}
+    />
+  )
+}
 
 
 function formatDate(value: string | undefined, withTime = false): string {

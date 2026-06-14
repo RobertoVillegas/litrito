@@ -1,13 +1,8 @@
 import { v } from 'convex/values'
 import { query } from './_generated/server'
+import { fuelTypeValidator } from './validators'
 
-const fuelType = v.union(
-  v.literal('regular'),
-  v.literal('premium'),
-  v.literal('diesel'),
-  v.literal('duba'),
-  v.literal('unknown'),
-)
+const fuelType = fuelTypeValidator
 
 export const latestRun = query({
   args: {},

@@ -394,6 +394,9 @@ export function StationTable({
     return [{ id: `fuel-${fuelTypes[0] ?? 'regular'}`, desc: false }]
   }, [fuelTypes, sortMode])
 
+  // TanStack Table intentionally returns non-memoizable functions; this component
+  // does not pass the table instance into memoized children.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,

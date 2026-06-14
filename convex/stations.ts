@@ -9,20 +9,10 @@ import {
 import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
+import { fuelTypeValidator, sortModeValidator } from './validators'
 
-const fuelType = v.union(
-  v.literal('regular'),
-  v.literal('premium'),
-  v.literal('diesel'),
-  v.literal('duba'),
-  v.literal('unknown'),
-)
-
-const sortMode = v.union(
-  v.literal('price'),
-  v.literal('distance'),
-  v.literal('name'),
-)
+const fuelType = fuelTypeValidator
+const sortMode = sortModeValidator
 
 const MEXICO_BOUNDS = {
   swLat: 14.5,
