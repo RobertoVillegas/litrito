@@ -1,0 +1,231 @@
+import { createFileRoute } from '@tanstack/react-router'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { Resvg } from '@resvg/resvg-js'
+import satori from 'satori'
+
+const OG_SIZE = { width: 1200, height: 630 }
+const FONT_FAMILY = 'Inter'
+const FONT_WEIGHT = 700
+
+let assetsPromise:
+  | Promise<{
+      font: Buffer
+      logoSrc: string
+    }>
+  | undefined
+
+async function loadAssets() {
+  assetsPromise ??= Promise.all([
+    readFile(
+      join(
+        process.cwd(),
+        'node_modules',
+        '@fontsource',
+        'inter',
+        'files',
+        `inter-latin-${FONT_WEIGHT}-normal.woff`,
+      ),
+    ),
+    readFile(join(process.cwd(), 'public', 'litrito-logo-full-res.png')),
+  ]).then(([font, logo]) => ({
+    font,
+    logoSrc: `data:image/png;base64,${logo.toString('base64')}`,
+  }))
+  return assetsPromise
+}
+
+function cleanText(value: string | null, fallback: string, maxLength: number) {
+  const text = (value ?? '')
+    .trim()
+    .split(/\n+/)
+    .map((line) => line.trim().replace(/[^\S\n]+/g, ' '))
+    .filter(Boolean)
+    .join('\n')
+  return (text || fallback).slice(0, maxLength)
+}
+
+async function renderOgImage({
+  title,
+  subtitle,
+  eyebrow,
+}: {
+  title: string
+  subtitle: string
+  eyebrow: string
+}) {
+  const { font, logoSrc } = await loadAssets()
+  const markup = {
+    type: 'div',
+    props: {
+      style: {
+        background: '#ffffff',
+        color: '#25282b',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: `"${FONT_FAMILY}", sans-serif`,
+        height: '100%',
+        justifyContent: 'center',
+        padding: '72px',
+        position: 'relative',
+        width: '100%',
+      },
+      children: [
+        {
+          type: 'div',
+          props: {
+            style: {
+              background: '#e60000',
+              display: 'flex',
+              height: '100%',
+              left: '0',
+              position: 'absolute',
+              top: '0',
+              width: '18px',
+            },
+          },
+        },
+        {
+          type: 'div',
+          props: {
+            style: {
+              background: '#25282b',
+              display: 'flex',
+              height: '100%',
+              position: 'absolute',
+              right: '0',
+              top: '0',
+              width: '18px',
+            },
+          },
+        },
+        {
+          type: 'div',
+          props: {
+            style: {
+              alignItems: 'center',
+              color: '#e60000',
+              display: 'flex',
+              fontSize: '30px',
+              fontWeight: 700,
+              gap: '16px',
+              justifyContent: 'flex-start',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+            },
+            children: [
+              {
+                type: 'img',
+                props: {
+                  src: logoSrc,
+                  style: {
+                    display: 'flex',
+                    height: '68px',
+                    objectFit: 'contain',
+                    width: '68px',
+                  },
+                },
+              },
+              { type: 'span', props: { children: eyebrow } },
+            ],
+          },
+        },
+        {
+          type: 'div',
+          props: {
+            style: {
+              alignItems: 'flex-start',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              maxWidth: '940px',
+              paddingTop: '38px',
+              textAlign: 'left',
+              width: '100%',
+            },
+            children: [
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    display: 'flex',
+                    fontSize: '72px',
+                    fontWeight: 700,
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.04,
+                  },
+                  children: title,
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    color: '#3a3e42',
+                    display: 'flex',
+                    fontSize: '29px',
+                    fontWeight: 700,
+                    lineHeight: 1.28,
+                    marginTop: '28px',
+                    maxWidth: '820px',
+                    whiteSpace: 'pre-wrap',
+                  },
+                  children: subtitle,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  }
+
+  const svg = await satori(markup as any, {
+    ...OG_SIZE,
+    fonts: [
+      {
+        data: font,
+        name: FONT_FAMILY,
+        style: 'normal',
+        weight: FONT_WEIGHT,
+      },
+    ],
+  })
+
+  return new Resvg(svg, {
+    background: '#ffffff',
+    fitTo: { mode: 'width', value: OG_SIZE.width },
+    font: { loadSystemFonts: false },
+  })
+    .render()
+    .asPng()
+}
+
+export const Route = createFileRoute('/og.png')({
+  server: {
+    handlers: {
+      GET: async ({ request }) => {
+        const url = new URL(request.url)
+        const title = cleanText(
+          url.searchParams.get('title'),
+          'Precios de gasolina en México.',
+          90,
+        )
+        const subtitle = cleanText(
+          url.searchParams.get('subtitle'),
+          'Compara precios por estación, municipio y estado.\nRegular, premium, diésel y duba, actualizados a diario.',
+          170,
+        )
+        const eyebrow = cleanText(url.searchParams.get('eyebrow'), 'Litrito', 34)
+        const png = await renderOgImage({ title, subtitle, eyebrow })
+
+        return new Response(new Uint8Array(png), {
+          headers: {
+            'content-type': 'image/png',
+            'cache-control': 'public, max-age=3600, stale-while-revalidate=86400',
+          },
+        })
+      },
+    },
+  },
+})

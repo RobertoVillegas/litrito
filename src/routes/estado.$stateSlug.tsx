@@ -4,6 +4,7 @@ import { Button } from '#/components/ui/button'
 import { LocationSeoPage } from '../components/LocationSeoPage'
 import { RouteErrorFallback } from '../components/RouteError'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
+import { buildSeoMeta } from '../lib/seo'
 
 export const Route = createFileRoute('/estado/$stateSlug')({
   loader: async ({ context, params }) => {
@@ -25,15 +26,17 @@ export const Route = createFileRoute('/estado/$stateSlug')({
     const origin = getConfiguredSiteOrigin()
     const url = origin ? `${origin}${path}` : path
     return {
-      meta: [
-        { title },
-        { name: 'description', content: description },
-        { property: 'og:title', content: title },
-        { property: 'og:description', content: description },
-        { property: 'og:url', content: url },
-        { name: 'twitter:title', content: title },
-        { name: 'twitter:description', content: description },
-      ],
+      meta: buildSeoMeta({
+        title,
+        description,
+        image: {
+          title: data ? `Gasolina en ${data.state.name}.` : 'Gasolina por estado.',
+          subtitle: data
+            ? 'Precios promedio, estaciones baratas y municipios disponibles.'
+            : 'Consulta precios de gasolina por estado en Litrito.',
+        },
+        url,
+      }),
       links: [{ rel: 'canonical', href: url }],
     }
   },

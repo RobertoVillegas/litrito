@@ -16,6 +16,7 @@ import { api } from '../../convex/_generated/api'
 import { cn } from '#/lib/utils'
 import { useFavorites } from '#/lib/useFavorites'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
+import { buildSeoMeta } from '../lib/seo'
 import { Button } from '#/components/ui/button'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
@@ -85,14 +86,16 @@ export const Route = createFileRoute('/estacion/$')({
       : null
 
     return {
-      meta: [
-        { title },
-        { name: 'description', content: description },
-        { property: 'og:title', content: title },
-        { property: 'og:description', content: description },
-        { name: 'twitter:title', content: title },
-        { name: 'twitter:description', content: description },
-      ],
+      meta: buildSeoMeta({
+        title,
+        description,
+        image: {
+          title: station ? station.name : `Estación ${params._splat ?? ''}`,
+          subtitle: description,
+          eyebrow: 'Litrito estación',
+        },
+        url: origin ? canonical : undefined,
+      }),
       ...(origin ? { links: [{ rel: 'canonical', href: canonical }] } : {}),
       ...(jsonLd
         ? { scripts: [{ type: 'application/ld+json', children: JSON.stringify(jsonLd) }] }

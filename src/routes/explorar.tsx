@@ -13,6 +13,7 @@ import { MapSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 import { AnimatedPrice } from '../components/AnimatedNumber'
+import { buildSeoMeta } from '../lib/seo'
 
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
@@ -73,16 +74,18 @@ export const Route = createFileRoute('/explorar')({
     const description =
       'Explora y filtra gasolineras de México por estado, municipio y combustible. Encuentra el mejor precio cerca de ti.'
     const origin = getConfiguredSiteOrigin()
+    const url = origin ? `${origin}/explorar` : undefined
     return {
-      meta: [
-        { title },
-        { name: 'description', content: description },
-        { property: 'og:title', content: title },
-        { property: 'og:description', content: description },
-        { name: 'twitter:title', content: title },
-        { name: 'twitter:description', content: description },
-      ],
-      ...(origin ? { links: [{ rel: 'canonical', href: `${origin}/explorar` }] } : {}),
+      meta: buildSeoMeta({
+        title,
+        description,
+        image: {
+          title: 'Explora gasolineras en México.',
+          subtitle: 'Filtra por estado, municipio, combustible, precio o distancia.',
+        },
+        url,
+      }),
+      ...(url ? { links: [{ rel: 'canonical', href: url }] } : {}),
     }
   },
   component: Explore,

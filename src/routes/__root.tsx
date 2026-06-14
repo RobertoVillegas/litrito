@@ -12,7 +12,6 @@ import { ServiceWorkerRegistration } from '../components/ServiceWorkerRegistrati
 import { SiteNav } from '../components/SiteNav'
 import { ToastProvider } from '../components/ui/toast'
 import { UserLocationProvider } from '../lib/useUserLocation'
-import { getConfiguredSiteOrigin } from '../lib/site-url'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -25,8 +24,6 @@ interface MyRouterContext {
   convexQueryClient: ConvexQueryClient
   queryClient: QueryClient
 }
-
-const OG_IMAGE_VERSION = '2026-06-13'
 
 // Read the Umami config from the SERVER runtime env (not import.meta.env, which
 // Vite inlines at build time — that fails when the value is only present in the
@@ -47,11 +44,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       (import.meta.env.VITE_UMAMI_SRC as string | undefined) ||
       runtimeEnv?.VITE_UMAMI_SRC ||
       'https://umami.athas.mx/script.js'
-    const appOrigin = getConfiguredSiteOrigin()
-    const ogImage = appOrigin
-      ? `${appOrigin}/og-image.png?v=${OG_IMAGE_VERSION}`
-      : `/og-image.png?v=${OG_IMAGE_VERSION}`
-    return { umamiWebsiteId, umamiSrc, appOrigin, ogImage }
+    return { umamiWebsiteId, umamiSrc }
   },
   head: ({ loaderData }) => ({
     scripts: loaderData?.umamiWebsiteId
@@ -92,102 +85,12 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         content: 'black-translucent',
       },
       {
-        title: 'Litrito - precios de gasolina en Mexico',
-      },
-      {
-        name: 'description',
-        content:
-          'Compara precios de gasolina por estacion, municipio y estado en Mexico. Regular, premium, diesel y duba, actualizados a diario.',
-      },
-      {
-        property: 'og:type',
-        content: 'website',
-      },
-      {
         property: 'og:site_name',
         content: 'Litrito',
       },
       {
-        property: 'og:title',
-        content: 'Litrito - precios de gasolina en Mexico',
-      },
-      {
-        property: 'og:description',
-        content:
-          'Compara precios de gasolina por estacion, municipio y estado en Mexico.',
-      },
-      {
-        property: 'og:image',
-        content: loaderData?.ogImage ?? '/og-image.png',
-      },
-      {
-        property: 'og:image:url',
-        content: loaderData?.ogImage ?? '/og-image.png',
-      },
-      {
-        property: 'og:image:secure_url',
-        content: loaderData?.ogImage ?? '/og-image.png',
-      },
-      {
-        property: 'og:image:type',
-        content: 'image/png',
-      },
-      {
-        property: 'og:image:width',
-        content: '1200',
-      },
-      {
-        property: 'og:image:height',
-        content: '630',
-      },
-      {
-        property: 'og:image:alt',
-        content: 'Litrito - precios de gasolina en Mexico',
-      },
-      {
         property: 'og:locale',
         content: 'es_MX',
-      },
-      ...(loaderData?.appOrigin
-        ? [
-            {
-              property: 'og:url',
-              content: loaderData.appOrigin,
-            },
-          ]
-        : []),
-      {
-        name: 'twitter:card',
-        content: 'summary_large_image',
-      },
-      {
-        name: 'twitter:title',
-        content: 'Litrito - precios de gasolina en Mexico',
-      },
-      {
-        name: 'twitter:description',
-        content:
-          'Compara precios de gasolina por estacion, municipio y estado en Mexico.',
-      },
-      {
-        name: 'twitter:image',
-        content: loaderData?.ogImage ?? '/og-image.png',
-      },
-      {
-        name: 'twitter:image:alt',
-        content: 'Litrito - precios de gasolina en Mexico',
-      },
-      {
-        name: 'twitter:image:type',
-        content: 'image/png',
-      },
-      {
-        name: 'twitter:image:width',
-        content: '1200',
-      },
-      {
-        name: 'twitter:image:height',
-        content: '630',
       },
     ],
     links: [

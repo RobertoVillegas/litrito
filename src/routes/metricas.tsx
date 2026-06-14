@@ -31,6 +31,7 @@ import { AnimatedCount, AnimatedPrice } from '../components/AnimatedNumber'
 import { ChartSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
+import { buildSeoMeta } from '../lib/seo'
 import { formatCurrency, formatAxisMXN, formatSignedMXN } from '#/lib/format'
 import { COLORS } from '#/lib/colors'
 
@@ -40,16 +41,18 @@ export const Route = createFileRoute('/metricas')({
     const description =
       'Promedios, rangos y tendencias de precios de gasolina regular, premium, diésel y duba por estado en México.'
     const origin = getConfiguredSiteOrigin()
+    const url = origin ? `${origin}/metricas` : undefined
     return {
-      meta: [
-        { title },
-        { name: 'description', content: description },
-        { property: 'og:title', content: title },
-        { property: 'og:description', content: description },
-        { name: 'twitter:title', content: title },
-        { name: 'twitter:description', content: description },
-      ],
-      ...(origin ? { links: [{ rel: 'canonical', href: `${origin}/metricas` }] } : {}),
+      meta: buildSeoMeta({
+        title,
+        description,
+        image: {
+          title: 'Métricas de gasolina en México.',
+          subtitle: 'Promedios, rangos y tendencias por estado y combustible.',
+        },
+        url,
+      }),
+      ...(url ? { links: [{ rel: 'canonical', href: url }] } : {}),
     }
   },
   component: Metrics,

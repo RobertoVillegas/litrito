@@ -9,6 +9,7 @@ import satori from "satori";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 const outPath = join(root, "public", "og-image.png");
+const logoPath = join(root, "public", "litrito-logo-full-res.png");
 
 const FONT_FAMILY = "Inter";
 const FONT_WEIGHT = 700;
@@ -35,7 +36,8 @@ const loadFont = async () => {
 };
 
 const render = async () => {
-  const font = await loadFont();
+  const [font, logo] = await Promise.all([loadFont(), readFile(logoPath)]);
+  const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
 
   // satori accepts a JSX-like element tree directly. (Do NOT wrap this in
   // satori-html's `html()` — that parses an HTML *string*; handing it an object
@@ -100,97 +102,17 @@ const render = async () => {
             },
             children: [
               {
-                type: "span",
+                type: "img",
                 props: {
+                  src: logoSrc,
                   style: {
                     alignItems: "center",
-                    background: "#e60000",
-                    borderRadius: "8px",
-                    color: "#ffffff",
                     display: "flex",
-                    height: "40px",
+                    height: "68px",
                     justifyContent: "center",
                     position: "relative",
-                    width: "40px",
+                    width: "68px",
                   },
-                  children: [
-                    {
-                      type: "span",
-                      props: {
-                        style: {
-                          background: "#ffffff",
-                          borderRadius: "4px",
-                          display: "flex",
-                          height: "23px",
-                          left: "10px",
-                          position: "absolute",
-                          top: "9px",
-                          width: "16px",
-                        },
-                      },
-                    },
-                    {
-                      type: "span",
-                      props: {
-                        style: {
-                          background: "#e60000",
-                          borderRadius: "2px",
-                          display: "flex",
-                          height: "7px",
-                          left: "13px",
-                          position: "absolute",
-                          top: "12px",
-                          width: "10px",
-                        },
-                      },
-                    },
-                    {
-                      type: "span",
-                      props: {
-                        style: {
-                          background: "#ffffff",
-                          borderRadius: "2px",
-                          display: "flex",
-                          height: "4px",
-                          left: "27px",
-                          position: "absolute",
-                          top: "15px",
-                          transform: "rotate(34deg)",
-                          width: "8px",
-                        },
-                      },
-                    },
-                    {
-                      type: "span",
-                      props: {
-                        style: {
-                          background: "#ffffff",
-                          borderRadius: "2px",
-                          display: "flex",
-                          height: "13px",
-                          left: "31px",
-                          position: "absolute",
-                          top: "18px",
-                          width: "4px",
-                        },
-                      },
-                    },
-                    {
-                      type: "span",
-                      props: {
-                        style: {
-                          background: "#ffffff",
-                          borderRadius: "2px",
-                          display: "flex",
-                          height: "4px",
-                          left: "9px",
-                          position: "absolute",
-                          top: "31px",
-                          width: "18px",
-                        },
-                      },
-                    },
-                  ],
                 },
               },
               { type: "span", props: { children: "Litrito" } },
@@ -230,14 +152,15 @@ const render = async () => {
                   style: {
                     color: "#3a3e42",
                     display: "flex",
-                    fontSize: "27px",
+                    fontSize: "29px",
                     fontWeight: 700,
-                    lineHeight: 1.25,
+                    lineHeight: 1.28,
                     marginTop: "28px",
-                    maxWidth: "590px",
+                    maxWidth: "820px",
+                    whiteSpace: "pre-wrap",
                   },
                   children:
-                    "Compara precios por estación, municipio y estado. Regular, premium, diésel y duba, actualizados a diario.",
+                    "Compara precios por estación, municipio y estado.\nRegular, premium, diésel y duba, actualizados a diario.",
                 },
               },
             ],

@@ -13,6 +13,7 @@ import { slugifyLocationName } from '#/lib/slug'
 import { AnimatedPrice } from '../components/AnimatedNumber'
 import { formatDistance } from '#/lib/format'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
+import { buildSeoMeta } from '../lib/seo'
 import { useLocationPermissionFlow } from '../components/LocationPermissionDialog'
 import type { FuelType } from '../components/StationFilters'
 
@@ -56,8 +57,23 @@ export const Route = createFileRoute('/')({
     return { filterOptions }
   },
   head: () => {
+    const title = 'Litrito - precios de gasolina en México'
+    const description =
+      'Compara precios por estación, municipio y estado. Regular, premium, diésel y duba, actualizados a diario.'
     const origin = getConfiguredSiteOrigin()
-    return origin ? { links: [{ rel: 'canonical', href: origin }] } : {}
+    return {
+      meta: buildSeoMeta({
+        title,
+        description,
+        image: {
+          title: 'Precios de gasolina en México.',
+          subtitle:
+            'Compara precios por estación, municipio y estado.\nRegular, premium, diésel y duba, actualizados a diario.',
+        },
+        url: origin || undefined,
+      }),
+      ...(origin ? { links: [{ rel: 'canonical', href: origin }] } : {}),
+    }
   },
   component: Home,
   errorComponent: ({ error, reset }) => (

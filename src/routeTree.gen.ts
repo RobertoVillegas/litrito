@@ -14,6 +14,7 @@ import { Route as RestablecerRouteImport } from './routes/restablecer'
 import { Route as RegistroRouteImport } from './routes/registro'
 import { Route as RecuperarRouteImport } from './routes/recuperar'
 import { Route as PerfilRouteImport } from './routes/perfil'
+import { Route as OgDotpngRouteImport } from './routes/og[.]png'
 import { Route as MetricasRouteImport } from './routes/metricas'
 import { Route as ExplorarRouteImport } from './routes/explorar'
 import { Route as EntrarRouteImport } from './routes/entrar'
@@ -47,6 +48,11 @@ const RecuperarRoute = RecuperarRouteImport.update({
 const PerfilRoute = PerfilRouteImport.update({
   id: '/perfil',
   path: '/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OgDotpngRoute = OgDotpngRouteImport.update({
+  id: '/og.png',
+  path: '/og.png',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MetricasRoute = MetricasRouteImport.update({
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
+  '/og.png': typeof OgDotpngRoute
   '/perfil': typeof PerfilRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
+  '/og.png': typeof OgDotpngRoute
   '/perfil': typeof PerfilRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
+  '/og.png': typeof OgDotpngRoute
   '/perfil': typeof PerfilRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
@@ -152,6 +161,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/explorar'
     | '/metricas'
+    | '/og.png'
     | '/perfil'
     | '/recuperar'
     | '/registro'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/explorar'
     | '/metricas'
+    | '/og.png'
     | '/perfil'
     | '/recuperar'
     | '/registro'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/explorar'
     | '/metricas'
+    | '/og.png'
     | '/perfil'
     | '/recuperar'
     | '/registro'
@@ -201,6 +213,7 @@ export interface RootRouteChildren {
   EntrarRoute: typeof EntrarRoute
   ExplorarRoute: typeof ExplorarRoute
   MetricasRoute: typeof MetricasRoute
+  OgDotpngRoute: typeof OgDotpngRoute
   PerfilRoute: typeof PerfilRoute
   RecuperarRoute: typeof RecuperarRoute
   RegistroRoute: typeof RegistroRoute
@@ -248,6 +261,13 @@ declare module '@tanstack/react-router' {
       path: '/perfil'
       fullPath: '/perfil'
       preLoaderRoute: typeof PerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/og.png': {
+      id: '/og.png'
+      path: '/og.png'
+      fullPath: '/og.png'
+      preLoaderRoute: typeof OgDotpngRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/metricas': {
@@ -321,6 +341,7 @@ const rootRouteChildren: RootRouteChildren = {
   EntrarRoute: EntrarRoute,
   ExplorarRoute: ExplorarRoute,
   MetricasRoute: MetricasRoute,
+  OgDotpngRoute: OgDotpngRoute,
   PerfilRoute: PerfilRoute,
   RecuperarRoute: RecuperarRoute,
   RegistroRoute: RegistroRoute,
