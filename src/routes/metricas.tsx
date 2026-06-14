@@ -150,8 +150,8 @@ function Metrics() {
                   <div className="text-[10px] font-black uppercase tracking-widest text-white/45 sm:w-16">
                     Vista
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="inline-flex rounded-full border border-white/15 bg-black/10 p-1">
+                  <div className="flex w-full items-center gap-2 sm:w-auto">
+                    <div className="inline-flex w-full rounded-full border border-white/15 bg-black/10 p-1 sm:w-auto">
                       <ViewButton
                         active={view === 'curated'}
                         onClick={() => changeView('curated')}
@@ -186,7 +186,7 @@ function Metrics() {
             </div>
           )}
           {data && (
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap">
               <Stat label="Estaciones" value={data.totalStations.toLocaleString('es-MX')} />
               <Stat label="Con precio" value={data.pricedStations.toLocaleString('es-MX')} />
               <Stat
@@ -544,7 +544,7 @@ function FuelSelector({
             key={fuel}
             type="button"
             onClick={() => onChange(fuel)}
-            className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition sm:flex-none ${
+            className={`inline-flex flex-1 items-center justify-center gap-1 rounded-full px-2 py-1.5 text-xs font-black transition sm:flex-none sm:gap-1.5 sm:px-3 ${
               active
                 ? 'text-white shadow-[0_6px_18px_rgba(0,0,0,0.22)]'
                 : tone === 'dark'
@@ -613,7 +613,7 @@ function MetricsSkeleton() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[6px] border border-white/15 bg-white/[0.04] px-4 py-2.5">
+    <div className="rounded-[6px] border border-white/15 bg-white/[0.04] px-4 py-2.5 last:col-span-2 lg:last:col-span-1">
       <div className="text-[10px] font-black uppercase tracking-widest text-white/50">
         {label}
       </div>
@@ -635,7 +635,7 @@ function ViewButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+      className={`flex-1 rounded-full px-2.5 py-1 text-xs font-bold transition sm:flex-none sm:px-3 ${
         active ? 'bg-white text-ink' : 'text-white/60 hover:text-white'
       }`}
     >
