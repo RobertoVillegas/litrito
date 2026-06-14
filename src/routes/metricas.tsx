@@ -1,7 +1,7 @@
 import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
 import { Popover } from '@base-ui/react/popover'
 import { useQuery } from 'convex/react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -104,7 +104,7 @@ function Metrics() {
   const bundle = useQuery(api.metrics.getMetrics, {}) as MetricsBundle | undefined
   const [view, setView] = useState<MetricsView>('curated')
   const [stateFuel, setStateFuel] = useState<FuelType>('regular')
-  const data = bundle ? bundle[view] : undefined
+  const data = useMemo(() => (bundle ? bundle[view] : undefined), [bundle, view])
 
   const changeView = (next: MetricsView) => {
     setView(next)
@@ -173,7 +173,7 @@ function Metrics() {
                   const m = data.perFuel[f]
                   return (
                     <div
-                      key={f}
+                      key={`${f}-${view}`}
                       className="rounded-[6px] border border-line p-5 transition-colors duration-300"
                       style={{ borderTopColor: FUEL_META[f].color, borderTopWidth: 3 }}
                     >

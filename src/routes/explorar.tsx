@@ -566,7 +566,15 @@ function Explore() {
               <Metric
                 icon={<BadgeCent className="h-5 w-5" />}
                 label="Mejor precio"
-                value={bestPrice ? <AnimatedPrice value={bestPrice} /> : 'Sin datos'}
+                value={
+                  paginated.status === 'LoadingFirstPage' ? (
+                    '—'
+                  ) : bestPrice ? (
+                    <AnimatedPrice value={bestPrice} />
+                  ) : (
+                    'Sin datos'
+                  )
+                }
               />
             </div>
           </div>
