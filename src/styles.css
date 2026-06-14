@@ -101,6 +101,11 @@ body {
   transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
+.btn-pill:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
 .btn-pill--primary {
   background: var(--color-brand);
   color: #fff;

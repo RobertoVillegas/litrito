@@ -3,7 +3,9 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { authClient } from '#/lib/auth-client'
 import { track } from '#/lib/analytics'
-import { AuthLayout, authInputClass } from '../components/AuthLayout'
+import { Button } from '#/components/ui/button'
+import { Input } from '#/components/ui/input'
+import { AuthLayout } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/entrar')({ component: SignIn })
 
@@ -54,44 +56,42 @@ export function SignIn() {
           </p>
           <div className="border-t border-line pt-5 text-center">
             <p>¿No tienes cuenta?</p>
-            <Link to="/registro" className="btn-pill btn-pill--outline-dark mt-3 w-full">
+            <Button render={<Link to="/registro" />} variant="outline" fullWidth className="mt-3">
               Crear cuenta
-            </Link>
+            </Button>
           </div>
         </div>
       }
     >
       <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
-        <input
+        <Input
           id="signin-email"
           name="email"
           type="email"
           required
           autoComplete="username"
           inputMode="email"
+          label="Email"
+          hideLabel
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
-          className={authInputClass}
         />
-        <input
+        <Input
           id="signin-password"
           name="password"
           type="password"
           required
           autoComplete="current-password"
+          label="Contraseña"
+          hideLabel
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Contraseña"
-          className={authInputClass}
         />
-        <button
-          type="submit"
-          disabled={submitting}
-          className="btn-pill btn-pill--primary w-full disabled:opacity-50"
-        >
+        <Button type="submit" fullWidth disabled={submitting}>
           {submitting ? 'Entrando…' : 'Entrar'}
-        </button>
+        </Button>
         {error && <p className="text-sm font-semibold text-brand">{error}</p>}
       </form>
     </AuthLayout>

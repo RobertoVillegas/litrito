@@ -2,11 +2,6 @@ import { Link } from '@tanstack/react-router'
 import { Fuel } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-// text-base (16px) matches the body base size and keeps iOS Safari from
-// auto-zooming inputs under 16px on focus.
-export const authInputClass =
-  'h-11 w-full rounded-[6px] border border-line bg-white px-3.5 text-base focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand'
-
 export function AuthLayout({
   title,
   subtitle,

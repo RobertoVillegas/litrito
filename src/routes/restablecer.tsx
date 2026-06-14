@@ -2,7 +2,9 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { authClient } from '#/lib/auth-client'
-import { AuthLayout, authInputClass } from '../components/AuthLayout'
+import { Button } from '#/components/ui/button'
+import { Input } from '#/components/ui/input'
+import { AuthLayout } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/restablecer')({
   component: ResetPassword,
@@ -53,9 +55,14 @@ function ResetPassword() {
       title="Nueva contraseña"
       subtitle="Elige una contraseña nueva para tu cuenta."
       footer={
-        <Link to="/recuperar" className="font-bold text-brand hover:text-brand-dark">
-          Solicitar otro enlace
-        </Link>
+        <p className="text-center">
+          <Link
+            to="/recuperar"
+            className="text-body underline-offset-2 hover:text-ink hover:underline"
+          >
+            Solicitar otro enlace
+          </Link>
+        </p>
       }
     >
       {!token ? (
@@ -69,25 +76,22 @@ function ResetPassword() {
         </p>
       ) : (
         <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
-          <input
+          <Input
             id="reset-password"
             name="new-password"
             type="password"
             required
             minLength={8}
             autoComplete="new-password"
+            label="Nueva contraseña"
+            hideLabel
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Nueva contraseña (mínimo 8)"
-            className={authInputClass}
           />
-          <button
-            type="submit"
-            disabled={submitting}
-            className="btn-pill btn-pill--primary w-full disabled:opacity-50"
-          >
+          <Button type="submit" fullWidth disabled={submitting}>
             {submitting ? 'Guardando…' : 'Guardar contraseña'}
-          </button>
+          </Button>
           {error && <p className="text-sm font-semibold text-brand">{error}</p>}
         </form>
       )}

@@ -2,7 +2,9 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { authClient } from '#/lib/auth-client'
-import { AuthLayout, authInputClass } from '../components/AuthLayout'
+import { Button } from '#/components/ui/button'
+import { Input } from '#/components/ui/input'
+import { AuthLayout } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/recuperar')({ component: ForgotPassword })
 
@@ -66,25 +68,22 @@ function ForgotPassword() {
         </p>
       ) : (
         <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
-          <input
+          <Input
             id="recover-email"
             name="email"
             type="email"
             required
             autoComplete="username"
             inputMode="email"
+            label="Email"
+            hideLabel
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
-            className={authInputClass}
           />
-          <button
-            type="submit"
-            disabled={submitting}
-            className="btn-pill btn-pill--primary w-full disabled:opacity-50"
-          >
+          <Button type="submit" fullWidth disabled={submitting}>
             {submitting ? 'Enviando…' : 'Enviar enlace'}
-          </button>
+          </Button>
         </form>
       )}
     </AuthLayout>
