@@ -144,37 +144,44 @@ function Metrics() {
             la gasolina más cara y más barata del país.
           </p>
           {bundle && (
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <div className="inline-flex rounded-full border border-white/15 bg-white/[0.04] p-1">
-                  <ViewButton
-                    active={view === 'curated'}
-                    onClick={() => changeView('curated')}
-                  >
-                    Curada
-                  </ViewButton>
-                  <ViewButton
-                    active={view === 'raw'}
-                    onClick={() => changeView('raw')}
-                  >
-                    Sin filtrar
-                  </ViewButton>
+            <div className="mt-7 rounded-[6px] border border-white/10 bg-white/[0.035] p-3">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-white/45 sm:w-16">
+                    Vista
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="inline-flex rounded-full border border-white/15 bg-black/10 p-1">
+                      <ViewButton
+                        active={view === 'curated'}
+                        onClick={() => changeView('curated')}
+                      >
+                        Curada
+                      </ViewButton>
+                      <ViewButton
+                        active={view === 'raw'}
+                        onClick={() => changeView('raw')}
+                      >
+                        Sin filtrar
+                      </ViewButton>
+                    </div>
+                    <InfoTooltip
+                      text={`La vista curada excluye ${bundle.excludedPriceRows.toLocaleString(
+                        'es-MX',
+                      )} precios fuera de ${formatCurrency(
+                        bundle.priceBand.min,
+                      )}–${formatCurrency(
+                        bundle.priceBand.max,
+                      )} por litro: montos que la fuente (CNE) reporta por error y que distorsionan los extremos y promedios. "Sin filtrar" muestra los datos tal cual llegan.`}
+                    />
+                  </div>
                 </div>
-                <InfoTooltip
-                  text={`La vista curada excluye ${bundle.excludedPriceRows.toLocaleString(
-                    'es-MX',
-                  )} precios fuera de ${formatCurrency(
-                    bundle.priceBand.min,
-                  )}–${formatCurrency(
-                    bundle.priceBand.max,
-                  )} por litro: montos que la fuente (CNE) reporta por error y que distorsionan los extremos y promedios. "Sin filtrar" muestra los datos tal cual llegan.`}
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="text-[10px] font-black uppercase tracking-widest text-white/50">
-                  Combustible
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-white/45 sm:w-24 lg:text-right">
+                    Combustible
+                  </div>
+                  <FuelSelector value={stateFuel} onChange={changeStateFuel} tone="dark" />
                 </div>
-                <FuelSelector value={stateFuel} onChange={changeStateFuel} />
               </div>
             </div>
           )}
@@ -516,12 +523,20 @@ function StateDeltaChart({
 function FuelSelector({
   value,
   onChange,
+  tone = 'light',
 }: {
   value: FuelType
   onChange: (fuel: FuelType) => void
+  tone?: 'light' | 'dark'
 }) {
   return (
-    <div className="inline-flex w-full rounded-full border border-line bg-white p-1 sm:w-auto">
+    <div
+      className={`inline-flex w-full rounded-full border p-1 sm:w-auto ${
+        tone === 'dark'
+          ? 'border-white/15 bg-black/10'
+          : 'border-line bg-white'
+      }`}
+    >
       {FUELS.map((fuel) => {
         const active = value === fuel
         return (
@@ -530,7 +545,11 @@ function FuelSelector({
             type="button"
             onClick={() => onChange(fuel)}
             className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition sm:flex-none ${
-              active ? 'text-white' : 'text-body hover:text-ink'
+              active
+                ? 'text-white shadow-[0_6px_18px_rgba(0,0,0,0.22)]'
+                : tone === 'dark'
+                  ? 'text-white/60 hover:text-white'
+                  : 'text-body hover:text-ink'
             }`}
             style={active ? { backgroundColor: FUEL_META[fuel].color } : undefined}
           >
