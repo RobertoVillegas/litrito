@@ -9,7 +9,16 @@ export function SiteFooter({ className }: Props) {
     <footer className={cn('bg-ink text-on-dark', className)}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-10 sm:px-6 lg:px-8">
         <div>
-          <div className="font-display text-3xl text-white">Litrito</div>
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/litrito-logo.webp"
+              alt=""
+              className="h-10 w-10 object-contain"
+              width={40}
+              height={40}
+            />
+            <div className="font-display text-3xl text-white">Litrito</div>
+          </div>
           <p className="mt-2 max-w-xl text-sm leading-6 text-white/60">
             Precios informativos reportados por permisionarios a la Comisión
             Nacional de Energía. Pueden cambiar en estación.

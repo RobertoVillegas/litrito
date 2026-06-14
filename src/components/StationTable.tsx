@@ -37,6 +37,7 @@ type Props = {
   fuelTypes: FuelType[]
   sortMode: SortMode
   isLoading: boolean
+  isRefreshing?: boolean
   canLoadMore: boolean
   isLoadingMore: boolean
   onLoadMore: () => void
@@ -227,6 +228,7 @@ export function StationTable({
   fuelTypes,
   sortMode,
   isLoading,
+  isRefreshing = false,
   canLoadMore,
   isLoadingMore,
   onLoadMore,
@@ -438,10 +440,15 @@ export function StationTable({
   return (
     <div className="island-shell overflow-hidden rounded-lg">
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
-        <span>
+        <span className="inline-flex items-center gap-2">
+          {(isLoading || isRefreshing) && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
+          )}
           {isLoading
-            ? 'Cargando…'
-            : `${rows.length} ${canLoadMore ? 'cargados' : 'resultados'}`}
+            ? 'Buscando estaciones…'
+            : isRefreshing
+              ? 'Actualizando resultados…'
+              : `${rows.length} ${canLoadMore ? 'cargados' : 'resultados'}`}
           {fuelTypes.length > 1 && (
             <span className="ml-2 text-slate-400">
               · {fuelTypes.length} combustibles activos
@@ -463,7 +470,16 @@ export function StationTable({
           }
         }}
         className="relative max-h-[60vh] min-h-[320px] overflow-auto"
+        aria-busy={isLoading || isRefreshing}
       >
+        {isRefreshing && !isLoading && rows.length > 0 && (
+          <div className="pointer-events-none sticky top-0 z-30 border-b border-brand/20 bg-white/92 px-4 py-2 text-xs font-bold text-brand backdrop-blur">
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Calculando estaciones con tu ubicación…
+            </span>
+          </div>
+        )}
         <div
           className="grid"
           style={{ minWidth: isMobile ? undefined : `${minTableWidth}px` }}

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import Avatar from 'boring-avatars'
 import { useQuery } from 'convex/react'
-import { ChevronDown, Fuel, LogOut, MapPin, Menu, User, X } from 'lucide-react'
+import { ChevronDown, LogOut, MapPin, Menu, User, X } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 import { useUserLocation } from '#/lib/useUserLocation'
@@ -18,8 +18,14 @@ export function SiteNav() {
     <header className="sticky top-0 z-[1100] border-b border-white/10 bg-ink text-on-dark">
       <nav className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2.5 text-white hover:text-white">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[6px] bg-brand">
-            <Fuel className="h-5 w-5 text-white" />
+          <span className="flex h-9 w-9 items-center justify-center overflow-visible">
+            <img
+              src="/litrito-logo.webp"
+              alt=""
+              className="h-9 w-9 object-contain"
+              width={32}
+              height={32}
+            />
           </span>
           <span className="font-display text-2xl leading-none text-white">Litrito</span>
         </Link>
@@ -108,16 +114,16 @@ function LocationPill() {
   const precise = loc?.source === 'precise'
   return (
     <>
-    <button
-      type="button"
-      onClick={requestWithExplanation}
-      title={precise ? 'Ubicación precisa activa' : 'Usar mi ubicación precisa'}
-      className="hidden items-center gap-1.5 rounded-full border border-white/20 px-3 py-1.5 text-xs font-bold text-white/80 transition hover:border-white/50 hover:text-white md:inline-flex"
-    >
-      <MapPin className={`h-3.5 w-3.5 ${precise ? 'text-brand' : 'text-white/50'}`} />
-      <span className="max-w-[140px] truncate">{label}</span>
-    </button>
-    {dialogElement}
+      <button
+        type="button"
+        onClick={requestWithExplanation}
+        title={precise ? 'Ubicación precisa activa' : 'Usar mi ubicación precisa'}
+        className="hidden items-center gap-1.5 rounded-full border border-white/20 px-3 py-1.5 text-xs font-bold text-white/80 transition hover:border-white/50 hover:text-white md:inline-flex"
+      >
+        <MapPin className={`h-3.5 w-3.5 ${precise ? 'text-brand' : 'text-white/50'}`} />
+        <span className="max-w-[140px] truncate">{label}</span>
+      </button>
+      {dialogElement}
     </>
   )
 }

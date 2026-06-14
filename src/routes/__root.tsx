@@ -217,8 +217,30 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
     ],
   }),
+  notFoundComponent: NotFound,
   shellComponent: RootDocument,
 })
+
+function NotFound() {
+  return (
+    <main className="mx-auto flex min-h-[60vh] w-full max-w-6xl flex-col items-center justify-center gap-4 px-4 text-center">
+      <p className="text-xs font-black uppercase tracking-widest text-brand">
+        404
+      </p>
+      <h1 className="font-display text-4xl text-ink">Página no encontrada</h1>
+      <p className="max-w-md text-sm font-semibold leading-6 text-body">
+        La ruta que abriste no existe o cambió. Puedes volver al inicio o
+        explorar estaciones por estado, municipio o nombre.
+      </p>
+      <a
+        href="/"
+        className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-sm font-bold text-white transition hover:bg-ink/90"
+      >
+        Ir al inicio
+      </a>
+    </main>
+  )
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (

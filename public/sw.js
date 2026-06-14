@@ -7,6 +7,8 @@ const STATIC_ASSETS = [
   '/apple-touch-icon.png',
   '/android-chrome-192x192.png',
   '/android-chrome-512x512.png',
+  '/litrito-logo.webp',
+  '/litrito-pwa-logo.webp',
 ]
 
 self.addEventListener('install', (event) => {

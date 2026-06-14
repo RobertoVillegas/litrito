@@ -18,6 +18,7 @@ import { StationFilters, type FilterState, type FuelType } from '../components/S
 import { StationTable, type StationRow } from '../components/StationTable'
 import { boundsOfLatLngs } from '../components/mapGeo'
 import type { MapBounds, MapFocus } from '../components/mapGeo'
+import { useLocationPermissionFlow } from '../components/LocationPermissionDialog'
 
 const FUEL_VALUES = ['regular', 'premium', 'diesel', 'duba'] as const
 const SORT_VALUES = ['price', 'distance', 'name'] as const
@@ -304,6 +305,7 @@ function Explore() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [notice, setNotice] = useState('')
   const userLoc = useUserLocation()
+  const { requestWithExplanation, dialogElement } = useLocationPermissionFlow()
   const { favoriteSet, toggleFavorite } = useFavorites()
 
   const filterOptions =
@@ -474,6 +476,17 @@ function Explore() {
   }, [boundsResult, showFavoritesOnly, favoriteRows])
 
   const tableRows = showFavoritesOnly ? favoriteRows : visibleRows
+  const listIsLoadingFirstPage =
+    !showFavoritesOnly && paginated.status === 'LoadingFirstPage'
+  const tableIsLoading =
+    showFavoritesOnly
+      ? favoriteStations === undefined && favoritePermits.length > 0
+      : !paginated.results
+  const tableIsRefreshing =
+    !showFavoritesOnly &&
+    listIsLoadingFirstPage &&
+    Boolean(paginated.results) &&
+    tableRows.length > 0
 
   // Map framing priority: an explicit favorites view, then your own location,
   // then the selected state's footprint. Each yields a stable key so the map
@@ -620,8 +633,19 @@ function Explore() {
           municipalities={munisForFilter}
           onChange={setFilters}
           hasPreciseLocation={userLoc.hasPreciseLocation}
-          onRequestPreciseLocation={userLoc.requestPrecise}
+          onRequestPreciseLocation={() => void requestWithExplanation()}
         />
+
+        {(tableIsLoading || tableIsRefreshing) && (
+          <div className="rounded-[6px] border border-brand/20 bg-[#fff7f7] px-4 py-3 text-sm font-semibold text-ink">
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-brand" />
+              {userLoc.hasPreciseLocation && filters.sortMode === 'distance'
+                ? 'Ordenando estaciones por cercanía con tu ubicación…'
+                : 'Actualizando resultados con los filtros activos…'}
+            </span>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-xs font-semibold text-body">
@@ -692,7 +716,7 @@ function Explore() {
                   initialBounds={mapBounds}
                   onMoveEnd={setMapBounds}
                   onLocateClick={() => {
-                    userLoc.requestPrecise()
+                    void requestWithExplanation()
                     setFilters((prev) =>
                       prev.sortMode === 'distance'
                         ? prev
@@ -709,11 +733,8 @@ function Explore() {
           rows={tableRows}
           fuelTypes={filters.fuelTypes}
           sortMode={filters.sortMode}
-          isLoading={
-            showFavoritesOnly
-              ? favoriteStations === undefined && favoritePermits.length > 0
-              : !paginated.results
-          }
+          isLoading={tableIsLoading}
+          isRefreshing={tableIsRefreshing}
           canLoadMore={!showFavoritesOnly && paginated.status === 'CanLoadMore'}
           isLoadingMore={!showFavoritesOnly && paginated.status === 'LoadingMore'}
           onLoadMore={() => paginated.loadMore(PAGE_SIZE)}
@@ -730,6 +751,8 @@ function Explore() {
           favoriteSet={favoriteSet}
         />
       </section>
+
+      {dialogElement}
 
       <SiteFooter className="mt-6" />
     </main>
