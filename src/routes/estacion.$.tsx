@@ -46,6 +46,9 @@ export const Route = createFileRoute('/estacion/$')({
     const location = station
       ? [station.municipalityName, station.stateName].filter(Boolean).join(', ')
       : ''
+    const ogSubtitle = station
+      ? [station.address, location].filter(Boolean).join('\n')
+      : 'Precios de gasolina actualizados a diario.'
     const priceSummary = formatStationPriceSummary(currentPrices)
     const title = station
       ? `${station.name} - Litrito`
@@ -89,7 +92,7 @@ export const Route = createFileRoute('/estacion/$')({
         description,
         image: {
           title: station ? station.name : `Estación ${params._splat ?? ''}`,
-          subtitle: location || description,
+          subtitle: ogSubtitle,
           eyebrow: 'Litrito estación',
           badges: formatOgPriceBadges(currentPrices),
         },
@@ -440,6 +443,11 @@ function formatOgPriceBadges(
   })
 }
 
+function endPunct(value: string) {
+  const text = value.trim()
+  return /[.!?…]$/.test(text) ? text : `${text}.`
+}
+
 async function shareStation({
   permitNumber,
   stationName,
@@ -458,7 +466,7 @@ async function shareStation({
   const priceLines = formatSharePriceLines(prices)
   const title = `${stationName} en Litrito`
   const text = [
-    `Mira esta estación en Litrito: ${stationName}.`,
+    `Mira esta estación en Litrito: ${endPunct(stationName)}`,
     priceLines.length ? ['', ...priceLines].join('\n') : 'Consulta sus precios de gasolina.',
     '',
     'Compara antes de cargar.',
