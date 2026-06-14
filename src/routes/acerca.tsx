@@ -6,6 +6,7 @@ import {
   Database,
   Mail,
   MapPin,
+  MessageCircle,
   RefreshCw,
 } from 'lucide-react'
 import { SiteFooter } from '../components/SiteFooter'
@@ -15,6 +16,7 @@ import { getConfiguredSiteOrigin } from '../lib/site-url'
 const ATHAS_URL = 'https://athas.mx?ref=litrito'
 const ATHAS_CAL = 'https://cal.com/athasmx/30min'
 const ATHAS_MAIL = 'mailto:hola@athas.mx'
+const ATHAS_WA = 'https://wa.me/524461428096'
 
 export const Route = createFileRoute('/acerca')({
   head: () => {
@@ -114,8 +116,7 @@ function AboutPage() {
               <p className="mt-5 text-lg font-light leading-8 text-white/70">
                 Athas es un estudio de diseño y tecnología. Diseñamos y
                 construimos lo que tu negocio necesita para operar: desde una
-                landing hasta sistemas completos, con integración de IA. Nos
-                importa que funcione, no que impresione.
+                landing hasta sistemas completos, con integración de IA.
               </p>
               <p className="mt-4 text-lg font-light leading-8 text-white/70">
                 Litrito es una muestra de lo que hacemos: datos públicos
@@ -149,13 +150,24 @@ function AboutPage() {
                   <ArrowUpRight className="h-4 w-4" />
                 </a>
               </div>
-              <a
-                href={ATHAS_MAIL}
-                className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-white/55 transition hover:text-brand"
-              >
-                <Mail className="h-4 w-4" />
-                hola@athas.mx
-              </a>
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <a
+                  href={ATHAS_MAIL}
+                  className="inline-flex items-center gap-2 text-sm font-bold text-white/55 transition hover:text-brand"
+                >
+                  <Mail className="h-4 w-4" />
+                  hola@athas.mx
+                </a>
+                <a
+                  href={ATHAS_WA}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm font-bold text-white/55 transition hover:text-brand"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  446 142 8096
+                </a>
+              </div>
             </div>
           </div>
         </div>
