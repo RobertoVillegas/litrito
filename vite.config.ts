@@ -7,16 +7,24 @@ import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
 
+// @resvg/resvg-js ships a native .node binary and is only used server-side in
+// the /og.png route. Rolldown chokes trying to load the binary as UTF-8, so we
+// keep every dep optimizer (client + SSR) from pre-bundling it and make sure it
+// stays external in the SSR and Nitro server builds (loaded as a native module
+// at runtime instead). Without the SSR excludes the dev server crashes whenever
+// Vite re-optimizes on a config restart.
+const RESVG = '@resvg/resvg-js'
+
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
-  // @resvg/resvg-js ships a native .node binary and is only used server-side in
-  // the /og.png route. Keep Vite's dep optimizer from pre-bundling it (rolldown
-  // chokes loading the binary as UTF-8 and the dev server crashes on startup).
-  optimizeDeps: { exclude: ['@resvg/resvg-js'] },
-  ssr: { external: ['@resvg/resvg-js'] },
+  optimizeDeps: { exclude: [RESVG] },
+  ssr: {
+    external: [RESVG],
+    optimizeDeps: { exclude: [RESVG] },
+  },
   plugins: [
     devtools(),
-    nitro({ rollupConfig: { external: [/^@sentry\//] } }),
+    nitro({ rollupConfig: { external: [/^@sentry\//, RESVG] } }),
     tailwindcss(),
     tanstackStart(),
     viteReact(),
