@@ -29,6 +29,7 @@
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.0.8",
     "@resvg/resvg-js": "^2.6.2",
+    "@sentry/tanstackstart-react": "^10.57.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "0.10.5",
     "@tanstack/react-form": "^1.33.0",

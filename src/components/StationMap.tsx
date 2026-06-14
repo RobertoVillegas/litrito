@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import MarkerClusterGroup from 'react-leaflet-cluster'
+import * as Sentry from '@sentry/tanstackstart-react'
 import L, {
   type LatLngBoundsExpression,
   type LatLngExpression,
@@ -11,6 +12,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { FuelType } from './StationFilters'
 import { AnimatedPrice } from './AnimatedNumber'
+import { ComponentErrorBoundary } from './ComponentErrorBoundary'
 
 type Station = {
   permitNumber: string
@@ -148,6 +150,44 @@ function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
   return null
 }
 
+// Drops a Sentry breadcrumb on every zoom/pan with the exact map view. Sentry
+// keeps the last ~100, so when something throws (e.g. a markercluster zoom bug
+// we can't reproduce locally) the issue shows the precise zoom/center/bounds
+// trail that led there.
+function MapBreadcrumbs({ points }: { points: number }) {
+  const map = useMapEvents({
+    zoomend() {
+      dropMapBreadcrumb(map, points, 'zoom')
+    },
+    moveend() {
+      dropMapBreadcrumb(map, points, 'move')
+    },
+  })
+  return null
+}
+
+function dropMapBreadcrumb(map: L.Map, points: number, kind: 'zoom' | 'move') {
+  try {
+    const c = map.getCenter()
+    const b = map.getBounds()
+    const round = (n: number) => Math.round(n * 1e4) / 1e4
+    Sentry.addBreadcrumb({
+      category: 'map',
+      level: 'info',
+      message: `map ${kind}`,
+      data: {
+        zoom: map.getZoom(),
+        lat: round(c.lat),
+        lng: round(c.lng),
+        points,
+        bounds: [round(b.getSouth()), round(b.getWest()), round(b.getNorth()), round(b.getEast())],
+      },
+    })
+  } catch {
+    // Never let instrumentation break the map.
+  }
+}
+
 function FitInitialBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
   const map = useMap()
   const fittedRef = useRef(false)
@@ -281,7 +321,7 @@ function LegendControl({
   return null
 }
 
-export function StationMap({
+function StationMapInner({
   rows,
   primaryFuel,
   fuelTypes,
@@ -363,6 +403,7 @@ export function StationMap({
           />
           {bounds && !effectiveFocus && <FitInitialBounds bounds={bounds} />}
           <FocusController focus={effectiveFocus} />
+          <MapBreadcrumbs points={points.length} />
           {onMoveEnd && <MoveWatcher onMoveEnd={onMoveEnd} />}
           {(userLatLng || onLocateClick) && (
             <LocateControl location={userLatLng} onClick={onLocateClick} />
@@ -456,6 +497,38 @@ export function StationMap({
           No hay estaciones en esta zona
         </div>
       )}
+    </div>
+  )
+}
+
+// Public component: isolates any map render failure to a local fallback (sized
+// like the map so layout doesn't jump) and reports it to Sentry with the row
+// count and fuel context. Async Leaflet errors that don't hit a React boundary
+// are still caught by Sentry's global handler, with the map breadcrumbs above.
+export function StationMap(props: Props) {
+  return (
+    <ComponentErrorBoundary
+      name="station-map"
+      context={{
+        points: props.rows.length,
+        primaryFuel: props.primaryFuel,
+        markerMode: props.markerMode ?? 'price',
+        truncated: props.truncated ?? false,
+      }}
+      fallback={<MapErrorFallback />}
+    >
+      <StationMapInner {...props} />
+    </ComponentErrorBoundary>
+  )
+}
+
+function MapErrorFallback() {
+  return (
+    <div className="flex h-[55vh] min-h-[320px] max-h-[640px] flex-col items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-6 text-center">
+      <p className="text-sm font-bold text-ink">No pudimos cargar el mapa</p>
+      <p className="max-w-xs text-xs text-body">
+        Puedes seguir usando el listado mientras tanto. Recarga para reintentar.
+      </p>
     </div>
   )
 }

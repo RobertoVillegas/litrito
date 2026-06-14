@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import { devtools } from '@tanstack/devtools-vite'
 
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
+import { sentryTanstackStart } from '@sentry/tanstackstart-react/vite'
 
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -15,6 +16,20 @@ import { nitro } from 'nitro/vite'
 // Vite re-optimizes on a config restart.
 const RESVG = '@resvg/resvg-js'
 
+// Source-map upload to Sentry only runs when an auth token is present, so a
+// normal `bun run build` is unchanged. Set SENTRY_AUTH_TOKEN (and optionally
+// SENTRY_ORG / SENTRY_PROJECT) in CI/release to get readable stack traces.
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN
+const sentryPlugins = sentryAuthToken
+  ? [
+      sentryTanstackStart({
+        org: process.env.SENTRY_ORG ?? 'litrito',
+        project: process.env.SENTRY_PROJECT ?? 'javascript-tanstackstart-react',
+        authToken: sentryAuthToken,
+      }),
+    ]
+  : []
+
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
   optimizeDeps: { exclude: [RESVG] },
@@ -27,6 +42,7 @@ const config = defineConfig({
     nitro({ rollupConfig: { external: [/^@sentry\//, RESVG] } }),
     tailwindcss(),
     tanstackStart(),
+    ...sentryPlugins,
     viteReact(),
   ],
 })

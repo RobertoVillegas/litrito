@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import * as Sentry from '@sentry/tanstackstart-react'
 import { logger, errorFields } from '#/lib/logger'
 
 // Shared route error fallback. Logs structured context (which screen, what was
@@ -21,6 +22,10 @@ export function RouteErrorFallback({
       screen,
       ...context,
       ...errorFields(error),
+    })
+    Sentry.captureException(error, {
+      tags: { screen },
+      extra: context,
     })
   }, [error, screen, context])
 
