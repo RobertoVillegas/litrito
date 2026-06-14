@@ -491,15 +491,41 @@ function Explore() {
     Boolean(paginated.results) &&
     tableRows.length > 0
 
-  // Map framing priority: an explicit favorites view, then your own location,
-  // then the selected state's footprint. Each yields a stable key so the map
-  // re-frames only when the intent actually changes.
+  const selectedStateId = filters.stateIds[0]
+  const selectedMuniId = filters.municipalityIds[0]
+  // Bounding box of the picked state/municipality, computed server-side from
+  // station coords (independent of the paginated list). Drives the map framing.
+  const areaBounds = useConvexQuery(
+    api.stations.areaBounds,
+    selectedStateId
+      ? {
+          stateExternalId: selectedStateId,
+          municipalityExternalId: selectedMuniId || undefined,
+        }
+      : ('skip' as const),
+  ) as MapBounds | null | undefined
+
+  // Map framing priority: a favorites view, then an explicit state/municipality
+  // selection (which wins over GPS — picking a place should take you there),
+  // then your own location. Each yields a stable key so the map re-frames only
+  // when the intent changes.
   const mapFocus = useMemo<MapFocus | null>(() => {
     if (showFavoritesOnly) {
       const b = boundsOfLatLngs(favoriteRows.map((r) => r.station))
       return b ? { key: 'favorites', type: 'bounds', bounds: b } : null
     }
-    if (userLoc.hasPreciseLocation && userLoc.location) {
+
+    // Frame the selected municipality (most specific) or state. `force`
+    // re-frames even when the target is inside the current view, so
+    // estado → municipio actually zooms in.
+    if (selectedStateId && areaBounds) {
+      const key = selectedMuniId
+        ? `muni:${selectedMuniId}`
+        : `state:${selectedStateId}`
+      return { key, type: 'bounds', bounds: areaBounds, force: true }
+    }
+
+    if (!selectedStateId && userLoc.hasPreciseLocation && userLoc.location) {
       const { latitude, longitude } = userLoc.location
       return {
         key: `user:${latitude.toFixed(3)},${longitude.toFixed(3)}`,
@@ -508,19 +534,15 @@ function Explore() {
         lon: longitude,
       }
     }
-    const stateId = filters.stateIds[0]
-    if (stateId) {
-      const b = boundsOfLatLngs(visibleRows.map((r) => r.station))
-      if (b) return { key: `state:${stateId}`, type: 'bounds', bounds: b }
-    }
     return null
   }, [
     showFavoritesOnly,
     favoriteRows,
     userLoc.hasPreciseLocation,
     userLoc.location,
-    filters.stateIds,
-    visibleRows,
+    selectedStateId,
+    selectedMuniId,
+    areaBounds,
   ])
 
   async function handleToggleFavorite(permitNumber: string) {

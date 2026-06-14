@@ -39,6 +39,11 @@ const DISTANCE_SCAN_CAP = 4000
 // paginated national distance sorting.
 const NEARBY_SCAN_CAP = 2000
 
+// Cap on stations read to compute a state/municipality bounding box for map
+// framing. States top out around ~1500 docs, so this covers the whole catalog;
+// a partial sample would still frame the area well.
+const AREA_BOUNDS_SCAN_CAP = 4000
+
 // N+1 price lookups, throttled to this many in flight at a time. Convex
 // queries have a per-call parallel-read ceiling (self-hosted is more
 // aggressive than cloud), so 800 simultaneous indexed reads get killed with
@@ -380,6 +385,51 @@ async function loadStationsForSelections(
   }
   return out
 }
+
+// Bounding box of every station in a state (or a single municipality), used to
+// frame the explore map when a place is picked from the filters. Read-only;
+// reuses the by_state / by_location indexes and caps the read so a huge state
+// can't blow the per-query budget (a partial sample still frames it well).
+export const areaBounds = query({
+  args: {
+    stateExternalId: v.optional(v.string()),
+    municipalityExternalId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { stateExternalId, municipalityExternalId } = args
+    if (!stateExternalId) return null
+
+    const rows = municipalityExternalId
+      ? await ctx.db
+          .query('stations')
+          .withIndex('by_location', (q) =>
+            q
+              .eq('stateExternalId', stateExternalId)
+              .eq('municipalityExternalId', municipalityExternalId),
+          )
+          .take(AREA_BOUNDS_SCAN_CAP)
+      : await ctx.db
+          .query('stations')
+          .withIndex('by_state', (q) => q.eq('stateExternalId', stateExternalId))
+          .take(AREA_BOUNDS_SCAN_CAP)
+
+    let swLat = Infinity
+    let swLon = Infinity
+    let neLat = -Infinity
+    let neLon = -Infinity
+    let count = 0
+    for (const s of rows) {
+      if (typeof s.latitude !== 'number' || typeof s.longitude !== 'number') continue
+      count += 1
+      swLat = Math.min(swLat, s.latitude)
+      neLat = Math.max(neLat, s.latitude)
+      swLon = Math.min(swLon, s.longitude)
+      neLon = Math.max(neLon, s.longitude)
+    }
+    if (count === 0) return null
+    return { swLat, swLon, neLat, neLon }
+  },
+})
 
 // National distance sort: read the stations nearest to the user's latitude by
 // walking the `by_lat` index outward in both directions, capped at
