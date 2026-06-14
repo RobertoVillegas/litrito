@@ -13,10 +13,13 @@ import { SiteFooter } from '../components/SiteFooter'
 import { buildSeoMeta } from '../lib/seo'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 
+const ATHAS_LEAD = 'Hola, vengo de Litrito y me interesa trabajar con Athas.'
 const ATHAS_URL = 'https://athas.mx?ref=litrito'
 const ATHAS_CAL = 'https://cal.com/athasmx/30min'
-const ATHAS_MAIL = 'mailto:hola@athas.mx'
-const ATHAS_WA = 'https://wa.me/524461428096'
+const ATHAS_MAIL = `mailto:hola@athas.mx?subject=${encodeURIComponent(
+  'Vengo de Litrito',
+)}&body=${encodeURIComponent(ATHAS_LEAD)}`
+const ATHAS_WA = `https://wa.me/524461428096?text=${encodeURIComponent(ATHAS_LEAD)}`
 
 export const Route = createFileRoute('/acerca')({
   head: () => {
@@ -149,22 +152,32 @@ function AboutPage() {
                   <ArrowUpRight className="h-4 w-4" />
                 </a>
               </div>
-              <div className="mt-5 flex items-center justify-between gap-3">
+              <div className="mt-5 grid grid-cols-2 gap-3">
                 <a
                   href={ATHAS_MAIL}
-                  className="inline-flex items-center gap-2 text-sm font-bold text-white/55 transition hover:text-brand"
+                  className="group flex flex-col gap-1 rounded-[10px] border border-white/10 px-3.5 py-3 transition hover:border-white/30"
                 >
-                  <Mail className="h-4 w-4" />
-                  hola@athas.mx
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-white/40">
+                    <Mail className="h-3.5 w-3.5" />
+                    Correo
+                  </span>
+                  <span className="truncate text-sm font-bold text-white/80 transition group-hover:text-brand">
+                    hola@athas.mx
+                  </span>
                 </a>
                 <a
                   href={ATHAS_WA}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm font-bold text-white/55 transition hover:text-brand"
+                  className="group flex flex-col gap-1 rounded-[10px] border border-white/10 px-3.5 py-3 transition hover:border-white/30"
                 >
-                  <MessageCircle className="h-4 w-4" />
-                  446 142 8096
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-white/40">
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    WhatsApp
+                  </span>
+                  <span className="truncate text-sm font-bold text-white/80 transition group-hover:text-brand">
+                    446 142 8096
+                  </span>
                 </a>
               </div>
             </div>
