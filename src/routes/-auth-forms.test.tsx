@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { SignIn } from './entrar'
-import { SignUp } from './registro'
+import { SignIn } from '../components/SignIn'
+import { SignUp } from '../components/SignUp'
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),

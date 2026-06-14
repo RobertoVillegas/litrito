@@ -657,7 +657,7 @@ function Explore() {
         <div className="overflow-hidden rounded-[6px] border border-line bg-white">
           <div className="border-b border-line bg-canvas-soft p-4">
             <h3 className="font-display text-lg text-ink">Mapa</h3>
-            <p className="mt-1 text-xs font-semibold text-body">
+            <div className="mt-1 text-xs font-semibold text-body">
               {showFavoritesOnly ? (
                 favoriteStations || favoritePermits.length === 0 ? (
                   `${mapRows.length} ${mapRows.length === 1 ? 'favorita' : 'favoritas'} en el mapa`
@@ -669,7 +669,7 @@ function Explore() {
               ) : (
                 <Skeleton className="h-4 w-44" />
               )}
-            </p>
+            </div>
           </div>
           <ClientOnly
             fallback={

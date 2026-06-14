@@ -1,5 +1,6 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox'
 import { Check, ChevronDown, X } from 'lucide-react'
+import { useId } from 'react'
 import { cn } from '#/lib/utils'
 
 export type ComboboxItem = { id: string; name: string; count?: number }
@@ -23,6 +24,7 @@ export function Combobox({
   disabled?: boolean
 }) {
   const selected = items.find((i) => i.id === value) ?? null
+  const inputId = useId()
   return (
     <BaseCombobox.Root
       items={items}
@@ -32,11 +34,15 @@ export function Combobox({
       disabled={disabled}
     >
       <div className="min-w-0 flex-1">
-        <BaseCombobox.Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+        <label
+          htmlFor={inputId}
+          className="block text-[10px] font-black uppercase tracking-widest text-slate-500"
+        >
           {label}
-        </BaseCombobox.Label>
+        </label>
         <BaseCombobox.InputGroup className="relative mt-1.5">
           <BaseCombobox.Input
+            id={inputId}
             placeholder={placeholder}
             className={cn(
               'h-10 w-full rounded-[6px] border px-3 pr-16 text-sm font-semibold transition focus:outline-none focus:ring-1 focus:ring-brand',
