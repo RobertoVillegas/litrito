@@ -116,8 +116,26 @@ const USER_ICON = L.divIcon({
 
 function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // When a popup opens near an edge, Leaflet auto-pans to fit it, which fires a
+  // `moveend`. Letting that move refetch by bounds re-renders every marker and
+  // hides the popup mid-transition. Swallow the single auto-pan `moveend` that
+  // follows a `popupopen` (cleared after a short window if no pan happens).
+  const suppressRef = useRef(false)
+  const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const map = useMapEvents({
+    popupopen() {
+      suppressRef.current = true
+      if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
+      suppressTimerRef.current = setTimeout(() => {
+        suppressRef.current = false
+      }, 600)
+    },
     moveend(e) {
+      if (suppressRef.current) {
+        suppressRef.current = false
+        if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
+        return
+      }
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         const b = e.target.getBounds()
@@ -143,6 +161,7 @@ function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
     })
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
+      if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -229,7 +248,8 @@ function FocusController({ focus }: { focus: MapFocus | null }) {
       )
       // On later focus changes, skip the re-frame when the target is already
       // fully on screen — avoids zooming out just to "fit" what you can see.
-      if (!isInitialFocus && map.getBounds().contains(target)) return
+      // `force` opts out of this (explicit state/municipality drill-down).
+      if (!isInitialFocus && !focus.force && map.getBounds().contains(target)) return
       map.fitBounds(target, { padding: [24, 24], maxZoom: 13 })
     }
   }, [focus, map])
@@ -435,7 +455,7 @@ function StationMapInner({
                     rank: markerMode === 'rank' ? row.rank : undefined,
                   })}
                 >
-                  <Popup>
+                  <Popup autoPanPadding={[28, 36]}>
                     <div className="litrito-popup">
                       <a className="litrito-popup__title" href={detailHref}>
                         {station.name}

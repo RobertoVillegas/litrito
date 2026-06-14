@@ -14,7 +14,10 @@ export type MapBounds = {
 // "focus on the selected state", and "focus on your favorites".
 export type MapFocus =
   | { key: string; type: 'point'; lat: number; lon: number }
-  | { key: string; type: 'bounds'; bounds: MapBounds }
+  // `force` re-frames even when the target is already on screen — used for
+  // explicit state/municipality selections so picking a municipality zooms into
+  // it instead of staying on the wider state view.
+  | { key: string; type: 'bounds'; bounds: MapBounds; force?: boolean }
 
 // Bounding box around a set of coordinates; null when none have lat/lng.
 export function boundsOfLatLngs(
