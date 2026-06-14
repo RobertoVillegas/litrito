@@ -12,7 +12,8 @@
     "start": "bun .output/server/index.mjs",
     "test": "vitest run",
     "generate:og": "node scripts/generate-og-image.mjs",
-    "prebuild": "bun run generate:og",
+    "generate:sitemap": "node scripts/generate-sitemap.mjs",
+    "prebuild": "bun run generate:og && bun run generate:sitemap",
     "dump:stations": "node scripts/dump-stations.mjs",
     "dump:stations:csv": "node scripts/dump-stations.mjs csv"
   },

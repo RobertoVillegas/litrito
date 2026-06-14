@@ -14,3 +14,6 @@ __unconfig*
 todos.json
 data/stations-*.json
 data/stations-*.csv
+
+# Generated at build time (prebuild)
+public/sitemap.xml
