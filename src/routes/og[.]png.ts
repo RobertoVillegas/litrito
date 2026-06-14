@@ -141,30 +141,56 @@ async function renderOgImage({
           props: {
             style: {
               alignItems: 'center',
-              color: '#e60000',
               display: 'flex',
               flexShrink: 0,
-              fontSize: '30px',
-              fontWeight: 700,
-              gap: '16px',
-              justifyContent: 'flex-start',
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
+              justifyContent: 'space-between',
+              width: '100%',
             },
             children: [
               {
-                type: 'img',
+                type: 'div',
                 props: {
-                  src: logoSrc,
                   style: {
+                    alignItems: 'center',
+                    color: '#e60000',
                     display: 'flex',
-                    height: '68px',
-                    objectFit: 'contain',
-                    width: '68px',
+                    fontSize: '30px',
+                    fontWeight: 700,
+                    gap: '16px',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
                   },
+                  children: [
+                    {
+                      type: 'img',
+                      props: {
+                        src: logoSrc,
+                        style: {
+                          display: 'flex',
+                          height: '68px',
+                          objectFit: 'contain',
+                          width: '68px',
+                        },
+                      },
+                    },
+                    { type: 'span', props: { children: eyebrow } },
+                  ],
                 },
               },
-              { type: 'span', props: { children: eyebrow } },
+              {
+                type: 'span',
+                props: {
+                  style: {
+                    color: '#7e7e7e',
+                    display: 'flex',
+                    fontSize: '22px',
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                  },
+                  children: 'Hecho por Athas',
+                },
+              },
             ],
           },
         },

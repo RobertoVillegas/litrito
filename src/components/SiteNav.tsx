@@ -27,13 +27,19 @@ export function SiteNav() {
               height={32}
             />
           </span>
-          <span className="font-display text-2xl leading-none text-white">Litrito</span>
+          <span className="flex flex-col">
+            <span className="font-display text-2xl leading-none text-white">Litrito</span>
+            <span className="mt-0.5 text-[10px] font-bold uppercase leading-none tracking-[0.14em] text-white/35">
+              por Athas
+            </span>
+          </span>
         </Link>
 
         <div className="ml-2 hidden items-center gap-1 sm:flex">
           <NavLink to="/" label="Inicio" />
           <NavLink to="/explorar" label="Explorar" />
           <NavLink to="/metricas" label="Métricas" />
+          <NavLink to="/acerca" label="Acerca" />
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -62,6 +68,11 @@ export function SiteNav() {
             <MobileNavLink
               to="/metricas"
               label="Métricas"
+              onNavigate={() => setMobileOpen(false)}
+            />
+            <MobileNavLink
+              to="/acerca"
+              label="Acerca"
               onNavigate={() => setMobileOpen(false)}
             />
           </div>

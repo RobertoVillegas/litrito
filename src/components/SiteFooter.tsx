@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { cn } from '../lib/utils'
 
 type Props = {
@@ -24,9 +25,15 @@ export function SiteFooter({ className }: Props) {
             Nacional de Energía. Pueden cambiar en estación.
           </p>
         </div>
-        <div className="space-y-2 md:hidden">
-          <p className="eyebrow text-white/40">Hecho en México</p>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-bold uppercase tracking-widest">
+        <div className="md:hidden">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-center text-xs font-bold uppercase tracking-widest">
+            <Link
+              to="/acerca"
+              className="text-white/55 underline decoration-white/20 underline-offset-2 hover:text-brand"
+            >
+              Acerca
+            </Link>
+            <span className="text-white/20">·</span>
             <a
               href="https://www.cne.gob.mx/"
               target="_blank"
@@ -42,13 +49,12 @@ export function SiteFooter({ className }: Props) {
               rel="noopener noreferrer"
               className="text-white/55 underline decoration-white/20 underline-offset-2 hover:text-brand"
             >
-              Hecho por athas
+              Hecho por Athas
             </a>
           </div>
         </div>
         <div className="hidden md:flex md:items-center md:justify-between">
           <p className="eyebrow text-white/40">
-            Hecho en México ·{' '}
             <a
               href="https://www.cne.gob.mx/"
               target="_blank"
@@ -56,7 +62,14 @@ export function SiteFooter({ className }: Props) {
               className="text-white/60 underline decoration-white/20 underline-offset-2 hover:text-brand"
             >
               Fuente CNE
-            </a>
+            </a>{' '}
+            ·{' '}
+            <Link
+              to="/acerca"
+              className="text-white/60 underline decoration-white/20 underline-offset-2 hover:text-brand"
+            >
+              Acerca
+            </Link>
           </p>
           <a
             href="https://athas.mx"
@@ -64,7 +77,7 @@ export function SiteFooter({ className }: Props) {
             rel="noopener noreferrer"
             className="eyebrow text-white/40 hover:text-brand"
           >
-            Hecho por athas
+            Hecho por Athas
           </a>
         </div>
       </div>

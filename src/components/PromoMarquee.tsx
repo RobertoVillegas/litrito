@@ -1,7 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 
 const MESSAGE =
-  "Litrito es parte de athas.mx — construimos soluciones digitales a la medida";
+  "Litrito es parte de Athas · diseñamos y construimos software a la medida";
 
 function Item() {
   return (
