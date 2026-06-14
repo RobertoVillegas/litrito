@@ -10,6 +10,13 @@ export const buttonVariants = cva('btn-pill disabled:pointer-events-none disable
       primary: 'btn-pill--primary',
       outline: 'btn-pill--outline-dark',
       'outline-red': 'btn-pill--outline-red',
+      'outline-white': 'btn-pill--outline-white',
+      ghost: 'btn-pill--ghost',
+    },
+    size: {
+      default: '',
+      sm: 'text-sm',
+      xs: 'text-xs',
     },
     fullWidth: {
       true: 'w-full',
@@ -17,6 +24,7 @@ export const buttonVariants = cva('btn-pill disabled:pointer-events-none disable
   },
   defaultVariants: {
     variant: 'primary',
+    size: 'default',
   },
 })
 
@@ -25,11 +33,11 @@ export type ButtonProps = useRender.ComponentProps<'button'> & VariantProps<type
 // Pass `render` to compose with another element (e.g. a router Link) while
 // keeping the button styling and accessibility, the base-ui way:
 //   <Button render={<Link to="/registro" />} variant="outline">…</Button>
-export function Button({ render, className, variant, fullWidth, type, ...props }: ButtonProps) {
+export function Button({ render, className, variant, size, fullWidth, type, ...props }: ButtonProps) {
   return useRender({
     render: render ?? <button type={type ?? 'button'} />,
     props: {
-      className: cn(buttonVariants({ variant, fullWidth }), className),
+      className: cn(buttonVariants({ variant, size, fullWidth }), className),
       ...props,
     },
   })

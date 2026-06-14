@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import { useForm } from '@tanstack/react-form'
 import { authClient } from '#/lib/auth-client'
+import { emailSchema, fieldError } from '#/lib/forms'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { AuthLayout } from '../components/AuthLayout'
@@ -19,32 +20,28 @@ type AuthResult = {
 }
 
 function ForgotPassword() {
-  const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [email, setEmail] = useState('')
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSubmitting(true)
-    try {
-      const client = authClient as unknown as ResetRequester
-      const request = client.requestPasswordReset ?? client.forgetPassword
-      const result = await request?.({
-        email,
-        redirectTo: `${window.location.origin}/restablecer`,
-      })
-
-      if (result?.error) {
-        throw new Error(result.error.message ?? 'Password reset request failed')
+  const form = useForm({
+    defaultValues: { email: '' },
+    onSubmit: async ({ value }) => {
+      try {
+        const client = authClient as unknown as ResetRequester
+        const request = client.requestPasswordReset ?? client.forgetPassword
+        await request?.({
+          email: value.email,
+          redirectTo: `${window.location.origin}/restablecer`,
+        })
+      } catch {
+        // Ignore — we always show the same message to avoid leaking which
+        // emails are registered.
+      } finally {
+        setEmail(value.email)
+        setSent(true)
       }
-    } catch {
-      // Ignore — we always show the same message to avoid leaking which
-      // emails are registered.
-    } finally {
-      setSubmitting(false)
-      setSent(true)
-    }
-  }
+    },
+  })
 
   return (
     <AuthLayout
@@ -67,23 +64,43 @@ function ForgotPassword() {
           llegará un correo con el enlace para restablecer tu contraseña.
         </p>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
-          <Input
-            id="recover-email"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            form.handleSubmit()
+          }}
+          className="space-y-3"
+          autoComplete="on"
+          noValidate
+        >
+          <form.Field
             name="email"
-            type="email"
-            required
-            autoComplete="username"
-            inputMode="email"
-            label="Email"
-            hideLabel
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
+            validators={{ onBlur: emailSchema, onSubmit: emailSchema }}
+            children={(field) => (
+              <Input
+                id="recover-email"
+                name={field.name}
+                type="email"
+                autoComplete="username"
+                inputMode="email"
+                label="Email"
+                hideLabel
+                placeholder="Email"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+                error={fieldError(field)}
+              />
+            )}
           />
-          <Button type="submit" fullWidth disabled={submitting}>
-            {submitting ? 'Enviando…' : 'Enviar enlace'}
-          </Button>
+          <form.Subscribe
+            selector={(s) => s.isSubmitting}
+            children={(isSubmitting) => (
+              <Button type="submit" fullWidth disabled={isSubmitting}>
+                {isSubmitting ? 'Enviando…' : 'Enviar enlace'}
+              </Button>
+            )}
+          />
         </form>
       )}
     </AuthLayout>

@@ -1,9 +1,11 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import { useForm } from '@tanstack/react-form'
 import { authClient } from '#/lib/auth-client'
+import { fieldError, newPasswordSchema } from '#/lib/forms'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
+import { useToast } from '#/components/ui/toast'
 import { AuthLayout } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/restablecer')({
@@ -24,31 +26,26 @@ type AuthResult = {
 function ResetPassword() {
   const { token } = Route.useSearch()
   const navigate = useNavigate()
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const toast = useToast()
+  const [serverError, setServerError] = useState('')
   const [done, setDone] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError('')
-    try {
-      const client = authClient as unknown as Resetter
-      const result = await client.resetPassword?.({ newPassword: password, token })
-
-      if (result?.error) {
-        throw new Error(result.error.message ?? 'Password reset failed')
+  const form = useForm({
+    defaultValues: { password: '' },
+    onSubmit: async ({ value }) => {
+      setServerError('')
+      try {
+        const client = authClient as unknown as Resetter
+        const result = await client.resetPassword?.({ newPassword: value.password, token })
+        if (result?.error) throw new Error(result.error.message ?? 'Password reset failed')
+        setDone(true)
+        toast.add({ title: 'Contraseña actualizada', type: 'success' })
+        setTimeout(() => navigate({ to: '/entrar' }), 1500)
+      } catch {
+        setServerError('El enlace es inválido o expiró. Solicita uno nuevo.')
       }
-
-      setDone(true)
-      setTimeout(() => navigate({ to: '/entrar' }), 1500)
-    } catch {
-      setError('El enlace es inválido o expiró. Solicita uno nuevo.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
+    },
+  })
 
   return (
     <AuthLayout
@@ -75,24 +72,47 @@ function ResetPassword() {
           Contraseña actualizada. Te llevamos a iniciar sesión…
         </p>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
-          <Input
-            id="reset-password"
-            name="new-password"
-            type="password"
-            required
-            minLength={8}
-            autoComplete="new-password"
-            label="Nueva contraseña"
-            hideLabel
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Nueva contraseña (mínimo 8)"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            form.handleSubmit()
+          }}
+          className="space-y-3"
+          autoComplete="on"
+          noValidate
+        >
+          <form.Field
+            name="password"
+            validators={{ onBlur: newPasswordSchema, onSubmit: newPasswordSchema }}
+            children={(field) => (
+              <Input
+                id="reset-password"
+                name={field.name}
+                type="password"
+                autoComplete="new-password"
+                label="Nueva contraseña"
+                hideLabel
+                placeholder="Nueva contraseña (mínimo 8)"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+                error={fieldError(field)}
+              />
+            )}
           />
-          <Button type="submit" fullWidth disabled={submitting}>
-            {submitting ? 'Guardando…' : 'Guardar contraseña'}
-          </Button>
-          {error && <p className="text-sm font-semibold text-brand">{error}</p>}
+          <form.Subscribe
+            selector={(s) => s.isSubmitting}
+            children={(isSubmitting) => (
+              <Button type="submit" fullWidth disabled={isSubmitting}>
+                {isSubmitting ? 'Guardando…' : 'Guardar contraseña'}
+              </Button>
+            )}
+          />
+          {serverError && (
+            <p role="alert" className="text-sm font-semibold text-brand">
+              {serverError}
+            </p>
+          )}
         </form>
       )}
     </AuthLayout>

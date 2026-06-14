@@ -12,11 +12,17 @@ export type InputProps = ComponentProps<'input'> & {
   label: string
   /** Render the label as screen-reader-only (e.g. when a placeholder conveys the field visually). */
   hideLabel?: boolean
+  /** Validation message; sets aria-invalid and shows the message below the field. */
+  error?: string
+  /** Mark the field invalid (red border + aria-invalid) without an own message — e.g. for a form-level error. */
+  invalid?: boolean
 }
 
-export function Input({ label, hideLabel, id, className, ...props }: InputProps) {
+export function Input({ label, hideLabel, error, invalid, id, className, ...props }: InputProps) {
   const generatedId = useId()
   const inputId = id ?? generatedId
+  const errorId = `${inputId}-error`
+  const isInvalid = Boolean(error) || invalid
   return (
     <div className="space-y-1.5">
       <label
@@ -25,7 +31,22 @@ export function Input({ label, hideLabel, id, className, ...props }: InputProps)
       >
         {label}
       </label>
-      <input id={inputId} className={cn(inputClass, className)} {...props} />
+      <input
+        id={inputId}
+        aria-invalid={isInvalid ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        className={cn(
+          inputClass,
+          isInvalid && 'border-brand focus:border-brand focus:ring-brand',
+          className,
+        )}
+        {...props}
+      />
+      {error && (
+        <p id={errorId} role="alert" className="text-sm font-semibold text-brand">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

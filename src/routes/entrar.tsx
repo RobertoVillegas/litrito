@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import { useForm } from '@tanstack/react-form'
 import { authClient } from '#/lib/auth-client'
 import { track } from '#/lib/analytics'
+import { emailSchema, fieldError, passwordSchema } from '#/lib/forms'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { AuthLayout } from '../components/AuthLayout'
@@ -15,30 +16,24 @@ type AuthResult = {
 
 export function SignIn() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  // Server-side credential failure: form-level (we can't know which field is
+  // wrong), shown inline on the fields — not a toast.
+  const [serverError, setServerError] = useState('')
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError('')
-    try {
-      const result = (await authClient.signIn.email({ email, password })) as AuthResult
-
-      if (result.error) {
-        throw new Error(result.error.message ?? 'Sign in failed')
+  const form = useForm({
+    defaultValues: { email: '', password: '' },
+    onSubmit: async ({ value }) => {
+      setServerError('')
+      try {
+        const result = (await authClient.signIn.email(value)) as AuthResult
+        if (result.error) throw new Error(result.error.message ?? 'Sign in failed')
+        track('login')
+        navigate({ to: '/perfil' })
+      } catch {
+        setServerError('Correo o contraseña incorrectos.')
       }
-
-      track('login')
-      navigate({ to: '/perfil' })
-    } catch {
-      setError('Correo o contraseña incorrectos.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
+    },
+  })
 
   return (
     <AuthLayout
@@ -46,14 +41,9 @@ export function SignIn() {
       subtitle="Accede para sincronizar tus gasolineras favoritas."
       footer={
         <div className="space-y-5">
-          <p className="text-center">
-            <Link
-              to="/recuperar"
-              className="text-body underline-offset-2 hover:text-ink hover:underline"
-            >
-              ¿Olvidaste tu contraseña?
-            </Link>
-          </p>
+          <Button render={<Link to="/recuperar" />} variant="ghost" fullWidth>
+            ¿Olvidaste tu contraseña?
+          </Button>
           <div className="border-t border-line pt-5 text-center">
             <p>¿No tienes cuenta?</p>
             <Button render={<Link to="/registro" />} variant="outline" fullWidth className="mt-3">
@@ -63,36 +53,63 @@ export function SignIn() {
         </div>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
-        <Input
-          id="signin-email"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          form.handleSubmit()
+        }}
+        className="space-y-3"
+        autoComplete="on"
+        noValidate
+      >
+        <form.Field
           name="email"
-          type="email"
-          required
-          autoComplete="username"
-          inputMode="email"
-          label="Email"
-          hideLabel
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
+          validators={{ onBlur: emailSchema, onSubmit: emailSchema }}
+          children={(field) => (
+            <Input
+              id="signin-email"
+              name={field.name}
+              type="email"
+              autoComplete="username"
+              inputMode="email"
+              label="Email"
+              hideLabel
+              placeholder="Email"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              error={fieldError(field)}
+              invalid={Boolean(serverError)}
+            />
+          )}
         />
-        <Input
-          id="signin-password"
+        <form.Field
           name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          label="Contraseña"
-          hideLabel
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Contraseña"
+          validators={{ onBlur: passwordSchema, onSubmit: passwordSchema }}
+          children={(field) => (
+            <Input
+              id="signin-password"
+              name={field.name}
+              type="password"
+              autoComplete="current-password"
+              label="Contraseña"
+              hideLabel
+              placeholder="Contraseña"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              error={fieldError(field) ?? (serverError || undefined)}
+            />
+          )}
         />
-        <Button type="submit" fullWidth disabled={submitting}>
-          {submitting ? 'Entrando…' : 'Entrar'}
-        </Button>
-        {error && <p className="text-sm font-semibold text-brand">{error}</p>}
+        <form.Subscribe
+          selector={(s) => s.isSubmitting}
+          children={(isSubmitting) => (
+            <Button type="submit" fullWidth disabled={isSubmitting}>
+              {isSubmitting ? 'Entrando…' : 'Entrar'}
+            </Button>
+          )}
+        />
       </form>
     </AuthLayout>
   )

@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import { useForm } from '@tanstack/react-form'
 import { authClient } from '#/lib/auth-client'
 import { track } from '#/lib/analytics'
+import { emailSchema, fieldError, newPasswordSchema } from '#/lib/forms'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { AuthLayout } from '../components/AuthLayout'
@@ -15,35 +16,27 @@ type AuthResult = {
 
 export function SignUp() {
   const navigate = useNavigate()
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  // Server rejection (e.g. email already in use) — shown inline on the email field.
+  const [serverError, setServerError] = useState('')
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError('')
-    try {
-      const result = (await authClient.signUp.email({
-        email,
-        password,
-        name: name || email.split('@')[0] || 'Litrito',
-      })) as AuthResult
-
-      if (result.error) {
-        throw new Error(result.error.message ?? 'Sign up failed')
+  const form = useForm({
+    defaultValues: { name: '', email: '', password: '' },
+    onSubmit: async ({ value }) => {
+      setServerError('')
+      try {
+        const result = (await authClient.signUp.email({
+          email: value.email,
+          password: value.password,
+          name: value.name || value.email.split('@')[0] || 'Litrito',
+        })) as AuthResult
+        if (result.error) throw new Error(result.error.message ?? 'Sign up failed')
+        track('signup')
+        navigate({ to: '/perfil' })
+      } catch {
+        setServerError('No se pudo crear la cuenta. ¿Ya existe ese correo?')
       }
-
-      track('signup')
-      navigate({ to: '/perfil' })
-    } catch {
-      setError('No se pudo crear la cuenta. ¿Ya existe ese correo?')
-    } finally {
-      setSubmitting(false)
-    }
-  }
+    },
+  })
 
   return (
     <AuthLayout
@@ -58,48 +51,82 @@ export function SignUp() {
         </div>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
-        <Input
-          id="signup-name"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          form.handleSubmit()
+        }}
+        className="space-y-3"
+        autoComplete="on"
+        noValidate
+      >
+        <form.Field
           name="name"
-          type="text"
-          autoComplete="name"
-          label="Nombre (opcional)"
-          hideLabel
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nombre (opcional)"
+          children={(field) => (
+            <Input
+              id="signup-name"
+              name={field.name}
+              type="text"
+              autoComplete="name"
+              label="Nombre (opcional)"
+              hideLabel
+              placeholder="Nombre (opcional)"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+          )}
         />
-        <Input
-          id="signup-email"
+        <form.Field
           name="email"
-          type="email"
-          required
-          autoComplete="email"
-          inputMode="email"
-          label="Email"
-          hideLabel
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
+          validators={{ onBlur: emailSchema, onSubmit: emailSchema }}
+          children={(field) => (
+            <Input
+              id="signup-email"
+              name={field.name}
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              label="Email"
+              hideLabel
+              placeholder="Email"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => {
+                setServerError('')
+                field.handleChange(e.target.value)
+              }}
+              error={fieldError(field) ?? (serverError || undefined)}
+            />
+          )}
         />
-        <Input
-          id="signup-password"
+        <form.Field
           name="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-          label="Contraseña"
-          hideLabel
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Contraseña (mínimo 8 caracteres)"
+          validators={{ onBlur: newPasswordSchema, onSubmit: newPasswordSchema }}
+          children={(field) => (
+            <Input
+              id="signup-password"
+              name={field.name}
+              type="password"
+              autoComplete="new-password"
+              label="Contraseña"
+              hideLabel
+              placeholder="Contraseña (mínimo 8 caracteres)"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              error={fieldError(field)}
+            />
+          )}
         />
-        <Button type="submit" fullWidth disabled={submitting}>
-          {submitting ? 'Creando…' : 'Crear cuenta'}
-        </Button>
-        {error && <p className="text-sm font-semibold text-brand">{error}</p>}
+        <form.Subscribe
+          selector={(s) => s.isSubmitting}
+          children={(isSubmitting) => (
+            <Button type="submit" fullWidth disabled={isSubmitting}>
+              {isSubmitting ? 'Creando…' : 'Crear cuenta'}
+            </Button>
+          )}
+        />
       </form>
     </AuthLayout>
   )

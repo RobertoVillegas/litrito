@@ -134,6 +134,26 @@ body {
   background: var(--color-canvas-soft);
 }
 
+/* Transparent, no border — same footprint as the other pills. */
+.btn-pill--ghost {
+  background: transparent;
+  color: var(--color-ink);
+  border-color: transparent;
+}
+.btn-pill--ghost:hover {
+  background: var(--color-canvas-soft);
+}
+
+/* For dark/photo sections: white outline that lightens on hover. */
+.btn-pill--outline-white {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.btn-pill--outline-white:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 button,
 .btn-pill,
 a {
