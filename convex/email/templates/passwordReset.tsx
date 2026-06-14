@@ -66,7 +66,7 @@ export function PasswordResetEmail({
           <Text style={styles.footer}>
             Litrito es un producto de{' '}
             <Link href="https://athas.mx" style={styles.footerLink}>
-              athas.mx
+              athas
             </Link>
             .
           </Text>
