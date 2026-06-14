@@ -6,6 +6,7 @@ import { ChevronDown, Fuel, LogOut, MapPin, Menu, User, X } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 import { useUserLocation } from '#/lib/useUserLocation'
+import { Button } from '#/components/ui/button'
 
 const AVATAR_COLORS = ['#e60000', '#25282b', '#7e7e7e', '#bebebe', '#ffffff']
 
@@ -163,20 +164,21 @@ function AccountMenu() {
                 <p className="text-sm text-body">
                   Entra para sincronizar tus favoritas.
                 </p>
-                <Link
-                  to="/entrar"
-                  onClick={() => setOpen(false)}
-                  className="btn-pill btn-pill--primary w-full text-sm"
+                <Button
+                  render={<Link to="/entrar" onClick={() => setOpen(false)} />}
+                  fullWidth
+                  size="sm"
                 >
                   Entrar
-                </Link>
-                <Link
-                  to="/registro"
-                  onClick={() => setOpen(false)}
-                  className="btn-pill btn-pill--outline-dark w-full text-sm"
+                </Button>
+                <Button
+                  render={<Link to="/registro" onClick={() => setOpen(false)} />}
+                  variant="outline"
+                  fullWidth
+                  size="sm"
                 >
                   Crear cuenta
-                </Link>
+                </Button>
               </div>
             )}
           </div>
@@ -206,31 +208,34 @@ function SignedInPanel({
           <div className="truncate text-xs text-body">{email}</div>
         </div>
       </div>
-      <Link
-        to="/perfil"
-        onClick={onNavigate}
-        className="btn-pill btn-pill--outline-dark w-full text-sm"
+      <Button
+        render={<Link to="/perfil" onClick={onNavigate} />}
+        variant="outline"
+        fullWidth
+        size="sm"
       >
         <User className="h-4 w-4" />
         Mi perfil
-      </Link>
+      </Button>
       {isAdmin && (
-        <Link
-          to="/admin/ingestion"
-          onClick={onNavigate}
-          className="btn-pill btn-pill--outline-dark w-full text-sm"
+        <Button
+          render={<Link to="/admin/ingestion" onClick={onNavigate} />}
+          variant="outline"
+          fullWidth
+          size="sm"
         >
           Auditoria
-        </Link>
+        </Button>
       )}
-      <button
-        type="button"
+      <Button
+        variant="outline-red"
+        fullWidth
+        size="sm"
         onClick={() => void authClient.signOut()}
-        className="btn-pill btn-pill--outline-red w-full text-sm"
       >
         <LogOut className="h-4 w-4" />
         Cerrar sesion
-      </button>
+      </Button>
     </div>
   )
 }

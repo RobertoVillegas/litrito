@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { api } from '../../convex/_generated/api'
+import { Button } from '#/components/ui/button'
 import { LocationSeoPage } from '../components/LocationSeoPage'
 import { RouteErrorFallback } from '../components/RouteError'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
@@ -56,9 +57,9 @@ function StatePage() {
         <p className="mt-3 text-sm font-semibold text-body">
           Revisa el enlace o explora el catálogo completo de estaciones.
         </p>
-        <a href="/explorar" className="btn-pill btn-pill--primary mt-6">
+        <Button render={<a href="/explorar" />} className="mt-6">
           Explorar estaciones
-        </a>
+        </Button>
       </main>
     )
   }

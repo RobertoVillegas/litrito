@@ -6,6 +6,7 @@ import { ArrowRight, Fuel, LocateFixed, MapPin, Navigation } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
 import { SiteFooter } from '../components/SiteFooter'
+import { Button } from '#/components/ui/button'
 import { DarkSkeleton, MapSkeleton, SkeletonLine } from '../components/Skeleton'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { track } from '#/lib/analytics'
@@ -200,24 +201,26 @@ function Home() {
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                <button
-                  type="button"
+                <Button
+                  fullWidth
+                  className="justify-center"
                   onClick={() => {
                     track('home_location_request', { fuel: fuelType, radiusKm })
                     userLoc.requestPrecise()
                   }}
-                  className="btn-pill btn-pill--primary w-full justify-center"
                 >
                   <LocateFixed className="h-4 w-4" />
                   {userLoc.hasPreciseLocation ? 'Actualizar ubicación' : 'Usar mi ubicación'}
-                </button>
-                <Link
-                  to="/explorar"
-                  className="btn-pill w-full justify-center border border-white/35 text-white hover:bg-white/10"
+                </Button>
+                <Button
+                  render={<Link to="/explorar" />}
+                  variant="outline-white"
+                  fullWidth
+                  className="justify-center"
                 >
                   Explorar estaciones
                   <ArrowRight className="h-4 w-4" />
-                </Link>
+                </Button>
               </div>
 
               {hasLocation && (

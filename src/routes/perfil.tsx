@@ -7,6 +7,7 @@ import { LogOut, MapPin, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 import { useFavorites } from '#/lib/useFavorites'
+import { Button } from '#/components/ui/button'
 import { MapSkeleton } from '../components/Skeleton'
 import { StationTable, type StationRow } from '../components/StationTable'
 import { boundsOfLatLngs } from '../components/mapGeo'
@@ -109,18 +110,12 @@ function Profile() {
             </div>
           </div>
           {user ? (
-            <button
-              type="button"
-              onClick={() => void authClient.signOut()}
-              className="btn-pill border border-white/40 text-white hover:bg-white/10"
-            >
+            <Button variant="outline-white" onClick={() => void authClient.signOut()}>
               <LogOut className="h-4 w-4" />
               Cerrar sesión
-            </button>
+            </Button>
           ) : (
-            <Link to="/entrar" className="btn-pill btn-pill--primary">
-              Entrar
-            </Link>
+            <Button render={<Link to="/entrar" />}>Entrar</Button>
           )}
         </div>
       </section>
@@ -149,9 +144,9 @@ function Profile() {
               Aún no tienes gasolineras favoritas. Marca la estrella en cualquier
               estación para guardarla aquí.
             </p>
-            <Link to="/" className="btn-pill btn-pill--primary mt-4">
+            <Button render={<Link to="/" />} className="mt-4">
               Explorar gasolineras
-            </Link>
+            </Button>
           </div>
         ) : (
           <>

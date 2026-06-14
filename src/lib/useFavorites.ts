@@ -47,17 +47,30 @@ export type ToggleResult = { favorited: boolean; message: string }
 export function useFavorites() {
   const session = authClient.useSession()
   const sessionUser = session?.data?.user ?? null
-  const [localFavorites, setLocalFavorites] = useState<string[]>(readLocal)
+  // Start empty to match the server render, then load from localStorage after
+  // mount — otherwise the first client render disagrees with the SSR HTML and
+  // the favorite state flashes (e.g. "Guardar" → "Favorita").
+  const [localFavorites, setLocalFavorites] = useState<string[]>([])
+  const [hydrated, setHydrated] = useState(false)
   const [syncedUserId, setSyncedUserId] = useState<string | null>(null)
-  const remoteFavorites = (useQuery(
-    api.favorites.list,
-    sessionUser ? {} : 'skip',
-  ) ?? []) as string[]
+  const remoteQuery = useQuery(api.favorites.list, sessionUser ? {} : 'skip')
+  const remoteFavorites = (remoteQuery ?? []) as string[]
   const setFavorite = useMutation(api.favorites.set)
 
   useEffect(() => {
-    writeLocal(localFavorites)
-  }, [localFavorites])
+    setLocalFavorites(readLocal())
+    setHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    // Don't persist until we've loaded, so we never clobber storage with [].
+    if (hydrated) writeLocal(localFavorites)
+  }, [hydrated, localFavorites])
+
+  // Favorite state is knowable once the browser store is loaded and, for signed-in
+  // users, the remote list has resolved. Consumers can gate UI on this to avoid a
+  // wrong-state flash.
+  const ready = hydrated && (sessionUser ? remoteQuery !== undefined : true)
 
   const favoriteSet = useMemo(
     () => new Set([...remoteFavorites, ...localFavorites]),
@@ -112,6 +125,7 @@ export function useFavorites() {
 
   return {
     favoriteSet,
+    ready,
     isFavorite: (permitNumber: string) => favoriteSet.has(permitNumber),
     toggleFavorite,
   }

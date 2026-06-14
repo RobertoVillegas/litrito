@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, RefreshCcw, ShieldCheck } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
+import { Button } from '#/components/ui/button'
 import { RouteErrorFallback } from '../components/RouteError'
 import { SkeletonLine } from '../components/Skeleton'
 
@@ -139,15 +140,15 @@ function AdminIngestion() {
                           <Td>{formatLocation(run)}</Td>
                           <Td>{run.message ?? 'Sin mensaje'}</Td>
                           <Td>
-                            <button
-                              type="button"
+                            <Button
+                              variant="outline"
+                              size="xs"
                               onClick={() => void retry(run)}
                               disabled={retrying === String(run._id)}
-                              className="btn-pill btn-pill--outline-dark text-xs disabled:opacity-60"
                             >
                               <RefreshCcw className="h-3.5 w-3.5" />
                               {retrying === String(run._id) ? 'Reintentando' : 'Reintentar'}
-                            </button>
+                            </Button>
                           </Td>
                         </tr>
                       ))}

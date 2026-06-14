@@ -16,6 +16,7 @@ import type { TooltipContentProps } from 'recharts'
 import { api } from '../../convex/_generated/api'
 import { cn } from '#/lib/utils'
 import { useFavorites } from '#/lib/useFavorites'
+import { Button } from '#/components/ui/button'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
@@ -134,7 +135,7 @@ function StationDetail() {
   const { _splat } = Route.useParams()
   const permitNumber = _splat ?? ''
   const initialData = Route.useLoaderData() as StationDetailData | null | undefined
-  const { isFavorite, toggleFavorite } = useFavorites()
+  const { isFavorite, toggleFavorite, ready: favoritesReady } = useFavorites()
   const [favMsg, setFavMsg] = useState('')
   const [shareMsg, setShareMsg] = useState('')
   const queriedData = useQuery(api.stations.getStationDetail, { permitNumber }) as
@@ -207,36 +208,51 @@ function StationDetail() {
           </p>
           <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
             {directionsHref && (
-              <a
-                className="btn-pill btn-pill--primary w-full sm:w-auto"
-                href={directionsHref}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Button
+                render={
+                  <a href={directionsHref} target="_blank" rel="noopener noreferrer" />
+                }
+                fullWidth
+                className="sm:w-auto"
               >
                 <Navigation className="h-4 w-4" />
                 Cómo llegar
-              </a>
+              </Button>
             )}
-            <button
-              type="button"
-              onClick={async () => {
-                const result = await toggleFavorite(permitNumber)
-                setFavMsg(result.message)
-              }}
-              className={`w-full sm:w-auto ${
-                isFavorite(permitNumber)
-                  ? 'btn-pill btn-pill--primary'
-                  : 'btn-pill border border-white/40 text-white hover:bg-white/10'
-              }`}
-            >
-              <Star
-                className="h-4 w-4"
-                fill={isFavorite(permitNumber) ? 'currentColor' : 'none'}
-              />
-              {isFavorite(permitNumber) ? 'Favorita' : 'Guardar'}
-            </button>
-            <button
-              type="button"
+            {favoritesReady ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  const result = await toggleFavorite(permitNumber)
+                  setFavMsg(result.message)
+                }}
+                className={`w-full sm:w-auto ${
+                  isFavorite(permitNumber)
+                    ? 'btn-pill btn-pill--primary'
+                    : 'btn-pill border border-white/40 text-white hover:bg-white/10'
+                }`}
+              >
+                <Star
+                  className="h-4 w-4"
+                  fill={isFavorite(permitNumber) ? 'currentColor' : 'none'}
+                />
+                {isFavorite(permitNumber) ? 'Favorita' : 'Guardar'}
+              </button>
+            ) : (
+              // Placeholder with the same footprint until favorite state is known,
+              // so the label never flashes from "Guardar" to "Favorita".
+              <div
+                aria-hidden
+                className="btn-pill w-full animate-pulse border border-white/15 bg-white/5 text-transparent sm:w-auto"
+              >
+                <Star className="h-4 w-4 text-white/20" />
+                Guardar
+              </div>
+            )}
+            <Button
+              variant="outline-white"
+              fullWidth
+              className="col-span-2 sm:col-auto sm:w-auto"
               onClick={() =>
                 void shareStation({
                   permitNumber,
@@ -245,11 +261,10 @@ function StationDetail() {
                   onDone: setShareMsg,
                 })
               }
-              className="btn-pill col-span-2 w-full border border-white/40 text-white hover:bg-white/10 sm:col-auto sm:w-auto"
             >
               {shareMsg ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
               Compartir
-            </button>
+            </Button>
           </div>
           {favMsg && (
             <p className="mt-2 text-xs font-semibold text-white/60">{favMsg}</p>

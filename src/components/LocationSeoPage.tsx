@@ -14,6 +14,7 @@ import {
 import type { TooltipContentProps } from 'recharts'
 import { FUEL_META } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
+import { Button } from '#/components/ui/button'
 import { SiteFooter } from './SiteFooter'
 
 type FuelMetric = {
@@ -109,20 +110,17 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
               para tomar una decisión antes de cargar combustible.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <a
-                href={`/explorar${exploreSearch}`}
-                className="btn-pill btn-pill--primary"
-              >
+              <Button render={<a href={`/explorar${exploreSearch}`} />}>
                 Ver estaciones
                 <ArrowRight className="h-4 w-4" />
-              </a>
+              </Button>
               {data.municipality && (
-                <a
-                  href={`/estado/${data.state.slug}`}
-                  className="btn-pill border border-white/35 text-white hover:bg-white/10"
+                <Button
+                  render={<a href={`/estado/${data.state.slug}`} />}
+                  variant="outline-white"
                 >
                   Todo {data.state.name}
-                </a>
+                </Button>
               )}
             </div>
             <div className="mt-6 flex items-center gap-2">
