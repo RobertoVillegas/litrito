@@ -9,8 +9,8 @@ import { authClient } from '#/lib/auth-client'
 import { useFavorites } from '#/lib/useFavorites'
 import { MapSkeleton } from '../components/Skeleton'
 import { StationTable, type StationRow } from '../components/StationTable'
-import { boundsOfLatLngs } from '../components/StationMap'
-import type { MapFocus } from '../components/StationMap'
+import { boundsOfLatLngs } from '../components/mapGeo'
+import type { MapFocus } from '../components/mapGeo'
 import type { FuelType } from '../components/StationFilters'
 
 const StationMap = lazy(() =>

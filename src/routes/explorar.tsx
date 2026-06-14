@@ -13,8 +13,8 @@ import { MapSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
-import { boundsOfLatLngs } from '../components/StationMap'
-import type { MapBounds, MapFocus } from '../components/StationMap'
+import { boundsOfLatLngs } from '../components/mapGeo'
+import type { MapBounds, MapFocus } from '../components/mapGeo'
 
 const FUEL_VALUES = ['regular', 'premium', 'diesel', 'duba'] as const
 const SORT_VALUES = ['price', 'distance', 'name'] as const
