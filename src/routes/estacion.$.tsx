@@ -43,19 +43,17 @@ export const Route = createFileRoute('/estacion/$')({
     const data = loaderData as StationDetailData | null | undefined
     const station = data?.station
     const currentPrices = data?.currentPrices ?? {}
-    const sharePrice = pickSharePrice(currentPrices)
+    const location = station
+      ? [station.municipalityName, station.stateName].filter(Boolean).join(', ')
+      : ''
+    const priceSummary = formatStationPriceSummary(currentPrices)
     const title = station
       ? `${station.name} - Litrito`
       : `Estación ${params._splat ?? ''} - Litrito`
     const description = station
-      ? [
-          sharePrice
-            ? `${FUEL_META[sharePrice.fuelType].label} a ${formatCurrency(sharePrice.price)}`
-            : 'Precios de gasolina',
-          [station.municipalityName, station.stateName].filter(Boolean).join(', '),
-        ]
+      ? [priceSummary || 'Precios de gasolina', location ? `en ${location}` : '']
           .filter(Boolean)
-          .join(' en ')
+          .join(' ')
       : 'Consulta precios de gasolina por estación en Litrito.'
 
     const origin = getConfiguredSiteOrigin()
@@ -91,8 +89,9 @@ export const Route = createFileRoute('/estacion/$')({
         description,
         image: {
           title: station ? station.name : `Estación ${params._splat ?? ''}`,
-          subtitle: description,
+          subtitle: location || description,
           eyebrow: 'Litrito estación',
+          badges: formatOgPriceBadges(currentPrices),
         },
         url: origin ? canonical : undefined,
       }),
@@ -419,17 +418,26 @@ function StationDetailSkeleton() {
   )
 }
 
-function pickSharePrice(
+function formatStationPriceSummary(
   prices: Record<string, { price: number; reportedAt?: string }>,
 ) {
-  const entries = Object.entries(prices)
-    .filter((entry): entry is [FuelType, { price: number; reportedAt?: string }] =>
-      ['regular', 'premium', 'diesel', 'duba'].includes(entry[0]),
-    )
-    .sort((a, b) => a[1].price - b[1].price)
-  if (entries.length === 0) return null
-  const [fuelType, value] = entries[0]
-  return { fuelType, price: value.price }
+  const parts = FUEL_ORDER.flatMap((fuelType) => {
+    const value = prices[fuelType]
+    if (!value) return []
+    return `${FUEL_META[fuelType].label} ${formatCurrency(value.price)}`
+  })
+  if (parts.length === 0) return ''
+  return `Precios: ${parts.join(', ')}.`
+}
+
+function formatOgPriceBadges(
+  prices: Record<string, { price: number; reportedAt?: string }>,
+) {
+  return FUEL_ORDER.flatMap((fuelType) => {
+    const value = prices[fuelType]
+    if (!value) return []
+    return `${FUEL_META[fuelType].label}|${formatCurrency(value.price)}`
+  })
 }
 
 async function shareStation({

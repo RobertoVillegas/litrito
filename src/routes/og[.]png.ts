@@ -58,14 +58,29 @@ function cleanText(value: string | null, fallback: string, maxLength: number) {
   return (text || fallback).slice(0, maxLength)
 }
 
+function cleanBadges(values: string[]) {
+  return values
+    .map((value) => {
+      const [label = '', detail = ''] = value.split('|')
+      const cleanLabel = cleanText(label, '', 28)
+      const cleanDetail = cleanText(detail, '', 18)
+      if (!cleanLabel || !cleanDetail) return null
+      return { label: cleanLabel, detail: cleanDetail }
+    })
+    .filter((value): value is { label: string; detail: string } => Boolean(value))
+    .slice(0, 4)
+}
+
 async function renderOgImage({
   title,
   subtitle,
   eyebrow,
+  badges,
 }: {
   title: string
   subtitle: string
   eyebrow: string
+  badges: Array<{ label: string; detail: string }>
 }) {
   const { font, logoSrc } = await loadAssets()
   const markup = {
@@ -189,6 +204,62 @@ async function renderOgImage({
             ],
           },
         },
+        badges.length
+          ? {
+              type: 'div',
+              props: {
+                style: {
+                  bottom: '72px',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  gap: '14px',
+                  left: '72px',
+                  position: 'absolute',
+                },
+                children: badges.map((badge) => ({
+                  type: 'div',
+                  props: {
+                    style: {
+                      alignItems: 'center',
+                      background: '#25282b',
+                      borderRadius: '10px',
+                      color: '#ffffff',
+                      display: 'flex',
+                      flexDirection: 'row',
+                      gap: '12px',
+                      padding: '14px 18px',
+                    },
+                    children: [
+                      {
+                        type: 'span',
+                        props: {
+                          style: {
+                            color: '#ffffff',
+                            display: 'flex',
+                            fontSize: '22px',
+                            fontWeight: 700,
+                          },
+                          children: badge.label,
+                        },
+                      },
+                      {
+                        type: 'span',
+                        props: {
+                          style: {
+                            color: '#facc15',
+                            display: 'flex',
+                            fontSize: '26px',
+                            fontWeight: 700,
+                          },
+                          children: badge.detail,
+                        },
+                      },
+                    ],
+                  },
+                })),
+              },
+            }
+          : null,
       ],
     },
   }
@@ -230,7 +301,8 @@ export const Route = createFileRoute('/og.png')({
           170,
         )
         const eyebrow = cleanText(url.searchParams.get('eyebrow'), 'Litrito', 34)
-        const png = await renderOgImage({ title, subtitle, eyebrow })
+        const badges = cleanBadges(url.searchParams.getAll('badge'))
+        const png = await renderOgImage({ title, subtitle, eyebrow, badges })
 
         return new Response(new Uint8Array(png), {
           headers: {

@@ -4,6 +4,7 @@ type OgImageInput = {
   title: string
   subtitle?: string
   eyebrow?: string
+  badges?: string[]
 }
 
 type SeoInput = {
@@ -13,9 +14,17 @@ type SeoInput = {
   url?: string
 }
 
-export function buildOgImageUrl({ title, subtitle, eyebrow = 'Litrito' }: OgImageInput) {
+export function buildOgImageUrl({
+  title,
+  subtitle,
+  eyebrow = 'Litrito',
+  badges = [],
+}: OgImageInput) {
   const params = new URLSearchParams({ title, eyebrow })
   if (subtitle) params.set('subtitle', subtitle)
+  for (const badge of badges) {
+    if (badge.trim()) params.append('badge', badge)
+  }
   const path = `/og.png?${params.toString()}`
   const origin = getConfiguredSiteOrigin()
   return origin ? `${origin}${path}` : path
@@ -26,6 +35,7 @@ export function buildSeoMeta({ title, description, image, url }: SeoInput) {
     title,
     subtitle: image?.subtitle ?? description,
     eyebrow: image?.eyebrow,
+    badges: image?.badges,
   })
 
   return [
