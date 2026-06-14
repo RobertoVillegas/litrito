@@ -3,6 +3,7 @@ import { getRequestIP } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
 const IP_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const GEOLOOKUP_TIMEOUT_MS = 2_500
 
 type CachedLocation = {
   ip: string
@@ -32,7 +33,10 @@ async function fetchIpLocation(ip: string): Promise<CachedLocation | null> {
   try {
     const response = await fetch(
       `https://ipwho.is/${encodeURIComponent(ip)}?fields=success,latitude,longitude,city,region,country`,
-      { headers: { accept: 'application/json' } },
+      {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(GEOLOOKUP_TIMEOUT_MS),
+      },
     )
     if (!response.ok) return null
     const body = (await response.json()) as {
@@ -99,6 +103,7 @@ export const reverseGeocode = createServerFn({ method: 'GET' })
           accept: 'application/json',
           'user-agent': 'Litrito/1.0 (+https://litrito.mx)',
         },
+        signal: AbortSignal.timeout(GEOLOOKUP_TIMEOUT_MS),
       })
       if (!response.ok) return { city: null, region: null }
       const body = (await response.json()) as {
