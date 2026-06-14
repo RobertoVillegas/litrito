@@ -33,31 +33,47 @@ type HomeSearch = {
   sort?: 'price' | 'distance' | 'name'
 }
 
+function readSearchString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      return typeof parsed === 'string' && parsed.trim() ? parsed : undefined
+    } catch {
+      return trimmed.slice(1, -1) || undefined
+    }
+  }
+  return trimmed
+}
+
 export const Route = createFileRoute('/explorar')({
   validateSearch: (search: Record<string, unknown>): HomeSearch => {
-    const fuels = typeof search.fuels === 'string' ? search.fuels : undefined
+    const fuels = readSearchString(search.fuels)
+    const primaryValue = readSearchString(search.primary)
+    const sortValue = readSearchString(search.sort)
     const primary =
-      typeof search.primary === 'string' &&
-      FUEL_VALUES.includes(search.primary as FuelType)
-        ? (search.primary as FuelType)
+      primaryValue && FUEL_VALUES.includes(primaryValue as FuelType)
+        ? (primaryValue as FuelType)
         : undefined
     const sort =
-      typeof search.sort === 'string' &&
-      SORT_VALUES.includes(search.sort as FilterState['sortMode'])
-        ? (search.sort as FilterState['sortMode'])
+      sortValue && SORT_VALUES.includes(sortValue as FilterState['sortMode'])
+        ? (sortValue as FilterState['sortMode'])
         : undefined
     return {
       fuels,
       primary,
-      state: typeof search.state === 'string' ? search.state : undefined,
-      municipality:
-        typeof search.municipality === 'string'
-          ? search.municipality
-          : undefined,
-      q: typeof search.q === 'string' ? search.q : undefined,
+      state: readSearchString(search.state),
+      municipality: readSearchString(search.municipality),
+      q: readSearchString(search.q),
       sort,
     }
   },
+  loaderDeps: () => ({}),
   loader: async ({ context }) => {
     const [filterOptions, latestRun] = await Promise.all([
       context.queryClient.ensureQueryData(
@@ -332,7 +348,7 @@ function Explore() {
     const resolved = typeof next === 'function' ? next(filters) : next
     trackFilterChanges(filters, resolved)
     void navigate({
-      search: filtersToSearch(resolved),
+      search: () => filtersToSearch(resolved),
       replace: true,
       resetScroll: false,
     })
@@ -500,7 +516,9 @@ function Explore() {
     selectedStateId
       ? {
           stateExternalId: selectedStateId,
-          municipalityExternalId: selectedMuniId || undefined,
+          ...(selectedMuniId
+            ? { municipalityExternalId: selectedMuniId }
+            : {}),
         }
       : ('skip' as const),
   ) as MapBounds | null | undefined

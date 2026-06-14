@@ -270,6 +270,35 @@ async function listStationsByPrice(
       : null
 
   const stateScoped = params.singleState
+  if (
+    !locationScopedMuni &&
+    !stateScoped &&
+    params.stateIds.length === 0 &&
+    params.parsedMunis.length === 0
+  ) {
+    const pagePrices = await ctx.db
+      .query('fuelPricesCurrent')
+      .withIndex('by_fuel_price', (q) => q.eq('fuelType', primaryFuel))
+      .paginate(params.paginationOpts)
+    const stations = (
+      await Promise.all(
+        pagePrices.page.map((price) =>
+          ctx.db
+            .query('stations')
+            .withIndex('by_permit', (q) =>
+              q.eq('permitNumber', price.stationPermitNumber),
+            )
+            .unique(),
+        ),
+      )
+    ).filter((station): station is Doc<'stations'> => station !== null)
+
+    return {
+      ...pagePrices,
+      page: await hydrateStationRows(ctx, stations, params.fuelTypes),
+    }
+  }
+
   const priceDocs = locationScopedMuni
     ? await ctx.db
         .query('fuelPricesCurrent')
