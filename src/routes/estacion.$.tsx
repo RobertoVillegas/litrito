@@ -21,7 +21,7 @@ import { Button } from '#/components/ui/button'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
-import { DarkSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
+import { ChartSkeleton, DarkSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 
 const StationMiniMap = lazy(() =>
@@ -545,7 +545,7 @@ function PriceHistoryChart({ history }: { history: HistoryEntry[] }) {
 
   return (
     <div className="mt-4 rounded-[6px] border border-line p-4">
-      <ClientOnly fallback={<div className="h-[240px]" />}>
+      <ClientOnly fallback={<ChartSkeleton height={240} />}>
         <ResponsiveContainer width="100%" height={240}>
           <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e6e6e6" vertical={false} />

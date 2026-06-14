@@ -21,7 +21,7 @@ import { api } from '../../convex/_generated/api'
 import { FUEL_META } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
-import { Skeleton, SkeletonLine } from '../components/Skeleton'
+import { ChartSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 
@@ -324,7 +324,7 @@ function FuelSpreadChart({ data }: { data: MetricsData }) {
         De la estación más barata a la más cara del país; el punto marca el promedio.
       </p>
       <div className="mt-4 rounded-[6px] border border-line p-4">
-        <ClientOnly fallback={<div className="h-[220px]" />}>
+        <ClientOnly fallback={<ChartSkeleton height={220} />}>
           <ResponsiveContainer width="100%" height={Math.max(200, rows.length * 52)}>
             <ComposedChart
               data={rows}
@@ -422,7 +422,7 @@ function StateDeltaChart({ data }: { data: MetricsData }) {
         Verde = más barato, rojo = más caro.
       </p>
       <div className="mt-4 rounded-[6px] border border-line p-4">
-        <ClientOnly fallback={<div className="h-[360px]" />}>
+        <ClientOnly fallback={<ChartSkeleton height={360} />}>
           <ResponsiveContainer width="100%" height={Math.max(360, rows.length * 26)}>
             <BarChart
               data={rows}

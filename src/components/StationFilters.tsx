@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react'
+import { useMemo } from 'react'
+import { Search, SlidersHorizontal, X } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { Combobox, type ComboboxItem } from './ui/combobox'
 
 export type FuelType = 'regular' | 'premium' | 'diesel' | 'duba'
 
@@ -47,113 +48,6 @@ function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
 }
 
-type ComboOption = { id: string; name: string; count: number }
-
-function Combobox({
-  label,
-  placeholder,
-  options,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string
-  placeholder: string
-  options: ComboOption[]
-  value: string | null
-  onChange: (id: string | null) => void
-  disabled?: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const selected = options.find((o) => o.id === value) ?? null
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const base = q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options
-    return base.slice(0, 80)
-  }, [options, query])
-
-  return (
-    <div className="min-w-0 flex-1">
-      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-        {label}
-      </span>
-      <div className="relative mt-1.5">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => setOpen((o) => !o)}
-          className={cn(
-            'flex h-10 w-full items-center justify-between gap-2 rounded-[6px] border px-3 text-sm font-semibold transition',
-            disabled
-              ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300'
-              : selected
-                ? 'border-brand bg-[#fff0f0] text-brand'
-                : 'border-slate-200 bg-white text-slate-700 hover:border-brand/40',
-          )}
-        >
-          <span className="truncate">{selected ? selected.name : placeholder}</span>
-          {selected ? (
-            <X
-              className="h-4 w-4 shrink-0 opacity-70 hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation()
-                onChange(null)
-              }}
-            />
-          ) : (
-            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
-          )}
-        </button>
-
-        {open && !disabled && (
-          <>
-            <div className="fixed inset-0 z-[1090]" onClick={() => setOpen(false)} />
-            <div className="absolute left-0 right-0 z-[1100] mt-1 rounded-[6px] border border-line bg-white shadow-[0_12px_40px_rgba(37,40,43,0.16)]">
-              <div className="relative border-b border-line p-2">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  autoFocus
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Buscar…"
-                  className="h-9 w-full rounded-[6px] border border-slate-200 bg-white pl-9 pr-3 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-                />
-              </div>
-              <div className="max-h-64 overflow-y-auto py-1">
-                {filtered.length === 0 ? (
-                  <div className="px-3 py-3 text-sm text-slate-400">Sin resultados</div>
-                ) : (
-                  filtered.map((o) => (
-                    <button
-                      key={o.id}
-                      type="button"
-                      onClick={() => {
-                        onChange(o.id)
-                        setOpen(false)
-                        setQuery('')
-                      }}
-                      className={cn(
-                        'flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition hover:bg-canvas-soft',
-                        o.id === value ? 'font-bold text-brand' : 'text-ink',
-                      )}
-                    >
-                      <span className="truncate">{o.name}</span>
-                      <span className="shrink-0 text-[11px] font-bold text-slate-400">
-                        {o.count}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
 export function StationFilters({
   state,
   states,
@@ -165,11 +59,11 @@ export function StationFilters({
   const selectedState = state.stateIds[0] ?? null
   const selectedMuni = state.municipalityIds[0] ?? null
 
-  const stateOptions = useMemo<ComboOption[]>(
+  const stateOptions = useMemo<ComboboxItem[]>(
     () => states.map((s) => ({ id: s.externalId, name: s.name, count: s.count })),
     [states],
   )
-  const muniOptions = useMemo<ComboOption[]>(
+  const muniOptions = useMemo<ComboboxItem[]>(
     () =>
       selectedState
         ? municipalities
@@ -304,19 +198,19 @@ export function StationFilters({
         <Combobox
           label="Estado"
           placeholder="Todos los estados"
-          options={stateOptions}
+          items={stateOptions}
           value={selectedState}
-          onChange={(id) =>
+          onValueChange={(id) =>
             update({ stateIds: id ? [id] : [], municipalityIds: [] })
           }
         />
         <Combobox
           label="Municipio"
           placeholder={selectedState ? 'Todos los municipios' : 'Elige un estado primero'}
-          options={muniOptions}
+          items={muniOptions}
           value={selectedMuni}
           disabled={!selectedState}
-          onChange={(id) => update({ municipalityIds: id ? [id] : [] })}
+          onValueChange={(id) => update({ municipalityIds: id ? [id] : [] })}
         />
       </div>
     </div>

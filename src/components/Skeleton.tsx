@@ -50,6 +50,33 @@ export function SkeletonLine({
   )
 }
 
+// Stand-in for a chart while it loads on the client. Faint bars so the area
+// reads as "a chart is coming" instead of an empty gap.
+const CHART_BARS = [52, 74, 43, 88, 61, 79, 48, 92, 67, 58, 83, 70]
+
+export function ChartSkeleton({
+  height = 240,
+  className,
+}: {
+  height?: number
+  className?: string
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        'flex items-end gap-2 rounded-[6px] border border-line bg-canvas-soft px-4 pb-4 pt-6',
+        className,
+      )}
+      style={{ height }}
+    >
+      {CHART_BARS.map((h, i) => (
+        <Skeleton key={i} className="flex-1" style={{ height: `${h}%` }} />
+      ))}
+    </div>
+  )
+}
+
 export function MapSkeleton({ className }: { className?: string }) {
   return (
     <div
