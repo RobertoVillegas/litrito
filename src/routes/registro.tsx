@@ -48,12 +48,12 @@ export function SignUp() {
       title="Crear cuenta"
       subtitle="Guarda tus gasolineras favoritas y llévalas a donde sea."
       footer={
-        <span>
-          ¿Ya tienes cuenta?{' '}
-          <Link to="/entrar" className="font-bold text-brand hover:text-brand-dark">
+        <div className="border-t border-line pt-5 text-center">
+          <p>¿Ya tienes cuenta?</p>
+          <Link to="/entrar" className="btn-pill btn-pill--outline-dark mt-3 w-full">
             Entrar
           </Link>
-        </span>
+        </div>
       }
     >
       <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">

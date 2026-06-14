@@ -49,9 +49,14 @@ function ForgotPassword() {
       title="Recuperar"
       subtitle="Te enviamos un enlace para restablecer tu contraseña."
       footer={
-        <Link to="/entrar" className="font-bold text-brand hover:text-brand-dark">
-          Volver a entrar
-        </Link>
+        <p className="text-center">
+          <Link
+            to="/entrar"
+            className="text-body underline-offset-2 hover:text-ink hover:underline"
+          >
+            Volver a entrar
+          </Link>
+        </p>
       }
     >
       {sent ? (

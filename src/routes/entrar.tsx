@@ -43,17 +43,22 @@ export function SignIn() {
       title="Entrar"
       subtitle="Accede para sincronizar tus gasolineras favoritas."
       footer={
-        <>
-          <Link to="/recuperar" className="font-bold text-brand hover:text-brand-dark">
-            ¿Olvidaste tu contraseña?
-          </Link>
-          <span className="mt-2 block">
-            ¿No tienes cuenta?{' '}
-            <Link to="/registro" className="font-bold text-brand hover:text-brand-dark">
-              Crear una
+        <div className="space-y-5">
+          <p className="text-center">
+            <Link
+              to="/recuperar"
+              className="text-body underline-offset-2 hover:text-ink hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
             </Link>
-          </span>
-        </>
+          </p>
+          <div className="border-t border-line pt-5 text-center">
+            <p>¿No tienes cuenta?</p>
+            <Link to="/registro" className="btn-pill btn-pill--outline-dark mt-3 w-full">
+              Crear cuenta
+            </Link>
+          </div>
+        </div>
       }
     >
       <form onSubmit={onSubmit} className="space-y-3" autoComplete="on">
