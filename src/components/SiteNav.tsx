@@ -34,6 +34,7 @@ export function SiteNav() {
           <NavLink to="/" label="Inicio" />
           <NavLink to="/explorar" label="Explorar" />
           <NavLink to="/metricas" label="Métricas" />
+          <NavLink to="/acerca" label="Acerca" />
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -62,6 +63,11 @@ export function SiteNav() {
             <MobileNavLink
               to="/metricas"
               label="Métricas"
+              onNavigate={() => setMobileOpen(false)}
+            />
+            <MobileNavLink
+              to="/acerca"
+              label="Acerca"
               onNavigate={() => setMobileOpen(false)}
             />
           </div>
