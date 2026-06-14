@@ -1,10 +1,20 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ArrowLeft, ArrowUpRight, Database, MapPin, RefreshCw } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  CalendarClock,
+  Database,
+  Mail,
+  MapPin,
+  RefreshCw,
+} from 'lucide-react'
 import { SiteFooter } from '../components/SiteFooter'
 import { buildSeoMeta } from '../lib/seo'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 
 const ATHAS_URL = 'https://athas.mx?ref=litrito'
+const ATHAS_CAL = 'https://cal.com/athasmx/30min'
+const ATHAS_MAIL = 'mailto:hola@athas.mx'
 
 export const Route = createFileRoute('/acerca')({
   head: () => {
@@ -95,34 +105,58 @@ function AboutPage() {
 
       <section className="bg-ink text-on-dark">
         <div className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="eyebrow text-brand">Hecho por Athas</p>
-          <h2 className="font-display mt-3 max-w-3xl text-4xl text-white sm:text-5xl">
-            Litrito es un proyecto de Athas
-          </h2>
-          <p className="mt-4 max-w-2xl text-lg font-light leading-8 text-white/70">
-            Athas es un estudio de producto digital. Diseñamos y construimos
-            software a la medida —web, móvil y datos— para negocios que quieren
-            llevar una idea a producción. Litrito es una muestra de lo que hacemos:
-            datos públicos convertidos en una herramienta rápida y útil.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <a
-              href={ATHAS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brand/90"
-            >
-              Conoce Athas
-              <ArrowUpRight className="h-4 w-4" />
-            </a>
-            <a
-              href="https://athas.mx/contacto?ref=litrito"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/20 px-5 py-2.5 text-sm font-bold text-white/80 transition hover:border-white/50 hover:text-white"
-            >
-              ¿Tienes un proyecto? Hablemos
-            </a>
+          <div className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
+            <div>
+              <p className="eyebrow text-brand">Hecho por Athas</p>
+              <h2 className="font-display mt-3 text-4xl text-white sm:text-5xl">
+                Litrito es un proyecto de Athas
+              </h2>
+              <p className="mt-5 text-lg font-light leading-8 text-white/70">
+                Athas es un estudio de diseño y tecnología. Diseñamos y
+                construimos lo que tu negocio necesita para operar: desde una
+                landing hasta sistemas completos, con integración de IA. Nos
+                importa que funcione, no que impresione.
+              </p>
+              <p className="mt-4 text-lg font-light leading-8 text-white/70">
+                Litrito es una muestra de lo que hacemos: datos públicos
+                convertidos en una herramienta rápida y útil.
+              </p>
+            </div>
+
+            <div className="rounded-[14px] border border-white/15 bg-white/[0.04] p-6 sm:p-8">
+              <h3 className="text-xl font-bold text-white">¿Tienes un proyecto?</h3>
+              <p className="mt-1.5 text-sm leading-6 text-white/60">
+                Cuéntanos qué necesitas. Lo diseñamos, lo construimos y lo
+                dejamos operando.
+              </p>
+              <div className="mt-6 flex flex-col gap-3">
+                <a
+                  href={ATHAS_CAL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-bold text-white transition hover:bg-brand/90"
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  Agenda 30 minutos
+                </a>
+                <a
+                  href={ATHAS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/20 px-5 py-3 text-sm font-bold text-white/80 transition hover:border-white/50 hover:text-white"
+                >
+                  Conoce Athas
+                  <ArrowUpRight className="h-4 w-4" />
+                </a>
+              </div>
+              <a
+                href={ATHAS_MAIL}
+                className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-white/55 transition hover:text-brand"
+              >
+                <Mail className="h-4 w-4" />
+                hola@athas.mx
+              </a>
+            </div>
           </div>
         </div>
       </section>

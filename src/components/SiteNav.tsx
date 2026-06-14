@@ -27,7 +27,12 @@ export function SiteNav() {
               height={32}
             />
           </span>
-          <span className="font-display text-2xl leading-none text-white">Litrito</span>
+          <span className="flex flex-col">
+            <span className="font-display text-2xl leading-none text-white">Litrito</span>
+            <span className="mt-0.5 text-[10px] font-bold uppercase leading-none tracking-[0.14em] text-white/35">
+              por Athas
+            </span>
+          </span>
         </Link>
 
         <div className="ml-2 hidden items-center gap-1 sm:flex">
