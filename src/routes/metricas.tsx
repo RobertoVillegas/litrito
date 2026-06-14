@@ -3,7 +3,7 @@ import { Popover } from '@base-ui/react/popover'
 import { useQuery } from 'convex/react'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowLeft, Info, TrendingDown, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Fuel, Info, TrendingDown, TrendingUp } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -84,9 +84,16 @@ type MetricsData = {
   pricedStations: number
   perFuel: Record<string, { cheapest: Extreme; expensive: Extreme; avg: number; count: number }>
   avgByState: { stateExternalId: string; name: string; avg: number; count: number }[]
+  avgByStateByFuel?: Record<
+    string,
+    { stateExternalId: string; name: string; avg: number; count: number }[]
+  >
   mostExpensiveState: { name: string; avg: number } | null
   cheapestState: { name: string; avg: number } | null
+  mostExpensiveStateByFuel?: Record<string, { name: string; avg: number } | null>
+  cheapestStateByFuel?: Record<string, { name: string; avg: number } | null>
   nationalAvgRegular: number | null
+  nationalAvgByFuel?: Record<string, number | null>
 }
 
 type MetricsBundle = {
@@ -102,11 +109,17 @@ type MetricsView = 'curated' | 'raw'
 function Metrics() {
   const bundle = useQuery(api.metrics.getMetrics, {}) as MetricsBundle | undefined
   const [view, setView] = useState<MetricsView>('curated')
+  const [stateFuel, setStateFuel] = useState<FuelType>('regular')
   const data = bundle ? bundle[view] : undefined
 
   const changeView = (next: MetricsView) => {
     setView(next)
     track('metrics_view', { view: next })
+  }
+
+  const changeStateFuel = (next: FuelType) => {
+    setStateFuel(next)
+    track('metrics_state_fuel', { fuel: next, view })
   }
 
   return (
@@ -162,8 +175,12 @@ function Metrics() {
               <Stat label="Estaciones" value={data.totalStations.toLocaleString('es-MX')} />
               <Stat label="Con precio" value={data.pricedStations.toLocaleString('es-MX')} />
               <Stat
-                label="Promedio Regular"
-                value={data.nationalAvgRegular ? formatCurrency(data.nationalAvgRegular) : '—'}
+                label={`Promedio ${FUEL_META[stateFuel].label}`}
+                value={
+                  getNationalAvg(data, stateFuel)
+                    ? formatCurrency(getNationalAvg(data, stateFuel)!)
+                    : '—'
+                }
               />
             </div>
           )}
@@ -218,25 +235,53 @@ function Metrics() {
               <StateCard
                 kind="exp"
                 title="Estado más caro"
-                state={data.mostExpensiveState}
+                fuel={stateFuel}
+                state={getMostExpensiveState(data, stateFuel)}
               />
               <StateCard
                 kind="cheap"
                 title="Estado más barato"
-                state={data.cheapestState}
+                fuel={stateFuel}
+                state={getCheapestState(data, stateFuel)}
               />
             </div>
 
             {/* Per-fuel price spread */}
             <FuelSpreadChart data={data} />
 
-            {/* Avg Regular by state, as delta vs national */}
-            <StateDeltaChart data={data} />
+            {/* Avg by state, as delta vs national */}
+            <StateDeltaChart
+              data={data}
+              fuel={stateFuel}
+              onFuelChange={changeStateFuel}
+            />
           </div>
         )}
       </section>
     </main>
   )
+}
+
+function getStateRows(data: MetricsData, fuel: FuelType): MetricsData['avgByState'] {
+  return data.avgByStateByFuel?.[fuel] ?? (fuel === 'regular' ? data.avgByState : [])
+}
+
+function getNationalAvg(data: MetricsData, fuel: FuelType): number | null {
+  return data.nationalAvgByFuel?.[fuel] ?? (fuel === 'regular' ? data.nationalAvgRegular : null)
+}
+
+function getMostExpensiveState(
+  data: MetricsData,
+  fuel: FuelType,
+): { name: string; avg: number } | null {
+  return data.mostExpensiveStateByFuel?.[fuel] ?? (fuel === 'regular' ? data.mostExpensiveState : null)
+}
+
+function getCheapestState(
+  data: MetricsData,
+  fuel: FuelType,
+): { name: string; avg: number } | null {
+  return data.cheapestStateByFuel?.[fuel] ?? (fuel === 'regular' ? data.cheapestState : null)
 }
 
 type SpreadRow = {
@@ -354,6 +399,7 @@ function FuelSpreadChart({ data }: { data: MetricsData }) {
 type StateDeltaRow = {
   stateExternalId: string
   name: string
+  fuel: FuelType
   avg: number
   count: number
   delta: number
@@ -363,11 +409,12 @@ function StateDeltaTooltip({ active, payload }: TooltipContentProps) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload as StateDeltaRow
   const pricier = d.delta >= 0
+  const fuelLabel = FUEL_META[d.fuel].label
   return (
     <div className="min-w-[180px] rounded-[6px] border border-line bg-white p-3 text-xs shadow-md">
       <div className="mb-1.5 font-black text-ink">{d.name}</div>
       <div className="flex items-center justify-between gap-6 text-body">
-        <span>Promedio Regular</span>
+        <span>Promedio {fuelLabel}</span>
         <span className="font-bold text-ink">{formatCurrency(d.avg)}</span>
       </div>
       <div
@@ -385,15 +432,25 @@ function StateDeltaTooltip({ active, payload }: TooltipContentProps) {
   )
 }
 
-function StateDeltaChart({ data }: { data: MetricsData }) {
-  const national = data.nationalAvgRegular
-  if (national == null || data.avgByState.length === 0) return null
+function StateDeltaChart({
+  data,
+  fuel,
+  onFuelChange,
+}: {
+  data: MetricsData
+  fuel: FuelType
+  onFuelChange: (fuel: FuelType) => void
+}) {
+  const national = getNationalAvg(data, fuel)
+  const stateRows = getStateRows(data, fuel)
+  if (national == null || stateRows.length === 0) return null
 
-  // avgByState arrives sorted desc by avg (pricier first), which keeps the
+  // State rows arrive sorted desc by avg (pricier first), which keeps the
   // diverging bars ordered from most expensive at the top to cheapest below.
-  const rows: StateDeltaRow[] = data.avgByState.map((s) => ({
+  const rows: StateDeltaRow[] = stateRows.map((s) => ({
     stateExternalId: s.stateExternalId,
     name: s.name,
+    fuel,
     avg: s.avg,
     count: s.count,
     delta: s.avg - national,
@@ -401,11 +458,18 @@ function StateDeltaChart({ data }: { data: MetricsData }) {
 
   return (
     <div>
-      <h2 className="eyebrow text-body">Regular vs. promedio nacional</h2>
-      <p className="mt-1 text-sm text-body">
-        Diferencia del promedio estatal contra el nacional ({formatCurrency(national)}).
-        Verde = más barato, rojo = más caro.
-      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="eyebrow text-body">
+            {FUEL_META[fuel].label} vs. promedio nacional
+          </h2>
+          <p className="mt-1 text-sm text-body">
+            Diferencia del promedio estatal contra el nacional ({formatCurrency(national)}).
+            Verde = más barato, rojo = más caro.
+          </p>
+        </div>
+        <FuelSelector value={fuel} onChange={onFuelChange} />
+      </div>
       <div className="mt-4 rounded-[6px] border border-line p-4">
         <ClientOnly fallback={<ChartSkeleton height={360} />}>
           <ResponsiveContainer width="100%" height={Math.max(360, rows.length * 26)}>
@@ -443,6 +507,36 @@ function StateDeltaChart({ data }: { data: MetricsData }) {
           </ResponsiveContainer>
         </ClientOnly>
       </div>
+    </div>
+  )
+}
+
+function FuelSelector({
+  value,
+  onChange,
+}: {
+  value: FuelType
+  onChange: (fuel: FuelType) => void
+}) {
+  return (
+    <div className="inline-flex w-full rounded-full border border-line bg-white p-1 sm:w-auto">
+      {FUELS.map((fuel) => {
+        const active = value === fuel
+        return (
+          <button
+            key={fuel}
+            type="button"
+            onClick={() => onChange(fuel)}
+            className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition sm:flex-none ${
+              active ? 'text-white' : 'text-body hover:text-ink'
+            }`}
+            style={active ? { backgroundColor: FUEL_META[fuel].color } : undefined}
+          >
+            <Fuel className="h-3.5 w-3.5" />
+            {FUEL_META[fuel].label}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -585,10 +679,12 @@ function ExtremeCell({ kind, e }: { kind: 'cheap' | 'exp'; e: Extreme }) {
 function StateCard({
   kind,
   title,
+  fuel,
   state,
 }: {
   kind: 'cheap' | 'exp'
   title: string
+  fuel: FuelType
   state: { name: string; avg: number } | null
 }) {
   const cheap = kind === 'cheap'
@@ -606,7 +702,7 @@ function StateCard({
         <>
           <div className="font-display mt-2 text-3xl text-ink">{state.name}</div>
           <div className="mt-1 text-sm font-semibold text-body">
-            Promedio Regular {formatCurrency(state.avg)}
+            Promedio {FUEL_META[fuel].label} {formatCurrency(state.avg)}
           </div>
         </>
       ) : (

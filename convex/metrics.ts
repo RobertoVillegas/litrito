@@ -46,9 +46,21 @@ type MetricsData = {
     avg: number
     count: number
   }[]
+  avgByStateByFuel: Record<
+    string,
+    {
+      stateExternalId: string
+      name: string
+      avg: number
+      count: number
+    }[]
+  >
   mostExpensiveState: { name: string; avg: number } | null
   cheapestState: { name: string; avg: number } | null
+  mostExpensiveStateByFuel: Record<string, { name: string; avg: number } | null>
+  cheapestStateByFuel: Record<string, { name: string; avg: number } | null>
   nationalAvgRegular: number | null
+  nationalAvgByFuel: Record<string, number | null>
 }
 
 type MetricsBundle = {
@@ -62,8 +74,6 @@ type MetricsBundle = {
 // Serializable per-state, per-view aggregate.
 type StateAgg = {
   perFuel: Record<string, FuelAgg>
-  regularSum: number
-  regularCount: number
   pricedStations: number
 }
 
@@ -79,8 +89,6 @@ type StateMetricsSlice = {
 // Mutable accumulator used while scanning a state's prices.
 type Acc = {
   perFuel: Record<string, FuelAgg>
-  regularSum: number
-  regularCount: number
   stations: Set<string>
 }
 
@@ -89,7 +97,7 @@ function newAcc(): Acc {
   for (const f of FUELS) {
     perFuel[f] = { cheapest: null, expensive: null, sum: 0, count: 0 }
   }
-  return { perFuel, regularSum: 0, regularCount: 0, stations: new Set() }
+  return { perFuel, stations: new Set() }
 }
 
 function feed(acc: Acc, fuelType: string, price: number, rec: Extreme, permit: string) {
@@ -100,17 +108,11 @@ function feed(acc: Acc, fuelType: string, price: number, rec: Extreme, permit: s
   if (!slot.expensive || price > slot.expensive.price) slot.expensive = rec
   slot.sum += price
   slot.count += 1
-  if (fuelType === 'regular') {
-    acc.regularSum += price
-    acc.regularCount += 1
-  }
 }
 
 function finalizeAcc(acc: Acc): StateAgg {
   return {
     perFuel: acc.perFuel,
-    regularSum: acc.regularSum,
-    regularCount: acc.regularCount,
     pricedStations: acc.stations.size,
   }
 }
@@ -211,17 +213,18 @@ function buildNational(
     perFuel[f] = { cheapest: null, expensive: null, sum: 0, count: 0 }
   }
 
-  const avgByState: MetricsData['avgByState'] = []
+  const avgByStateByFuel: MetricsData['avgByStateByFuel'] = {}
+  const nationalAvgByFuel: MetricsData['nationalAvgByFuel'] = {}
+  for (const f of FUELS) {
+    avgByStateByFuel[f] = []
+    nationalAvgByFuel[f] = null
+  }
   let totalStations = 0
   let pricedStations = 0
-  let nationalRegularSum = 0
-  let nationalRegularCount = 0
 
   for (const { stateExternalId, name, totalStations: stationCount, agg } of items) {
     totalStations += stationCount
     pricedStations += agg.pricedStations
-    nationalRegularSum += agg.regularSum
-    nationalRegularCount += agg.regularCount
 
     for (const f of FUELS) {
       const src = agg.perFuel[f]
@@ -235,15 +238,14 @@ function buildNational(
       }
       dst.sum += src.sum
       dst.count += src.count
-    }
-
-    if (agg.regularCount > 0) {
-      avgByState.push({
-        stateExternalId,
-        name,
-        avg: agg.regularSum / agg.regularCount,
-        count: agg.regularCount,
-      })
+      if (src.count > 0) {
+        avgByStateByFuel[f].push({
+          stateExternalId,
+          name,
+          avg: src.sum / src.count,
+          count: src.count,
+        })
+      }
     }
   }
 
@@ -256,27 +258,38 @@ function buildNational(
       avg: agg.count ? agg.sum / agg.count : 0,
       count: agg.count,
     }
+    nationalAvgByFuel[f] = agg.count ? agg.sum / agg.count : null
   }
 
-  avgByState.sort((a, b) => b.avg - a.avg)
+  for (const f of FUELS) {
+    avgByStateByFuel[f].sort((a, b) => b.avg - a.avg)
+  }
+
+  const avgByState = avgByStateByFuel.regular ?? []
+  const mostExpensiveStateByFuel: MetricsData['mostExpensiveStateByFuel'] = {}
+  const cheapestStateByFuel: MetricsData['cheapestStateByFuel'] = {}
+  for (const f of FUELS) {
+    const rows = avgByStateByFuel[f] ?? []
+    mostExpensiveStateByFuel[f] = rows[0]
+      ? { name: rows[0].name, avg: rows[0].avg }
+      : null
+    cheapestStateByFuel[f] = rows.length
+      ? { name: rows[rows.length - 1].name, avg: rows[rows.length - 1].avg }
+      : null
+  }
 
   return {
     totalStations,
     pricedStations,
     perFuel: perFuelOut,
     avgByState,
-    mostExpensiveState: avgByState[0]
-      ? { name: avgByState[0].name, avg: avgByState[0].avg }
-      : null,
-    cheapestState: avgByState.length
-      ? {
-          name: avgByState[avgByState.length - 1].name,
-          avg: avgByState[avgByState.length - 1].avg,
-        }
-      : null,
-    nationalAvgRegular: nationalRegularCount
-      ? nationalRegularSum / nationalRegularCount
-      : null,
+    avgByStateByFuel,
+    mostExpensiveState: mostExpensiveStateByFuel.regular,
+    cheapestState: cheapestStateByFuel.regular,
+    mostExpensiveStateByFuel,
+    cheapestStateByFuel,
+    nationalAvgRegular: nationalAvgByFuel.regular,
+    nationalAvgByFuel,
   }
 }
 
@@ -332,9 +345,13 @@ const EMPTY_VIEW: MetricsData = {
     FUELS.map((f) => [f, { cheapest: null, expensive: null, avg: 0, count: 0 }]),
   ),
   avgByState: [],
+  avgByStateByFuel: Object.fromEntries(FUELS.map((f) => [f, []])),
   mostExpensiveState: null,
   cheapestState: null,
+  mostExpensiveStateByFuel: Object.fromEntries(FUELS.map((f) => [f, null])),
+  cheapestStateByFuel: Object.fromEntries(FUELS.map((f) => [f, null])),
   nationalAvgRegular: null,
+  nationalAvgByFuel: Object.fromEntries(FUELS.map((f) => [f, null])),
 }
 
 const EMPTY_BUNDLE: MetricsBundle = {
