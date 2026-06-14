@@ -24,6 +24,7 @@ import { RouteErrorFallback } from '../components/RouteError'
 import { ChartSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
+import { formatCurrency } from '#/lib/format'
 
 export const Route = createFileRoute('/metricas')({
   head: () => {
@@ -55,15 +56,6 @@ export const Route = createFileRoute('/metricas')({
 })
 
 const FUELS = ['regular', 'premium', 'diesel', 'duba'] as const
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
 
 function formatAxisMXN(value: number): string {
   return new Intl.NumberFormat('es-MX', {

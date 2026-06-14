@@ -22,6 +22,7 @@ import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
 import { ChartSkeleton, DarkSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
+import { formatCurrency } from '#/lib/format'
 
 const StationMiniMap = lazy(() =>
   import('../components/StationMiniMap').then((m) => ({ default: m.StationMiniMap })),
@@ -111,15 +112,6 @@ export const Route = createFileRoute('/estacion/$')({
   },
 })
 
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
 
 function formatDate(value: string | undefined, withTime = false): string {
   if (!value) return '—'

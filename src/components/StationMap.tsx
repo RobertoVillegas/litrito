@@ -10,6 +10,7 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { FuelType } from './StationFilters'
+import { formatCurrency } from '#/lib/format'
 
 type Station = {
   permitNumber: string
@@ -64,15 +65,6 @@ const MEXICO_BOUNDS: LatLngBoundsExpression = [
   [14.5, -118.5],
   [32.7, -86.5],
 ]
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
 
 function priceColor(price: number, allPrices: number[]): string {
   if (allPrices.length === 0) return '#0f766e'

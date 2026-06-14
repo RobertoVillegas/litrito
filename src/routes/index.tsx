@@ -10,6 +10,7 @@ import { DarkSkeleton, MapSkeleton, SkeletonLine } from '../components/Skeleton'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { track } from '#/lib/analytics'
 import { slugifyLocationName } from '#/lib/slug'
+import { formatCurrency, formatDistance } from '#/lib/format'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 import type { FuelType } from '../components/StationFilters'
 
@@ -66,21 +67,6 @@ export const Route = createFileRoute('/')({
     />
   ),
 })
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
-
-function formatDistance(km: number): string {
-  if (km < 1) return `${Math.round(km * 1000)} m`
-  if (km < 10) return `${km.toFixed(1)} km`
-  return `${Math.round(km)} km`
-}
 
 function Home() {
   const loaderData = Route.useLoaderData()

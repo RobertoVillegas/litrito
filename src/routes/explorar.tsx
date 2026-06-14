@@ -12,6 +12,7 @@ import { SiteFooter } from '../components/SiteFooter'
 import { MapSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
+import { formatCurrency } from '#/lib/format'
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
 import { boundsOfLatLngs } from '../components/mapGeo'
@@ -146,15 +147,6 @@ type FilterOption = {
 type FilterOptionsResult = {
   states: FilterOption[]
   municipalities: (FilterOption & { stateExternalId: string })[]
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
 }
 
 function formatDate(value: string | undefined): string {

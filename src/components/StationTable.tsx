@@ -11,6 +11,7 @@ import { ArrowDownUp, Loader2, Star } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '../lib/utils'
 import { Skeleton, SkeletonLine } from './Skeleton'
+import { formatCurrency, formatDistance } from '#/lib/format'
 import type { FuelType, SortMode } from './StationFilters'
 
 type Station = {
@@ -42,21 +43,6 @@ type Props = {
   onFuelSortChange?: (fuelType: FuelType) => void
   onToggleFavorite?: (permitNumber: string) => void
   favoriteSet?: Set<string>
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
-
-function formatDistance(km: number): string {
-  if (km < 1) return `${Math.round(km * 1000)} m`
-  if (km < 10) return `${km.toFixed(1)} km`
-  return `${Math.round(km)} km`
 }
 
 const FUEL_LABEL: Record<FuelType, string> = {
