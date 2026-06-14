@@ -18,6 +18,7 @@ import { Route as OgDotpngRouteImport } from './routes/og[.]png'
 import { Route as MetricasRouteImport } from './routes/metricas'
 import { Route as ExplorarRouteImport } from './routes/explorar'
 import { Route as EntrarRouteImport } from './routes/entrar'
+import { Route as DebugSentryRouteImport } from './routes/debug-sentry'
 import { Route as AcercaRouteImport } from './routes/acerca'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EstadoStateSlugRouteImport } from './routes/estado.$stateSlug'
@@ -71,6 +72,11 @@ const EntrarRoute = EntrarRouteImport.update({
   path: '/entrar',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DebugSentryRoute = DebugSentryRouteImport.update({
+  id: '/debug-sentry',
+  path: '/debug-sentry',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AcercaRoute = AcercaRouteImport.update({
   id: '/acerca',
   path: '/acerca',
@@ -111,6 +117,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/acerca': typeof AcercaRoute
+  '/debug-sentry': typeof DebugSentryRoute
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/acerca': typeof AcercaRoute
+  '/debug-sentry': typeof DebugSentryRoute
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/acerca': typeof AcercaRoute
+  '/debug-sentry': typeof DebugSentryRoute
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/acerca'
+    | '/debug-sentry'
     | '/entrar'
     | '/explorar'
     | '/metricas'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/acerca'
+    | '/debug-sentry'
     | '/entrar'
     | '/explorar'
     | '/metricas'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/acerca'
+    | '/debug-sentry'
     | '/entrar'
     | '/explorar'
     | '/metricas'
@@ -223,6 +235,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AcercaRoute: typeof AcercaRoute
+  DebugSentryRoute: typeof DebugSentryRoute
   EntrarRoute: typeof EntrarRoute
   ExplorarRoute: typeof ExplorarRoute
   MetricasRoute: typeof MetricasRoute
@@ -304,6 +317,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/debug-sentry': {
+      id: '/debug-sentry'
+      path: '/debug-sentry'
+      fullPath: '/debug-sentry'
+      preLoaderRoute: typeof DebugSentryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/acerca': {
       id: '/acerca'
       path: '/acerca'
@@ -359,6 +379,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AcercaRoute: AcercaRoute,
+  DebugSentryRoute: DebugSentryRoute,
   EntrarRoute: EntrarRoute,
   ExplorarRoute: ExplorarRoute,
   MetricasRoute: MetricasRoute,
