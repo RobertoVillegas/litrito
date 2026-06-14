@@ -13,6 +13,11 @@ import { ToastProvider } from '../components/ui/toast'
 import { UserLocationProvider } from '../lib/useUserLocation'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 
+// Eager-load the animated number component so its dependency on the number-flow
+// custom element is part of the initial bundle and not left to a lazy chunk that
+// can 404 after a deploy.
+import '../components/AnimatedNumber'
+
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import appCss from '../styles.css?url'

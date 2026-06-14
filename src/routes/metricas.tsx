@@ -173,7 +173,7 @@ function Metrics() {
                   const m = data.perFuel[f]
                   return (
                     <div
-                      key={`${f}-${view}`}
+                      key={f}
                       className="rounded-[6px] border border-line p-5 transition-colors duration-300"
                       style={{ borderTopColor: FUEL_META[f].color, borderTopWidth: 3 }}
                     >
