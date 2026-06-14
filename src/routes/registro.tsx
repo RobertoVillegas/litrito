@@ -8,7 +8,12 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { AuthLayout } from '../components/AuthLayout'
 
-export const Route = createFileRoute('/registro')({ component: SignUp })
+export const Route = createFileRoute('/registro')({
+  head: () => ({
+    meta: [{ title: 'Crear cuenta - Litrito' }, { name: 'robots', content: 'noindex, nofollow' }],
+  }),
+  component: SignUp,
+})
 
 type AuthResult = {
   error?: { message?: string } | null

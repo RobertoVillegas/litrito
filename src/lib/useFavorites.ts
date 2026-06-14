@@ -1,37 +1,85 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 
 const LOCAL_FAVORITES_KEY = 'litrito:favorites:v1'
 
-function readLocal(): string[] {
-  if (typeof window === 'undefined') return []
+// --- localStorage as an external store -------------------------------------
+// Reading localStorage during render would disagree with the server (which has
+// none) and warn on hydration. useSyncExternalStore solves this the idiomatic
+// way: getServerSnapshot feeds the SSR + first client render, then React swaps
+// to the live value right after hydration — no manual effect, no mismatch.
+
+const listeners = new Set<() => void>()
+let snapshotCache: { raw: string | null; value: string[] } = { raw: null, value: [] }
+const EMPTY: string[] = []
+
+function parse(raw: string | null): string[] {
   try {
-    const raw = window.localStorage.getItem(LOCAL_FAVORITES_KEY)
-    const favorites = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(favorites)) return []
-    return favorites.filter(
-      (f): f is string => typeof f === 'string' && f.trim().length > 0,
-    )
+    const parsed = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((f): f is string => typeof f === 'string' && f.trim().length > 0)
   } catch {
     return []
   }
 }
 
+function getSnapshot(): string[] {
+  let raw: string | null = null
+  try {
+    raw = window.localStorage.getItem(LOCAL_FAVORITES_KEY)
+  } catch {
+    raw = null
+  }
+  // Cache by raw string so the snapshot ref is stable between unchanged reads.
+  if (raw === snapshotCache.raw) return snapshotCache.value
+  snapshotCache = { raw, value: parse(raw) }
+  return snapshotCache.value
+}
+
+function getServerSnapshot(): string[] {
+  return EMPTY
+}
+
+function subscribe(onChange: () => void): () => void {
+  listeners.add(onChange)
+  window.addEventListener('storage', onChange) // cross-tab updates
+  return () => {
+    listeners.delete(onChange)
+    window.removeEventListener('storage', onChange)
+  }
+}
+
 function writeLocal(favorites: string[]) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(
-    LOCAL_FAVORITES_KEY,
-    JSON.stringify(Array.from(new Set(favorites))),
+  try {
+    window.localStorage.setItem(
+      LOCAL_FAVORITES_KEY,
+      JSON.stringify(Array.from(new Set(favorites))),
+    )
+  } catch {
+    // ignore (e.g. private mode)
+  }
+  // `storage` only fires in *other* tabs, so notify this tab's subscribers too.
+  listeners.forEach((l) => l())
+}
+
+function useLocalFavorites(): string[] {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+}
+
+// True only after hydration — without an effect. Server and the first client
+// render return false; React re-renders with true once hydrated.
+const noopSubscribe = () => () => {}
+function useIsHydrated(): boolean {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
   )
 }
 
-function updateList(
-  favorites: string[],
-  permitNumber: string,
-  favorited: boolean,
-): string[] {
+function updateList(favorites: string[], permitNumber: string, favorited: boolean): string[] {
   const set = new Set(favorites)
   if (favorited) set.add(permitNumber)
   else set.delete(permitNumber)
@@ -47,35 +95,22 @@ export type ToggleResult = { favorited: boolean; message: string }
 export function useFavorites() {
   const session = authClient.useSession()
   const sessionUser = session?.data?.user ?? null
-  // Start empty to match the server render, then load from localStorage after
-  // mount — otherwise the first client render disagrees with the SSR HTML and
-  // the favorite state flashes (e.g. "Guardar" → "Favorita").
-  const [localFavorites, setLocalFavorites] = useState<string[]>([])
-  const [hydrated, setHydrated] = useState(false)
+  const localFavorites = useLocalFavorites()
+  const hydrated = useIsHydrated()
   const [syncedUserId, setSyncedUserId] = useState<string | null>(null)
   const remoteQuery = useQuery(api.favorites.list, sessionUser ? {} : 'skip')
   const remoteFavorites = (remoteQuery ?? []) as string[]
   const setFavorite = useMutation(api.favorites.set)
 
-  useEffect(() => {
-    setLocalFavorites(readLocal())
-    setHydrated(true)
-  }, [])
-
-  useEffect(() => {
-    // Don't persist until we've loaded, so we never clobber storage with [].
-    if (hydrated) writeLocal(localFavorites)
-  }, [hydrated, localFavorites])
-
-  // Favorite state is knowable once the browser store is loaded and, for signed-in
-  // users, the remote list has resolved. Consumers can gate UI on this to avoid a
-  // wrong-state flash.
-  const ready = hydrated && (sessionUser ? remoteQuery !== undefined : true)
-
   const favoriteSet = useMemo(
     () => new Set([...remoteFavorites, ...localFavorites]),
     [remoteFavorites, localFavorites],
   )
+
+  // Favorite state is knowable once the browser store is loaded and, for signed-in
+  // users, the remote list has resolved. Consumers gate UI on this to avoid a
+  // wrong-state flash.
+  const ready = hydrated && (sessionUser ? remoteQuery !== undefined : true)
 
   // On sign-in, push any browser-only favorites up to the account once.
   useEffect(() => {
@@ -100,7 +135,7 @@ export function useFavorites() {
 
   async function toggleFavorite(permitNumber: string): Promise<ToggleResult> {
     const favorited = !favoriteSet.has(permitNumber)
-    setLocalFavorites((current) => updateList(current, permitNumber, favorited))
+    writeLocal(updateList(getSnapshot(), permitNumber, favorited))
     if (!sessionUser) {
       return {
         favorited,

@@ -96,7 +96,7 @@ function StationCard({
   const s = row.station
   return (
     <div className="p-4">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <Link
           to="/estacion/$"
           params={{ _splat: s.permitNumber }}
@@ -124,32 +124,34 @@ function StationCard({
       <div className="truncate text-[11px] text-mute">
         {[s.municipalityName, s.stateName].filter(Boolean).join(', ')}
       </div>
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
-        {fuelTypes.map((ft) => {
-          const price = row.prices[ft]?.price
-          return (
-            <span
-              key={ft}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold',
-                price != null
-                  ? 'border-line bg-canvas-soft text-ink'
-                  : 'border-slate-100 bg-white text-mute',
-              )}
-            >
-              <span className="text-[10px] uppercase tracking-wide text-body">
-                {FUEL_LABEL[ft]}
+      <div className="mt-2.5 flex items-end justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {fuelTypes.map((ft) => {
+            const price = row.prices[ft]?.price
+            return (
+              <span
+                key={ft}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold',
+                  price != null
+                    ? 'border-line bg-canvas-soft text-ink'
+                    : 'border-slate-100 bg-white text-mute',
+                )}
+              >
+                <span className="text-[10px] uppercase tracking-wide text-body">
+                  {FUEL_LABEL[ft]}
+                </span>
+                {price != null ? formatCurrency(price) : '–'}
               </span>
-              {price != null ? formatCurrency(price) : '–'}
-            </span>
-          )
-        })}
-      </div>
-      {sortMode === 'distance' && distanceKm != null && (
-        <div className="mt-2 text-xs font-bold text-brand">
-          A {formatDistance(distanceKm)}
+            )
+          })}
         </div>
-      )}
+        {sortMode === 'distance' && distanceKm != null && (
+          <div className="shrink-0 whitespace-nowrap pb-1 text-xs font-bold text-brand">
+            A {formatDistance(distanceKm)}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

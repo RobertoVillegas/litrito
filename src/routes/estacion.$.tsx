@@ -16,6 +16,7 @@ import type { TooltipContentProps } from 'recharts'
 import { api } from '../../convex/_generated/api'
 import { cn } from '#/lib/utils'
 import { useFavorites } from '#/lib/useFavorites'
+import { getConfiguredSiteOrigin } from '../lib/site-url'
 import { Button } from '#/components/ui/button'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
@@ -62,6 +63,33 @@ export const Route = createFileRoute('/estacion/$')({
           .join(' en ')
       : 'Consulta precios de gasolina por estación en Litrito.'
 
+    const origin = getConfiguredSiteOrigin()
+    const canonical = `${origin}/estacion/${encodeURIComponent(params._splat ?? '')}`
+    const jsonLd = station
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'GasStation',
+          name: station.name,
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress: station.address,
+            addressLocality: station.municipalityName,
+            addressRegion: station.stateName,
+            addressCountry: 'MX',
+          },
+          ...(typeof station.latitude === 'number' && typeof station.longitude === 'number'
+            ? {
+                geo: {
+                  '@type': 'GeoCoordinates',
+                  latitude: station.latitude,
+                  longitude: station.longitude,
+                },
+              }
+            : {}),
+          ...(origin ? { url: canonical } : {}),
+        }
+      : null
+
     return {
       meta: [
         { title },
@@ -71,6 +99,10 @@ export const Route = createFileRoute('/estacion/$')({
         { name: 'twitter:title', content: title },
         { name: 'twitter:description', content: description },
       ],
+      ...(origin ? { links: [{ rel: 'canonical', href: canonical }] } : {}),
+      ...(jsonLd
+        ? { scripts: [{ type: 'application/ld+json', children: JSON.stringify(jsonLd) }] }
+        : {}),
     }
   },
   component: StationDetail,

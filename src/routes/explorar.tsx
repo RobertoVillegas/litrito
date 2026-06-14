@@ -11,6 +11,7 @@ import { RouteErrorFallback } from '../components/RouteError'
 import { SiteFooter } from '../components/SiteFooter'
 import { MapSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
+import { getConfiguredSiteOrigin } from '../lib/site-url'
 import { StationFilters, type FilterState, type FuelType } from '../components/StationFilters'
 import { StationTable, type StationRow } from '../components/StationTable'
 import { boundsOfLatLngs } from '../components/mapGeo'
@@ -63,6 +64,23 @@ export const Route = createFileRoute('/explorar')({
       ),
     ])
     return { filterOptions, latestRun }
+  },
+  head: () => {
+    const title = 'Explorar gasolineras - Litrito'
+    const description =
+      'Explora y filtra gasolineras de México por estado, municipio y combustible. Encuentra el mejor precio cerca de ti.'
+    const origin = getConfiguredSiteOrigin()
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { property: 'og:title', content: title },
+        { property: 'og:description', content: description },
+        { name: 'twitter:title', content: title },
+        { name: 'twitter:description', content: description },
+      ],
+      ...(origin ? { links: [{ rel: 'canonical', href: `${origin}/explorar` }] } : {}),
+    }
   },
   component: Explore,
   errorComponent: ExploreErrorBoundary,

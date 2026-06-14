@@ -23,8 +23,26 @@ import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
 import { Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
+import { getConfiguredSiteOrigin } from '../lib/site-url'
 
 export const Route = createFileRoute('/metricas')({
+  head: () => {
+    const title = 'Métricas de precios de gasolina en México - Litrito'
+    const description =
+      'Promedios, rangos y tendencias de precios de gasolina regular, premium, diésel y duba por estado en México.'
+    const origin = getConfiguredSiteOrigin()
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { property: 'og:title', content: title },
+        { property: 'og:description', content: description },
+        { name: 'twitter:title', content: title },
+        { name: 'twitter:description', content: description },
+      ],
+      ...(origin ? { links: [{ rel: 'canonical', href: `${origin}/metricas` }] } : {}),
+    }
+  },
   component: Metrics,
   errorComponent: ({ error, reset }) => (
     <RouteErrorFallback

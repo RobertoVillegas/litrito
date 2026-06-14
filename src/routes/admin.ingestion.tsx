@@ -9,6 +9,9 @@ import { RouteErrorFallback } from '../components/RouteError'
 import { SkeletonLine } from '../components/Skeleton'
 
 export const Route = createFileRoute('/admin/ingestion')({
+  head: () => ({
+    meta: [{ title: 'Auditoría de ingesta - Litrito' }, { name: 'robots', content: 'noindex, nofollow' }],
+  }),
   component: AdminIngestion,
   errorComponent: ({ error, reset }) => (
     <RouteErrorFallback

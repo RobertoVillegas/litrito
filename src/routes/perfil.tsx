@@ -25,7 +25,12 @@ function ClientOnly({ children, fallback }: { children: ReactNode; fallback?: Re
   return <>{children}</>
 }
 
-export const Route = createFileRoute('/perfil')({ component: Profile })
+export const Route = createFileRoute('/perfil')({
+  head: () => ({
+    meta: [{ title: 'Mi perfil - Litrito' }, { name: 'robots', content: 'noindex, nofollow' }],
+  }),
+  component: Profile,
+})
 
 const AVATAR_COLORS = ['#e60000', '#25282b', '#7e7e7e', '#bebebe', '#ffffff']
 const FUEL_TYPES: FuelType[] = ['regular', 'premium', 'diesel', 'duba']

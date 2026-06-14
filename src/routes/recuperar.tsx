@@ -7,7 +7,12 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { AuthLayout } from '../components/AuthLayout'
 
-export const Route = createFileRoute('/recuperar')({ component: ForgotPassword })
+export const Route = createFileRoute('/recuperar')({
+  head: () => ({
+    meta: [{ title: 'Recuperar contraseña - Litrito' }, { name: 'robots', content: 'noindex, nofollow' }],
+  }),
+  component: ForgotPassword,
+})
 
 // Method name varies across better-auth versions; resolve defensively.
 type ResetRequester = {

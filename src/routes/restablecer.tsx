@@ -9,6 +9,9 @@ import { useToast } from '#/components/ui/toast'
 import { AuthLayout } from '../components/AuthLayout'
 
 export const Route = createFileRoute('/restablecer')({
+  head: () => ({
+    meta: [{ title: 'Nueva contraseña - Litrito' }, { name: 'robots', content: 'noindex, nofollow' }],
+  }),
   component: ResetPassword,
   validateSearch: (search: Record<string, unknown>) => ({
     token: typeof search.token === 'string' ? search.token : '',

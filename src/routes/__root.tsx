@@ -25,7 +25,7 @@ interface MyRouterContext {
   queryClient: QueryClient
 }
 
-const OG_IMAGE_VERSION = '2026-06-08'
+const OG_IMAGE_VERSION = '2026-06-13'
 
 // Read the Umami config from the SERVER runtime env (not import.meta.env, which
 // Vite inlines at build time — that fails when the value is only present in the

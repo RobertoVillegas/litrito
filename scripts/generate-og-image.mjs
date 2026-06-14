@@ -51,7 +51,7 @@ const render = async () => {
         fontFamily: `"${FONT_FAMILY}", sans-serif`,
         height: "100%",
         justifyContent: "center",
-        padding: "56px",
+        padding: "72px",
         position: "relative",
         width: "100%",
       },
@@ -94,13 +94,9 @@ const render = async () => {
               fontSize: "30px",
               fontWeight: 700,
               gap: "16px",
-              justifyContent: "center",
+              justifyContent: "flex-start",
               letterSpacing: "0.04em",
-              marginLeft: "auto",
-              marginRight: "auto",
-              maxWidth: "610px",
               textTransform: "uppercase",
-              width: "610px",
             },
             children: [
               {
@@ -205,16 +201,14 @@ const render = async () => {
           type: "div",
           props: {
             style: {
-              alignItems: "center",
+              alignItems: "flex-start",
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
-              marginLeft: "auto",
-              marginRight: "auto",
-              maxWidth: "610px",
+              maxWidth: "900px",
               paddingTop: "42px",
-              textAlign: "center",
-              width: "610px",
+              textAlign: "left",
+              width: "100%",
             },
             children: [
               {
