@@ -9,7 +9,7 @@ const UPDATED_AT = '15 de junio de 2026'
 
 export const Route = createFileRoute('/privacidad')({
   head: () => {
-    const title = 'Política de privacidad - Litrito'
+    const title = 'Aviso de privacidad - Litrito'
     const description =
       'Cómo Litrito usa datos de cuenta, ubicación, favoritos, analítica y proveedores de autenticación social.'
     const origin = getConfiguredSiteOrigin()
@@ -19,7 +19,7 @@ export const Route = createFileRoute('/privacidad')({
         title,
         description,
         image: {
-          title: 'Política de privacidad de Litrito.',
+          title: 'Aviso de privacidad de Litrito.',
           subtitle: 'Datos mínimos para comparar precios de gasolina.',
         },
         url,
@@ -35,7 +35,7 @@ function PrivacyPage() {
     <main className="min-h-screen">
       <LegalHero
         eyebrow="Privacidad"
-        title="Política de privacidad"
+        title="Aviso de privacidad"
         subtitle="Explicamos qué datos usamos para operar Litrito, cómo los protegemos y qué control tienes sobre ellos."
       />
 
@@ -44,6 +44,18 @@ function PrivacyPage() {
           Esta política aplica al sitio y aplicación web Litrito, disponible en
           litrito.com. Litrito es operado por Athas. Para dudas sobre privacidad
           puedes escribir a <a href="mailto:hola@athas.mx">hola@athas.mx</a>.
+        </p>
+        <p>
+          Este aviso se emite conforme a la Ley Federal de Protección de Datos
+          Personales en Posesión de los Particulares (LFPDPPP), su reglamento y
+          demás disposiciones aplicables en México.
+        </p>
+
+        <h2>Responsable del tratamiento</h2>
+        <p>
+          Athas es responsable del tratamiento de los datos personales que se
+          recaben a través de Litrito. Nuestro medio de contacto para privacidad
+          y datos personales es <a href="mailto:hola@athas.mx">hola@athas.mx</a>.
         </p>
 
         <h2>Datos que recopilamos</h2>
@@ -86,13 +98,23 @@ function PrivacyPage() {
         </p>
 
         <h2>Para qué usamos tus datos</h2>
+        <p>Usamos tus datos para las siguientes finalidades primarias:</p>
         <ul>
           <li>Operar la cuenta, sesión y funciones guardadas.</li>
           <li>Mostrar estaciones, favoritos, precios y mapas.</li>
           <li>Ordenar resultados por cercanía cuando lo solicitas.</li>
           <li>Detectar errores, abuso, fallas de seguridad y problemas de rendimiento.</li>
+        </ul>
+        <p>También podemos usarlos para finalidades secundarias:</p>
+        <ul>
           <li>Entender uso agregado de la aplicación para mejorar el producto.</li>
         </ul>
+        <p>
+          Puedes oponerte a finalidades secundarias escribiendo a
+          <a href="mailto:hola@athas.mx"> hola@athas.mx</a>. Litrito seguirá
+          funcionando, aunque algunas mediciones agregadas o mejoras podrían
+          limitarse.
+        </p>
 
         <h2>Servicios externos</h2>
         <p>
@@ -101,6 +123,12 @@ function PrivacyPage() {
           correo transaccional y proveedores de inicio de sesión social. Estos
           proveedores tratan datos solo en la medida necesaria para prestar sus
           servicios.
+        </p>
+        <p>
+          Esos proveedores pueden encontrarse dentro o fuera de México. Cuando el
+          tratamiento implique una transferencia de datos personales, la haremos
+          conforme a la LFPDPPP y solo para las finalidades descritas en este
+          aviso o cuando exista una base legal aplicable.
         </p>
 
         <h2>Datos públicos de precios</h2>
@@ -111,12 +139,27 @@ function PrivacyPage() {
           personales de usuarios de Litrito.
         </p>
 
+        <h2>Derechos ARCO y revocación</h2>
+        <p>
+          Conforme a la LFPDPPP, puedes ejercer tus derechos de acceso,
+          rectificación, cancelación y oposición (ARCO), así como revocar tu
+          consentimiento cuando sea aplicable. Para hacerlo, escríbenos a
+          <a href="mailto:hola@athas.mx"> hola@athas.mx</a> desde el correo
+          asociado a tu cuenta o incluyendo datos suficientes para identificarte.
+        </p>
+        <p>
+          Para atender tu solicitud podemos pedir información adicional para
+          confirmar tu identidad y proteger tu cuenta. Responderemos conforme a
+          los plazos previstos por la legislación mexicana aplicable.
+        </p>
+
         <h2>Conservación y eliminación</h2>
         <p>
           Conservamos datos de cuenta mientras mantengas una cuenta activa o
-          mientras sean necesarios para seguridad, operación o cumplimiento. Puedes
-          pedir acceso, corrección o eliminación de tus datos escribiendo a
-          <a href="mailto:hola@athas.mx"> hola@athas.mx</a>.
+          mientras sean necesarios para seguridad, operación o cumplimiento. Si
+          solicitas la eliminación de tu cuenta o datos, podemos conservar cierta
+          información cuando sea necesario para cumplir obligaciones legales,
+          resolver controversias o prevenir abuso.
         </p>
 
         <h2>Seguridad</h2>
@@ -128,7 +171,7 @@ function PrivacyPage() {
 
         <h2>Cambios</h2>
         <p>
-          Podemos actualizar esta política cuando cambie Litrito o sus proveedores.
+          Podemos actualizar este aviso cuando cambie Litrito o sus proveedores.
           Publicaremos la versión vigente en esta página con su fecha de
           actualización.
         </p>

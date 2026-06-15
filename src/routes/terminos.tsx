@@ -45,6 +45,12 @@ function TermsPage() {
           litrito.com. Al usar Litrito aceptas estos términos. Si no estás de
           acuerdo, no uses el servicio.
         </p>
+        <p>
+          Estos términos se rigen por las leyes federales aplicables de México.
+          En materia de datos personales, el tratamiento se rige por nuestro aviso
+          de privacidad y por la Ley Federal de Protección de Datos Personales en
+          Posesión de los Particulares (LFPDPPP), cuando resulte aplicable.
+        </p>
 
         <h2>Qué es Litrito</h2>
         <p>
@@ -119,9 +125,19 @@ function TermsPage() {
 
         <h2>Privacidad</h2>
         <p>
-          El uso de datos personales se describe en nuestra{' '}
-          <Link to="/privacidad">Política de privacidad</Link>. Esa política forma
-          parte de estos términos.
+          El uso de datos personales se describe en nuestro{' '}
+          <Link to="/privacidad">Aviso de privacidad</Link>. Ese aviso forma
+          parte de estos términos y explica tus derechos ARCO, revocación de
+          consentimiento, ubicación, cuenta e inicio de sesión con proveedores
+          como Google o Facebook.
+        </p>
+
+        <h2>Ley aplicable</h2>
+        <p>
+          Estos términos y cualquier controversia relacionada con Litrito se
+          interpretarán conforme a las leyes aplicables de México. Antes de
+          cualquier disputa formal, buscaremos resolver dudas o reclamaciones por
+          medio de <a href="mailto:hola@athas.mx">hola@athas.mx</a>.
         </p>
 
         <h2>Cambios a estos términos</h2>
