@@ -127,6 +127,10 @@ export function useLocationPermissionFlow() {
   }>({ open: false, permission: 'unknown' })
 
   async function requestWithExplanation() {
+    if (userLoc.hasPreciseLocation) {
+      await userLoc.requestPrecise()
+      return
+    }
     const intent: LocationRequestIntent = await userLoc.preparePreciseRequest()
     if (intent.action === 'request') {
       await userLoc.requestPrecise()
