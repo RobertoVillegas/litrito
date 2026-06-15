@@ -50,6 +50,7 @@ type Props = {
   autoCenterOnUserLocation?: boolean
   focus?: MapFocus | null
   initialBounds?: MapBounds | null
+  loading?: boolean
   markerMode?: 'price' | 'rank'
   onMoveEnd?: (bounds: MapBounds) => void
   onLocateClick?: () => void
@@ -350,6 +351,7 @@ function StationMapInner({
   autoCenterOnUserLocation,
   focus,
   initialBounds,
+  loading = false,
   markerMode = 'price',
   onMoveEnd,
   onLocateClick,
@@ -512,7 +514,15 @@ function StationMapInner({
           Mostrando 800 · acércate para ver más
         </div>
       )}
-      {points.length === 0 && (
+      {loading && (
+        <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-700 shadow">
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
+            Actualizando mapa
+          </div>
+        </div>
+      )}
+      {!loading && points.length === 0 && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-xs font-bold text-slate-500 shadow">
           No hay estaciones en esta zona
         </div>

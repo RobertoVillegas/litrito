@@ -512,6 +512,10 @@ function Explore() {
     listIsLoadingFirstPage &&
     Boolean(paginated.results) &&
     tableRows.length > 0
+  const mapIsLoading =
+    showFavoritesOnly
+      ? favoriteStations === undefined && favoritePermits.length > 0
+      : Boolean(mapBounds) && boundsResult === undefined
 
   const selectedStateId = filters.stateIds[0]
   const selectedMuniId = filters.municipalityIds[0]
@@ -528,6 +532,7 @@ function Explore() {
         }
       : ('skip' as const),
   ) as MapBounds | null | undefined
+  const mapFocusIsLoading = Boolean(selectedStateId) && areaBounds === undefined
 
   // Map framing priority: a favorites view, then an explicit state/municipality
   // selection (which wins over GPS — picking a place should take you there),
@@ -763,13 +768,21 @@ function Explore() {
                   truncated={!showFavoritesOnly && boundsResult?.truncated}
                   focus={mapFocus}
                   initialBounds={mapBounds}
+                  loading={mapIsLoading || mapFocusIsLoading}
                   onMoveEnd={setMapBounds}
                   onLocateClick={() => {
                     void requestWithExplanation()
                     setFilters((prev) =>
-                      prev.sortMode === 'distance'
+                      prev.sortMode === 'distance' &&
+                      prev.stateIds.length === 0 &&
+                      prev.municipalityIds.length === 0
                         ? prev
-                        : { ...prev, sortMode: 'distance' },
+                        : {
+                            ...prev,
+                            stateIds: [],
+                            municipalityIds: [],
+                            sortMode: 'distance',
+                          },
                     )
                   }}
                 />
