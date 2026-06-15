@@ -37,12 +37,12 @@ const DISTANCE_SCAN_CAP = 4000
 
 // The home "Top 10" ranks by price among the stations nearest the user. We pull
 // the closest N (S2-ordered) within the radius and pick the cheapest among
-// them. In dense cities the cap is reached long before the radius — which is
-// the point: nobody in CDMX cares about a station 50km away when hundreds sit
-// closer. In remote areas there are fewer than N within range, so the radius
-// bounds it instead. 64 keeps per-query reads (and system ops) well under the
-// self-hosted ceiling.
-const NEARBY_CANDIDATE_LIMIT = 64
+// them. N must be high enough that a cheaper station a worthwhile 5-10km away
+// still makes the candidate set in a dense city (driving a few km for a better
+// price is worth it; driving 50km is not). In remote areas there are fewer than
+// N within range, so the radius bounds it instead. 256 covers a dense-city
+// 5-10km radius while keeping per-query reads under the self-hosted ceiling.
+const NEARBY_CANDIDATE_LIMIT = 256
 
 // Cap on stations read to compute a state/municipality bounding box for map
 // framing. States top out around ~1500 docs, so this covers the whole catalog;
