@@ -515,7 +515,7 @@ function StationMapInner({
         </div>
       )}
       {loading && (
-        <div className="pointer-events-none absolute inset-x-3 top-3 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-[1000] flex justify-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-700 shadow">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
             Actualizando mapa

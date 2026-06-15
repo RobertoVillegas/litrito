@@ -222,7 +222,6 @@ function parseFuelTypes(value: string | undefined): FuelType[] {
 function filtersFromSearch(
   search: HomeSearch,
   hasPreciseLocation: boolean,
-  locationStateId: string | null,
 ): FilterState {
   const fuelTypes = parseFuelTypes(search.fuels)
   const primaryFuel =
@@ -232,7 +231,7 @@ function filtersFromSearch(
   return {
     fuelTypes,
     primaryFuel,
-    stateIds: search.state ? [search.state] : locationStateId ? [locationStateId] : [],
+    stateIds: search.state ? [search.state] : [],
     municipalityIds: search.municipality ? [search.municipality] : [],
     search: search.q ?? '',
     sortMode: search.sort ?? (hasPreciseLocation ? 'distance' : 'price'),
@@ -248,48 +247,6 @@ function filtersToSearch(filters: FilterState): HomeSearch {
     q: filters.search || undefined,
     sort: filters.sortMode,
   }
-}
-
-function normalizeLocationName(value: string | null | undefined) {
-  return (value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-}
-
-const STATE_ALIASES: Record<string, string[]> = {
-  'ciudad de mexico': ['cdmx', 'mexico city', 'distrito federal'],
-  'estado de mexico': ['edomex', 'mexico state'],
-  'nuevo leon': ['nuevo leon'],
-  'san luis potosi': ['san luis potosi'],
-  'queretaro': ['queretaro', 'queretaro de arteaga'],
-  'michoacan': ['michoacan', 'michoacan de ocampo'],
-  'veracruz': ['veracruz', 'veracruz de ignacio de la llave'],
-}
-
-function inferStateIdFromLocation(
-  location: ReturnType<typeof useUserLocation>['location'],
-  states: FilterOption[],
-) {
-  if (!location || location.source !== 'precise') return null
-  const candidates = [
-    normalizeLocationName(location.region),
-    normalizeLocationName(location.city),
-  ].filter(Boolean)
-
-  return (
-    states.find((state) => {
-      const stateName = normalizeLocationName(state.name)
-      const aliases = STATE_ALIASES[stateName] ?? []
-      return candidates.some(
-        (candidate) =>
-          candidate === stateName ||
-          aliases.some((alias) => normalizeLocationName(alias) === candidate),
-      )
-    })?.externalId ?? null
-  )
 }
 
 // Emit one analytics event per filter dimension that actually changed. Search
@@ -333,15 +290,9 @@ function Explore() {
       municipalities: [],
     }
 
-  const locationStateId = useMemo(
-    () => inferStateIdFromLocation(userLoc.location, filterOptions.states),
-    [userLoc.location, filterOptions.states],
-  )
-
   const filters = useMemo(
-    () =>
-      filtersFromSearch(search, userLoc.hasPreciseLocation, locationStateId),
-    [search, userLoc.hasPreciseLocation, locationStateId],
+    () => filtersFromSearch(search, userLoc.hasPreciseLocation),
+    [search, userLoc.hasPreciseLocation],
   )
 
   const setFilters = (next: FilterState | ((prev: FilterState) => FilterState)) => {
