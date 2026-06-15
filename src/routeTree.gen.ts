@@ -20,6 +20,7 @@ import { Route as OgDotpngRouteImport } from './routes/og[.]png'
 import { Route as MetricasRouteImport } from './routes/metricas'
 import { Route as ExplorarRouteImport } from './routes/explorar'
 import { Route as EntrarRouteImport } from './routes/entrar'
+import { Route as EliminarDatosRouteImport } from './routes/eliminar-datos'
 import { Route as DebugSentryRouteImport } from './routes/debug-sentry'
 import { Route as AcercaRouteImport } from './routes/acerca'
 import { Route as IndexRouteImport } from './routes/index'
@@ -84,6 +85,11 @@ const EntrarRoute = EntrarRouteImport.update({
   path: '/entrar',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EliminarDatosRoute = EliminarDatosRouteImport.update({
+  id: '/eliminar-datos',
+  path: '/eliminar-datos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DebugSentryRoute = DebugSentryRouteImport.update({
   id: '/debug-sentry',
   path: '/debug-sentry',
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/acerca': typeof AcercaRoute
   '/debug-sentry': typeof DebugSentryRoute
+  '/eliminar-datos': typeof EliminarDatosRoute
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/acerca': typeof AcercaRoute
   '/debug-sentry': typeof DebugSentryRoute
+  '/eliminar-datos': typeof EliminarDatosRoute
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/acerca': typeof AcercaRoute
   '/debug-sentry': typeof DebugSentryRoute
+  '/eliminar-datos': typeof EliminarDatosRoute
   '/entrar': typeof EntrarRoute
   '/explorar': typeof ExplorarRoute
   '/metricas': typeof MetricasRoute
@@ -196,6 +205,7 @@ export interface FileRouteTypes {
     | '/'
     | '/acerca'
     | '/debug-sentry'
+    | '/eliminar-datos'
     | '/entrar'
     | '/explorar'
     | '/metricas'
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/'
     | '/acerca'
     | '/debug-sentry'
+    | '/eliminar-datos'
     | '/entrar'
     | '/explorar'
     | '/metricas'
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/'
     | '/acerca'
     | '/debug-sentry'
+    | '/eliminar-datos'
     | '/entrar'
     | '/explorar'
     | '/metricas'
@@ -260,6 +272,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AcercaRoute: typeof AcercaRoute
   DebugSentryRoute: typeof DebugSentryRoute
+  EliminarDatosRoute: typeof EliminarDatosRoute
   EntrarRoute: typeof EntrarRoute
   ExplorarRoute: typeof ExplorarRoute
   MetricasRoute: typeof MetricasRoute
@@ -357,6 +370,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/eliminar-datos': {
+      id: '/eliminar-datos'
+      path: '/eliminar-datos'
+      fullPath: '/eliminar-datos'
+      preLoaderRoute: typeof EliminarDatosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/debug-sentry': {
       id: '/debug-sentry'
       path: '/debug-sentry'
@@ -420,6 +440,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AcercaRoute: AcercaRoute,
   DebugSentryRoute: DebugSentryRoute,
+  EliminarDatosRoute: EliminarDatosRoute,
   EntrarRoute: EntrarRoute,
   ExplorarRoute: ExplorarRoute,
   MetricasRoute: MetricasRoute,

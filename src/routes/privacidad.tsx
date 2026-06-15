@@ -161,6 +161,11 @@ function PrivacyPage() {
           información cuando sea necesario para cumplir obligaciones legales,
           resolver controversias o prevenir abuso.
         </p>
+        <p>
+          Puedes pedir que borremos tu cuenta y datos en cualquier momento.
+          Consulta cómo hacerlo en{' '}
+          <Link to="/eliminar-datos">Eliminar tus datos</Link>.
+        </p>
 
         <h2>Seguridad</h2>
         <p>
@@ -196,18 +201,20 @@ function LegalHero({
   return (
     <section className="bg-ink text-on-dark">
       <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-white/60 hover:text-white"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Volver a Litrito
-        </Link>
-        <div className="eyebrow mt-8 inline-flex items-center gap-2 rounded-[32px] bg-brand px-3 py-1.5 text-white">
-          <ShieldCheck className="h-4 w-4" />
-          {eyebrow}
+        <div className="flex items-center justify-between gap-4">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-white/60 hover:text-white"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Volver a Litrito
+          </Link>
+          <div className="eyebrow inline-flex shrink-0 items-center gap-2 rounded-[32px] bg-brand px-3 py-1.5 text-white">
+            <ShieldCheck className="h-4 w-4" />
+            {eyebrow}
+          </div>
         </div>
-        <h1 className="font-display mt-4 text-5xl text-white sm:text-7xl">{title}</h1>
+        <h1 className="font-display mt-6 text-5xl text-white sm:text-7xl">{title}</h1>
         <p className="mt-4 max-w-2xl text-lg font-light leading-8 text-white/70">
           {subtitle}
         </p>
