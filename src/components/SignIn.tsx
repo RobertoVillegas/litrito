@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { authClient } from '#/lib/auth-client'
 import { track } from '#/lib/analytics'
@@ -13,11 +13,23 @@ type AuthResult = {
   error?: { message?: string } | null
 }
 
-export function SignIn() {
+export function SignIn({
+  socialInitial,
+}: {
+  socialInitial?: { google: boolean; facebook: boolean }
+}) {
   const navigate = useNavigate()
+  const session = authClient.useSession()
   // Server-side credential failure: form-level (we can't know which field is
   // wrong), shown inline on the fields — not a toast.
   const [serverError, setServerError] = useState('')
+
+  // Already signed in? This page has nothing to offer — go to the profile.
+  useEffect(() => {
+    if (!session.isPending && session.data?.user) {
+      void navigate({ to: '/perfil', replace: true })
+    }
+  }, [session.isPending, session.data?.user, navigate])
 
   const form = useForm({
     defaultValues: { email: '', password: '' },
@@ -33,6 +45,11 @@ export function SignIn() {
       }
     },
   })
+
+  // Hold a blank shell instead of flashing the form while the redirect runs.
+  if (!session.isPending && session.data?.user) {
+    return null
+  }
 
   return (
     <AuthLayout
@@ -52,7 +69,7 @@ export function SignIn() {
         </div>
       }
     >
-      <SocialSignIn verb="Continuar" />
+      <SocialSignIn verb="Continuar" initial={socialInitial} />
       <form
         onSubmit={(e) => {
           e.preventDefault()

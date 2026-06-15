@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { authClient } from '#/lib/auth-client'
 import { track } from '#/lib/analytics'
@@ -13,10 +13,22 @@ type AuthResult = {
   error?: { message?: string } | null
 }
 
-export function SignUp() {
+export function SignUp({
+  socialInitial,
+}: {
+  socialInitial?: { google: boolean; facebook: boolean }
+}) {
   const navigate = useNavigate()
+  const session = authClient.useSession()
   // Server rejection (e.g. email already in use) — shown inline on the email field.
   const [serverError, setServerError] = useState('')
+
+  // Already signed in? Skip the form and go to the profile.
+  useEffect(() => {
+    if (!session.isPending && session.data?.user) {
+      void navigate({ to: '/perfil', replace: true })
+    }
+  }, [session.isPending, session.data?.user, navigate])
 
   const form = useForm({
     defaultValues: { name: '', email: '', password: '' },
@@ -37,6 +49,11 @@ export function SignUp() {
     },
   })
 
+  // Hold a blank shell instead of flashing the form while the redirect runs.
+  if (!session.isPending && session.data?.user) {
+    return null
+  }
+
   return (
     <AuthLayout
       title="Crear cuenta"
@@ -50,7 +67,7 @@ export function SignUp() {
         </div>
       }
     >
-      <SocialSignIn verb="Registrarte" />
+      <SocialSignIn verb="Registrarte" initial={socialInitial} />
       <form
         onSubmit={(e) => {
           e.preventDefault()

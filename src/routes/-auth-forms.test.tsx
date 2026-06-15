@@ -41,6 +41,7 @@ vi.mock('#/lib/auth-client', () => ({
   authClient: {
     signIn: { email: mocks.signInEmail, social: mocks.signInSocial },
     signUp: { email: mocks.signUpEmail },
+    useSession: () => ({ data: null, isPending: false }),
   },
 }))
 

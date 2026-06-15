@@ -6,11 +6,21 @@ import { track } from '#/lib/analytics'
 import { Button } from '#/components/ui/button'
 
 type Provider = 'google' | 'facebook'
+type Enabled = { google: boolean; facebook: boolean }
 
 // Renders nothing until the backend confirms which providers are configured, so
-// a button never shows for a provider missing from the Convex env.
-export function SocialSignIn({ verb }: { verb: 'Continuar' | 'Registrarte' }) {
-  const enabled = useQuery(api.auth.socialProvidersEnabled, {})
+// a button never shows for a provider missing from the Convex env. `initial` is
+// the SSR-prefetched value from the route loader; using it as the fallback
+// avoids a flash where the buttons pop in after the live query resolves.
+export function SocialSignIn({
+  verb,
+  initial,
+}: {
+  verb: 'Continuar' | 'Registrarte'
+  initial?: Enabled
+}) {
+  const live = useQuery(api.auth.socialProvidersEnabled, {})
+  const enabled = live ?? initial
   // Tracks which provider kicked off a redirect so only that button shows a
   // loading state.
   const [pending, setPending] = useState<Provider | null>(null)
