@@ -21,6 +21,7 @@ import type * as email_templates_accountDeletion from "../email/templates/accoun
 import type * as email_templates_passwordReset from "../email/templates/passwordReset.js";
 import type * as email_templates_theme from "../email/templates/theme.js";
 import type * as favorites from "../favorites.js";
+import type * as geo from "../geo.js";
 import type * as http from "../http.js";
 import type * as ingestion from "../ingestion.js";
 import type * as locationBounds from "../locationBounds.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   "email/templates/passwordReset": typeof email_templates_passwordReset;
   "email/templates/theme": typeof email_templates_theme;
   favorites: typeof favorites;
+  geo: typeof geo;
   http: typeof http;
   ingestion: typeof ingestion;
   locationBounds: typeof locationBounds;
@@ -88,4 +90,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
+  geospatial: import("@convex-dev/geospatial/_generated/component.js").ComponentApi<"geospatial">;
 };

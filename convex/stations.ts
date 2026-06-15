@@ -9,6 +9,7 @@ import {
 import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
+import { stationGeoIndex } from './geo'
 import { fuelTypeValidator, sortModeValidator } from './validators'
 
 const fuelType = fuelTypeValidator
@@ -34,10 +35,11 @@ const MAX_STATION_SCAN = 4000
 // nearest stations fall inside this latitude-centered window.
 const DISTANCE_SCAN_CAP = 4000
 
-// The home "Top 10" only needs stations inside the selected radius. Use a
-// latitude range scan instead of the broader nearest-latitude sample used by
-// paginated national distance sorting.
-const NEARBY_SCAN_CAP = 2000
+// The home "Top 10" ranks by price among stations inside the selected radius.
+// We pull the closest N stations (S2-ordered) within the radius from the
+// geospatial index and pick the cheapest among them. 256 comfortably covers
+// any realistic radius while keeping the follow-up price reads bounded.
+const NEARBY_CANDIDATE_LIMIT = 256
 
 // Cap on stations read to compute a state/municipality bounding box for map
 // framing. States top out around ~1500 docs, so this covers the whole catalog;
@@ -536,49 +538,43 @@ async function loadNearestByLatitude(
   return [...north, ...south]
 }
 
+// Nearest stations within the radius, via the S2 geospatial index. Unlike a
+// single-axis latitude scan, S2 prunes on both lat and lon, so the result is
+// the true closest set regardless of how dense the surrounding band is — no
+// directional cap can silently drop the user's nearby stations. The geo index
+// returns distances in meters ordered by proximity; we resolve each key to its
+// station doc in bounded batches to stay under the parallel-read ceiling.
 async function loadStationsWithinRadius(
   ctx: QueryCtx,
   userLocation: { latitude: number; longitude: number },
   maxDistanceKm: number,
 ): Promise<Array<{ station: Doc<'stations'>; distanceKm: number }>> {
-  const latDelta = maxDistanceKm / 111.32
-  const cosLat = Math.cos(toRad(userLocation.latitude))
-  const lonDelta =
-    maxDistanceKm / (111.32 * Math.max(Math.abs(cosLat), 0.01))
-  const minLat = userLocation.latitude - latDelta
-  const maxLat = userLocation.latitude + latDelta
-  const minLon = userLocation.longitude - lonDelta
-  const maxLon = userLocation.longitude + lonDelta
+  const nearest = await stationGeoIndex.nearest(ctx, {
+    point: {
+      latitude: userLocation.latitude,
+      longitude: userLocation.longitude,
+    },
+    limit: NEARBY_CANDIDATE_LIMIT,
+    maxDistance: maxDistanceKm * 1000,
+  })
 
-  const candidates = await collectUpTo(
-    ctx.db
-      .query('stations')
-      .withIndex('by_lat', (q) =>
-        q.gte('latitude', minLat).lte('latitude', maxLat),
+  const out: Array<{ station: Doc<'stations'>; distanceKm: number }> = []
+  for (let i = 0; i < nearest.length; i += PRICE_LOOKUP_CHUNK) {
+    const batch = nearest.slice(i, i + PRICE_LOOKUP_CHUNK)
+    const stations = await Promise.all(
+      batch.map(({ key }) =>
+        ctx.db
+          .query('stations')
+          .withIndex('by_permit', (q) => q.eq('permitNumber', key))
+          .unique(),
       ),
-    NEARBY_SCAN_CAP,
-  )
-
-  return candidates
-    .flatMap((station) => {
-      const lat = station.latitude
-      const lon = station.longitude
-      if (
-        typeof lat !== 'number' ||
-        typeof lon !== 'number' ||
-        lon < minLon ||
-        lon > maxLon
-      ) {
-        return []
-      }
-      const distanceKm = haversineKm(
-        userLocation.latitude,
-        userLocation.longitude,
-        lat,
-        lon,
-      )
-      return distanceKm <= maxDistanceKm ? [{ station, distanceKm }] : []
+    )
+    batch.forEach(({ distance }, j) => {
+      const station = stations[j]
+      if (station) out.push({ station, distanceKm: distance / 1000 })
     })
+  }
+  return out
 }
 
 async function listStationsByDistance(
