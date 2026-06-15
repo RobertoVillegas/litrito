@@ -159,6 +159,11 @@ type StationFromQuery = {
   distanceKm?: number | null
 }
 
+type BoundsStationsResult = {
+  stations: StationFromQuery[]
+  truncated: boolean
+}
+
 type FilterOption = {
   externalId: string
   name: string
@@ -353,12 +358,14 @@ function Explore() {
   const boundsResult = useConvexQuery(
     api.stations.listStationsInBounds,
     boundsArgs,
-  ) as
-    | {
-        stations: StationFromQuery[]
-        truncated: boolean
-      }
-    | undefined
+  ) as BoundsStationsResult | undefined
+  const [lastBoundsResult, setLastBoundsResult] =
+    useState<BoundsStationsResult | null>(null)
+
+  useEffect(() => {
+    if (boundsResult) setLastBoundsResult(boundsResult)
+  }, [boundsResult])
+  const effectiveBoundsResult = boundsResult ?? lastBoundsResult
 
   // All favorite stations (with coords + prices), regardless of viewport.
   // Powers both the favorites-only map and table so nothing is missed just
@@ -434,8 +441,8 @@ function Explore() {
 
   const mapRows = useMemo<StationRow[]>(() => {
     if (showFavoritesOnly) return favoriteRows
-    if (!boundsResult) return []
-    return boundsResult.stations.map((row) => ({
+    if (!effectiveBoundsResult) return []
+    return effectiveBoundsResult.stations.map((row) => ({
       station: {
         permitNumber: row.station.permitNumber,
         name: row.station.name,
@@ -449,7 +456,7 @@ function Explore() {
       highlightedPrice: row.highlightedPrice,
       distanceKm: row.distanceKm,
     }))
-  }, [boundsResult, showFavoritesOnly, favoriteRows])
+  }, [effectiveBoundsResult, showFavoritesOnly, favoriteRows])
 
   const tableRows = showFavoritesOnly ? favoriteRows : visibleRows
   const listIsLoadingFirstPage =
@@ -693,8 +700,8 @@ function Explore() {
                 ) : (
                   <Skeleton className="h-4 w-44" />
                 )
-              ) : boundsResult ? (
-                `${boundsResult.stations.length} estaciones visibles${boundsResult.truncated ? ' (acércate para más)' : ''}`
+              ) : effectiveBoundsResult ? (
+                `${effectiveBoundsResult.stations.length} estaciones visibles${effectiveBoundsResult.truncated ? ' (acércate para más)' : ''}`
               ) : (
                 <Skeleton className="h-4 w-44" />
               )}
@@ -716,7 +723,7 @@ function Explore() {
                   primaryFuel={filters.primaryFuel}
                   fuelTypes={filters.fuelTypes}
                   userLocation={userLoc.location}
-                  truncated={!showFavoritesOnly && boundsResult?.truncated}
+                  truncated={!showFavoritesOnly && effectiveBoundsResult?.truncated}
                   focus={mapFocus}
                   initialBounds={mapBounds}
                   loading={mapIsLoading || mapFocusIsLoading}
