@@ -15,7 +15,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <Toast.Provider>
       {children}
       <Toast.Portal>
-        <Toast.Viewport className="fixed bottom-4 right-4 z-[100] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 sm:bottom-6 sm:right-6">
+        <Toast.Viewport className="fixed bottom-4 right-4 z-[2000] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 sm:bottom-6 sm:right-6">
           <ToastList />
         </Toast.Viewport>
       </Toast.Portal>

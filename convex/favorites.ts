@@ -20,7 +20,11 @@ async function requireUser(ctx: QueryCtx | MutationCtx) {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const user = await requireUser(ctx)
+    // Return empty (not an error) when signed out: this query stays subscribed
+    // for a tick during sign-out / account deletion, and throwing here bubbles
+    // to the route error boundary. Mutations below still require a user.
+    const user = await authComponent.safeGetAuthUser(ctx)
+    if (!user) return []
     const userId = String(user._id)
     const favorites = await ctx.db
       .query('stationFavorites')

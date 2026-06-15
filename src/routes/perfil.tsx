@@ -140,10 +140,13 @@ function Profile() {
               )}
             </div>
           </div>
-          <Button variant="outline-white" onClick={() => void authClient.signOut()}>
-            <LogOut className="h-4 w-4" />
-            Cerrar sesión
-          </Button>
+          <div className="flex items-center gap-2">
+            {!deletion && <DeleteAccount email={user.email} />}
+            <Button variant="outline-white" onClick={() => void authClient.signOut()}>
+              <LogOut className="h-4 w-4" />
+              Cerrar sesión
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -219,8 +222,6 @@ function Profile() {
             />
           </>
         )}
-
-        {!deletion && <DeleteAccount email={user.email} />}
       </section>
     </main>
   )
