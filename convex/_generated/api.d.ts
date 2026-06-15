@@ -11,6 +11,8 @@
 import type * as accountDeletion from "../accountDeletion.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as brandRules from "../brandRules.js";
+import type * as brands from "../brands.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as email_config from "../email/config.js";
@@ -42,6 +44,8 @@ declare const fullApi: ApiFromModules<{
   accountDeletion: typeof accountDeletion;
   admin: typeof admin;
   auth: typeof auth;
+  brandRules: typeof brandRules;
+  brands: typeof brands;
   catalog: typeof catalog;
   crons: typeof crons;
   "email/config": typeof email_config;

@@ -251,6 +251,62 @@ export const resetStationPhotos = internalMutation({
   },
 })
 
+// Temporary diagnostic: list nearby Mapillary candidates with type/heading so we
+// can see whether panoramas exist and how images are aimed relative to a station.
+export const debugStationMapillary = internalAction({
+  args: { permitNumber: v.string() },
+  handler: async (ctx, args) => {
+    const token = process.env.MAPILLARY_TOKEN
+    if (!token) return { error: 'no token' }
+    const ctxData = await ctx.runQuery(internal.photos.photoFetchContext, {
+      permitNumber: args.permitNumber,
+    })
+    const { latitude, longitude } = ctxData
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return { error: 'no coords' }
+    }
+    const pad = 80 / 111_320
+    const lonPad = 80 / (111_320 * Math.max(Math.cos(toRad(latitude)), 0.01))
+    const url = new URL(MAPILLARY_GRAPH_URL)
+    url.searchParams.set('access_token', token)
+    url.searchParams.set(
+      'fields',
+      'id,is_pano,thumb_512_url,geometry,computed_geometry,compass_angle,computed_compass_angle',
+    )
+    url.searchParams.set(
+      'bbox',
+      [longitude - lonPad, latitude - pad, longitude + lonPad, latitude + pad].join(','),
+    )
+    url.searchParams.set('limit', '50')
+    const res = await fetch(url)
+    const data = (await res.json()) as { data?: Array<MapillaryImage & { is_pano?: boolean }> }
+    const rows = (data.data ?? []).flatMap((img) => {
+      const coords = img.computed_geometry?.coordinates ?? img.geometry?.coordinates
+      const heading = img.computed_compass_angle ?? img.compass_angle
+      if (!coords) return []
+      const distance = distanceMeters(latitude, longitude, coords[1], coords[0])
+      const bearing = bearingDegrees(coords[1], coords[0], latitude, longitude)
+      return [
+        {
+          id: img.id,
+          isPano: img.is_pano ?? false,
+          distance: Math.round(distance),
+          facingDelta:
+            typeof heading === 'number'
+              ? Math.round(angleDelta(heading, bearing))
+              : null,
+        },
+      ]
+    })
+    rows.sort((a, b) => a.distance - b.distance)
+    return {
+      total: rows.length,
+      panos: rows.filter((r) => r.isPano).length,
+      nearest: rows.slice(0, 12),
+    }
+  },
+})
+
 type MapillaryImage = {
   id: string
   thumb_512_url?: string
