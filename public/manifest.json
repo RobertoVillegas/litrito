@@ -3,6 +3,8 @@
   "name": "Litrito - precios de gasolina",
   "description": "Compara precios de gasolina por estacion, municipio y estado en Mexico.",
   "id": "/",
+  "lang": "es-MX",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -10,6 +12,18 @@
   "theme_color": "#25282b",
   "background_color": "#ffffff",
   "categories": ["utilities", "navigation", "travel"],
+  "shortcuts": [
+    {
+      "name": "Explorar gasolineras",
+      "short_name": "Explorar",
+      "url": "/explorar"
+    },
+    {
+      "name": "Métricas de precios",
+      "short_name": "Métricas",
+      "url": "/metricas"
+    }
+  ],
   "icons": [
     {
       "src": "/android-chrome-192x192.png",

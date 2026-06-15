@@ -30,6 +30,58 @@ export function buildOgImageUrl({
   return origin ? `${origin}${path}` : path
 }
 
+type LocationJsonLdInput = {
+  placeName: string
+  url?: string
+  topRegular: {
+    station: {
+      name: string
+      address: string
+      municipalityName?: string
+      stateName?: string
+    }
+    price: number
+  }[]
+}
+
+// ItemList of the cheapest regular-gas stations for a location page, so search
+// engines can surface the list (mirrors the GasStation JSON-LD on detail pages).
+export function buildLocationJsonLd({ placeName, url, topRegular }: LocationJsonLdInput) {
+  if (!topRegular.length) return null
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `Gasolineras más baratas en ${placeName}`,
+    ...(url ? { url } : {}),
+    numberOfItems: topRegular.length,
+    itemListElement: topRegular.map((row, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      item: {
+        '@type': 'GasStation',
+        name: row.station.name,
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: row.station.address,
+          addressLocality: row.station.municipalityName,
+          addressRegion: row.station.stateName,
+          addressCountry: 'MX',
+        },
+        makesOffer: {
+          '@type': 'Offer',
+          itemOffered: { '@type': 'Product', name: 'Gasolina regular' },
+          priceSpecification: {
+            '@type': 'UnitPriceSpecification',
+            price: row.price,
+            priceCurrency: 'MXN',
+            unitText: 'litro',
+          },
+        },
+      },
+    })),
+  }
+}
+
 export function buildSeoMeta({ title, description, image, url }: SeoInput) {
   const imageUrl = buildOgImageUrl({
     title,

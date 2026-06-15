@@ -1,3 +1,4 @@
+import type { FunctionArgs } from 'convex/server'
 import {
   internalMutation,
   mutation,
@@ -6,6 +7,8 @@ import {
 } from './_generated/server'
 import { components, internal } from './_generated/api'
 import { authComponent } from './auth'
+
+type DeleteManyArgs = FunctionArgs<typeof components.betterAuth.adapter.deleteMany>
 
 // How long a deletion sits in a cancellable state before the cron purges it.
 export const GRACE_PERIOD_DAYS = 15
@@ -93,7 +96,7 @@ export const purgeDue = internalMutation({
 
     for (const row of due) {
       await deleteAppData(ctx, row.authUserId)
-      await deleteAuthUser(ctx, row.authUserId)
+      await deleteAuthUser(ctx, row.authUserId, row.email)
       await ctx.db.delete(row._id)
       await ctx.scheduler.runAfter(0, internal.email.sendAccountDeletionEmail.send, {
         mode: 'completed',
@@ -125,11 +128,14 @@ async function deleteAppData(ctx: MutationCtx, userId: string) {
   }
 }
 
-// Deletes the user's Better Auth records (sessions, accounts, then the user
-// row) through the component's adapter mutations.
-async function deleteAuthUser(ctx: MutationCtx, authUserId: string) {
-  await deleteAuthRowsByUser(ctx, 'session', authUserId)
-  await deleteAuthRowsByUser(ctx, 'account', authUserId)
+// Deletes the user's Better Auth records (sessions, accounts, verification
+// tokens, then the user row) through the component's adapter mutations.
+async function deleteAuthUser(ctx: MutationCtx, authUserId: string, email: string) {
+  await deleteAuthRows(ctx, 'session', 'userId', authUserId)
+  await deleteAuthRows(ctx, 'account', 'userId', authUserId)
+  // verification rows are keyed by identifier (e.g. the email or a prefixed
+  // token), not userId — match anything containing the email.
+  await deleteAuthRows(ctx, 'verification', 'identifier', email, 'contains')
   await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
     input: {
       model: 'user',
@@ -138,21 +144,26 @@ async function deleteAuthUser(ctx: MutationCtx, authUserId: string) {
   })
 }
 
-async function deleteAuthRowsByUser(
+async function deleteAuthRows(
   ctx: MutationCtx,
-  model: 'session' | 'account',
-  authUserId: string,
+  model: 'session' | 'account' | 'verification',
+  field: string,
+  value: string,
+  operator?: 'eq' | 'contains',
 ) {
   let cursor: string | null = null
   for (;;) {
+    // The adapter's `where.field` is a per-model discriminated union; with a
+    // generic `model`/`field` we assert the concrete (runtime-valid) shape.
+    const args = {
+      input: {
+        model,
+        where: [{ field, value, ...(operator ? { operator } : {}) }],
+      },
+      paginationOpts: { numItems: 200, cursor },
+    } as DeleteManyArgs
     const result: { isDone: boolean; continueCursor: string } =
-      await ctx.runMutation(components.betterAuth.adapter.deleteMany, {
-        input: {
-          model,
-          where: [{ field: 'userId', value: authUserId }],
-        },
-        paginationOpts: { numItems: 200, cursor },
-      })
+      await ctx.runMutation(components.betterAuth.adapter.deleteMany, args)
     if (result.isDone) break
     cursor = result.continueCursor
   }

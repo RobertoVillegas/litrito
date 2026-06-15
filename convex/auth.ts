@@ -65,6 +65,21 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       resetPasswordTokenExpiresIn: PASSWORD_RESET_EXPIRES_IN_SECONDS,
     },
     socialProviders,
+    // Persist counters in the component's `rateLimit` table — Convex functions
+    // are stateless, so the default in-memory store would never accumulate.
+    // Limits are per client IP (forwarded via x-forwarded-for through the proxy).
+    rateLimit: {
+      enabled: true,
+      storage: 'database',
+      window: 60,
+      max: 100,
+      customRules: {
+        '/sign-in/email': { window: 60, max: 10 },
+        '/sign-up/email': { window: 60, max: 5 },
+        '/forget-password': { window: 60, max: 3 },
+        '/reset-password': { window: 60, max: 5 },
+      },
+    },
     trustedOrigins: [process.env.SITE_URL ?? 'http://localhost:3000'],
     plugins: [convex({ authConfig })],
   })

@@ -4,7 +4,7 @@ import { Button } from '#/components/ui/button'
 import { LocationSeoPage } from '../components/LocationSeoPage'
 import { RouteErrorFallback } from '../components/RouteError'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
-import { buildSeoMeta } from '../lib/seo'
+import { buildLocationJsonLd, buildSeoMeta } from '../lib/seo'
 
 export const Route = createFileRoute('/estado/$stateSlug')({
   loader: async ({ context, params }) => {
@@ -25,6 +25,9 @@ export const Route = createFileRoute('/estado/$stateSlug')({
     const path = data ? `/estado/${data.state.slug}` : `/estado/${params.stateSlug}`
     const origin = getConfiguredSiteOrigin()
     const url = origin ? `${origin}${path}` : path
+    const jsonLd = data
+      ? buildLocationJsonLd({ placeName: data.state.name, url, topRegular: data.topRegular })
+      : null
     return {
       meta: buildSeoMeta({
         title,
@@ -38,6 +41,9 @@ export const Route = createFileRoute('/estado/$stateSlug')({
         url,
       }),
       links: [{ rel: 'canonical', href: url }],
+      ...(jsonLd
+        ? { scripts: [{ type: 'application/ld+json', children: JSON.stringify(jsonLd) }] }
+        : {}),
     }
   },
   component: StatePage,
