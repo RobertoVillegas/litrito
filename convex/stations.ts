@@ -35,11 +35,14 @@ const MAX_STATION_SCAN = 4000
 // nearest stations fall inside this latitude-centered window.
 const DISTANCE_SCAN_CAP = 4000
 
-// The home "Top 10" ranks by price among stations inside the selected radius.
-// We pull the closest N stations (S2-ordered) within the radius from the
-// geospatial index and pick the cheapest among them. 256 comfortably covers
-// any realistic radius while keeping the follow-up price reads bounded.
-const NEARBY_CANDIDATE_LIMIT = 256
+// The home "Top 10" ranks by price among the stations nearest the user. We pull
+// the closest N (S2-ordered) within the radius and pick the cheapest among
+// them. In dense cities the cap is reached long before the radius — which is
+// the point: nobody in CDMX cares about a station 50km away when hundreds sit
+// closer. In remote areas there are fewer than N within range, so the radius
+// bounds it instead. 64 keeps per-query reads (and system ops) well under the
+// self-hosted ceiling.
+const NEARBY_CANDIDATE_LIMIT = 64
 
 // Cap on stations read to compute a state/municipality bounding box for map
 // framing. States top out around ~1500 docs, so this covers the whole catalog;
