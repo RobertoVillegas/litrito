@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useAction, useQuery } from 'convex/react'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, RefreshCcw, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, RefreshCw, ShieldCheck } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { Button } from '#/components/ui/button'
 import { RouteErrorFallback } from '../components/RouteError'
@@ -149,7 +149,7 @@ function AdminIngestion() {
                               onClick={() => void retry(run)}
                               disabled={retrying === String(run._id)}
                             >
-                              <RefreshCcw className="h-3.5 w-3.5" />
+                              <RefreshCw className="h-3.5 w-3.5" />
                               {retrying === String(run._id) ? 'Reintentando' : 'Reintentar'}
                             </Button>
                           </Td>

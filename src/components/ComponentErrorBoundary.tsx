@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import * as Sentry from '@sentry/tanstackstart-react'
-import { RotateCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { logger, errorFields } from '#/lib/logger'
 
 // Component-level error boundary: isolates a failure to one piece of the UI so
@@ -60,7 +60,7 @@ function DefaultComponentFallback({ onRetry }: { onRetry: () => void }) {
         onClick={onRetry}
         className="inline-flex h-9 items-center gap-1.5 rounded-full bg-ink px-4 text-xs font-bold text-white hover:bg-ink/90"
       >
-        <RotateCw className="h-3.5 w-3.5" />
+        <RefreshCw className="h-3.5 w-3.5" />
         Reintentar
       </button>
     </div>
