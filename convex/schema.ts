@@ -145,6 +145,43 @@ export default defineSchema({
   })
     .index('by_created_at', ['createdAt'])
     .index('by_actor', ['actorUserId']),
+  stationBrandAudits: defineTable({
+    stationPermitNumber: v.string(),
+    stationName: v.string(),
+    stationAddress: v.string(),
+    stateExternalId: v.string(),
+    municipalityExternalId: v.string(),
+    stateName: v.optional(v.string()),
+    municipalityName: v.optional(v.string()),
+    stationLatitude: v.optional(v.number()),
+    stationLongitude: v.optional(v.number()),
+    candidateSource: v.union(v.literal('osm'), v.literal('google_places'), v.literal('manual')),
+    candidateId: v.optional(v.string()),
+    candidateName: v.optional(v.string()),
+    candidateBrand: v.optional(v.string()),
+    candidateOperator: v.optional(v.string()),
+    candidateLatitude: v.optional(v.number()),
+    candidateLongitude: v.optional(v.number()),
+    candidateDistanceMeters: v.optional(v.number()),
+    matchStatus: v.union(
+      v.literal('accepted'),
+      v.literal('review_nearby_not_accepted'),
+      v.literal('no_match'),
+      v.literal('manual_override'),
+      v.literal('rejected'),
+    ),
+    acceptedBrand: v.optional(v.string()),
+    confidence: v.union(v.literal('high'), v.literal('review'), v.literal('none')),
+    notes: v.optional(v.string()),
+    reviewedBy: v.optional(v.string()),
+    reviewedAt: v.optional(v.string()),
+    scannedAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_station', ['stationPermitNumber'])
+    .index('by_location', ['stateExternalId', 'municipalityExternalId'])
+    .index('by_status', ['matchStatus'])
+    .index('by_updated_at', ['updatedAt']),
   userRoles: defineTable({
     userId: v.string(),
     email: v.string(),
@@ -172,4 +209,19 @@ export default defineSchema({
   })
     .index('by_user', ['authUserId'])
     .index('by_scheduled', ['scheduledAt']),
+  // One cached photo per station. Filled lazily on first view: we look up a
+  // street-level image near the station's coordinates from Mapillary (free) and
+  // store the thumbnail in Convex storage so later views don't re-hit the API or
+  // depend on expiring CDN URLs. `status: 'none'` records that we checked and
+  // found no coverage, so we don't keep retrying.
+  stationPhotos: defineTable({
+    stationPermitNumber: v.string(),
+    source: v.literal('mapillary'),
+    status: v.union(v.literal('found'), v.literal('none')),
+    storageId: v.optional(v.id('_storage')),
+    mapillaryImageId: v.optional(v.string()),
+    attribution: v.optional(v.string()),
+    capturedAt: v.optional(v.string()),
+    checkedAt: v.string(),
+  }).index('by_station', ['stationPermitNumber']),
 })

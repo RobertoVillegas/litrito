@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAction, useQuery } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, RefreshCw, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Check, RefreshCw, Search, ShieldCheck, X } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { Button } from '#/components/ui/button'
 import { RouteErrorFallback } from '../components/RouteError'
@@ -66,10 +66,54 @@ type Overview = {
   auditEvents: AuditEvent[]
 }
 
+type BrandAuditRow = {
+  _id: string
+  stationPermitNumber: string
+  stationName: string
+  stationAddress: string
+  stateName?: string
+  municipalityName?: string
+  candidateName?: string
+  candidateBrand?: string
+  candidateOperator?: string
+  candidateDistanceMeters?: number
+  matchStatus:
+    | 'accepted'
+    | 'review_nearby_not_accepted'
+    | 'no_match'
+    | 'manual_override'
+    | 'rejected'
+  acceptedBrand?: string
+  confidence: 'high' | 'review' | 'none'
+  notes?: string
+  reviewedBy?: string
+  reviewedAt?: string
+  updatedAt: string
+}
+
+type BrandAuditOverview = {
+  summary: {
+    total: number
+    accepted: number
+    review: number
+    manual: number
+    rejected: number
+    noMatch: number
+  }
+  rows: BrandAuditRow[]
+}
+
 function AdminIngestion() {
   const overview = useQuery(api.admin.ingestionOverview, {}) as Overview | undefined
+  const brandAudit = useQuery(api.admin.stationBrandAuditOverview, {
+    stateExternalId: '32',
+    municipalityExternalId: '056',
+  }) as BrandAuditOverview | undefined
   const retryMunicipality = useAction(api.admin.retryMunicipalityPrices)
+  const scanBrands = useAction(api.admin.scanStationBrands)
+  const reviewBrand = useMutation(api.admin.reviewStationBrand)
   const [retrying, setRetrying] = useState<string | null>(null)
+  const [scanningBrands, setScanningBrands] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   const retry = async (run: IngestionRun) => {
@@ -87,6 +131,47 @@ function AdminIngestion() {
     } finally {
       setRetrying(null)
     }
+  }
+
+  const scanZacatecasBrands = async () => {
+    setNotice(null)
+    setScanningBrands(true)
+    try {
+      const result = await scanBrands({
+        stateExternalId: '32',
+        municipalityExternalId: '056',
+      })
+      setNotice(
+        `Auditoría de marcas: ${result.scanned} estaciones, ${result.candidates} candidatos OSM.`,
+      )
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'No se pudo auditar marcas.')
+    } finally {
+      setScanningBrands(false)
+    }
+  }
+
+  const decideBrand = async (
+    row: BrandAuditRow,
+    decision: 'accept_candidate' | 'reject' | 'manual_override',
+  ) => {
+    const acceptedBrand =
+      decision === 'manual_override'
+        ? window.prompt('Marca correcta', row.acceptedBrand || row.stationName)
+        : undefined
+    if (decision === 'manual_override' && !acceptedBrand?.trim()) return
+
+    const notes =
+      decision === 'reject'
+        ? window.prompt('Nota de rechazo', row.notes ?? 'Falso positivo') ?? undefined
+        : undefined
+
+    await reviewBrand({
+      stationPermitNumber: row.stationPermitNumber,
+      decision,
+      acceptedBrand: acceptedBrand?.trim(),
+      notes: notes?.trim(),
+    })
   }
 
   return (
@@ -119,6 +204,34 @@ function AdminIngestion() {
             )}
 
             <OverviewGrid overview={overview} />
+
+            <section>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="eyebrow text-body">Auditoría de marcas</h2>
+                  <p className="mt-1 text-sm text-mute">
+                    Piloto Zacatecas Capital: OSM automático solo hasta 40m; 41-100m queda
+                    para revisión.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => void scanZacatecasBrands()}
+                  disabled={scanningBrands}
+                >
+                  <Search className="h-4 w-4" />
+                  {scanningBrands ? 'Escaneando' : 'Escanear Zacatecas'}
+                </Button>
+              </div>
+              {brandAudit === undefined ? (
+                <Skeleton className="h-32 w-full" />
+              ) : (
+                <BrandAuditTable
+                  audit={brandAudit}
+                  onDecision={(row, decision) => void decideBrand(row, decision)}
+                />
+              )}
+            </section>
 
             {overview.recentFailures.length > 0 && (
               <section>
@@ -271,6 +384,126 @@ function RunsTable({ runs }: { runs: IngestionRun[] }) {
   )
 }
 
+function BrandAuditTable({
+  audit,
+  onDecision,
+}: {
+  audit: BrandAuditOverview
+  onDecision: (
+    row: BrandAuditRow,
+    decision: 'accept_candidate' | 'reject' | 'manual_override',
+  ) => void
+}) {
+  return (
+    <div className="overflow-hidden rounded-[6px] border border-line">
+      <div className="grid gap-3 border-b border-line bg-ash p-4 text-sm sm:grid-cols-6">
+        <MiniMetric label="Total" value={audit.summary.total} />
+        <MiniMetric label="Aceptadas" value={audit.summary.accepted} />
+        <MiniMetric label="Revisión" value={audit.summary.review} />
+        <MiniMetric label="Manual" value={audit.summary.manual} />
+        <MiniMetric label="Rechazadas" value={audit.summary.rejected} />
+        <MiniMetric label="Sin match" value={audit.summary.noMatch} />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1120px] text-left text-sm">
+          <thead className="bg-white text-xs uppercase text-mute">
+            <tr>
+              <Th>Estación CNE</Th>
+              <Th>Candidato</Th>
+              <Th>Distancia</Th>
+              <Th>Estado</Th>
+              <Th>Marca aceptada</Th>
+              <Th>Acción</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {audit.rows.length === 0 ? (
+              <tr>
+                <Td colSpan={6}>Aún no hay auditoría. Ejecuta el escaneo piloto.</Td>
+              </tr>
+            ) : (
+              audit.rows.map((row) => (
+                <tr key={row._id}>
+                  <Td>
+                    <div className="font-bold text-ink">{row.stationName}</div>
+                    <div className="mt-1 text-xs text-mute">{row.stationPermitNumber}</div>
+                    <div className="mt-1 max-w-[340px] text-xs text-body">
+                      {row.stationAddress}
+                    </div>
+                  </Td>
+                  <Td>
+                    <div className="font-bold text-ink">
+                      {row.candidateBrand || row.candidateName || '—'}
+                    </div>
+                    {row.candidateOperator && (
+                      <div className="mt-1 text-xs text-mute">{row.candidateOperator}</div>
+                    )}
+                    {row.notes && <div className="mt-1 text-xs text-brand">{row.notes}</div>}
+                  </Td>
+                  <Td>
+                    {typeof row.candidateDistanceMeters === 'number'
+                      ? `${row.candidateDistanceMeters}m`
+                      : '—'}
+                  </Td>
+                  <Td>
+                    <BrandStatusBadge status={row.matchStatus} />
+                  </Td>
+                  <Td>
+                    <div className="font-bold text-ink">{row.acceptedBrand ?? '—'}</div>
+                    {row.reviewedBy && (
+                      <div className="mt-1 text-xs text-mute">
+                        {row.reviewedBy} ·{' '}
+                        {row.reviewedAt ? formatDateTime(row.reviewedAt) : '—'}
+                      </div>
+                    )}
+                  </Td>
+                  <Td>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => onDecision(row, 'accept_candidate')}
+                        disabled={!row.candidateBrand && !row.candidateName}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Aceptar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => onDecision(row, 'manual_override')}
+                      >
+                        Manual
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => onDecision(row, 'reject')}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Rechazar
+                      </Button>
+                    </div>
+                  </Td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function MiniMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="text-xs font-black uppercase text-mute">{label}</div>
+      <div className="mt-1 text-xl font-black text-ink">{value}</div>
+    </div>
+  )
+}
+
 function MetricCard({
   label,
   value,
@@ -298,6 +531,22 @@ function StatusBadge({ status }: { status: RunStatus }) {
         : status === 'skipped'
           ? 'bg-amber-50 text-amber-700'
           : 'bg-blue-50 text-blue-700'
+  return (
+    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ${cls}`}>
+      {status}
+    </span>
+  )
+}
+
+function BrandStatusBadge({ status }: { status: BrandAuditRow['matchStatus'] }) {
+  const cls =
+    status === 'accepted' || status === 'manual_override'
+      ? 'bg-green-50 text-green-700'
+      : status === 'review_nearby_not_accepted'
+        ? 'bg-amber-50 text-amber-700'
+        : status === 'rejected'
+          ? 'bg-red-50 text-red-700'
+          : 'bg-slate-100 text-slate-700'
   return (
     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ${cls}`}>
       {status}

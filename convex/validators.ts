@@ -32,6 +32,8 @@ export const runStatusValidator = v.union(
 export const adminAuditActionValidator = v.union(
   v.literal('retry_municipality_prices'),
   v.literal('set_user_admin'),
+  v.literal('scan_station_brands'),
+  v.literal('review_station_brand'),
 )
 
 export const adminAuditStatusValidator = v.union(
