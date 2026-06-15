@@ -31,7 +31,7 @@ export const Route = createFileRoute('/sitemap.xml')({
           runtimeEnv?.VITE_CONVEX_URL ||
           (import.meta.env.VITE_CONVEX_URL as string | undefined)
         const origin = siteOrigin(request)
-        const urls = ['/', '/explorar', '/metricas']
+        const urls = ['/', '/explorar', '/metricas', '/privacidad', '/terminos']
 
         if (convexUrl) {
           const client = new ConvexHttpClient(convexUrl)

@@ -24,7 +24,7 @@ function slugify(value) {
     .replace(/^-+|-+$/g, '')
 }
 
-const STATIC_PATHS = ['/', '/explorar', '/metricas']
+const STATIC_PATHS = ['/', '/explorar', '/metricas', '/privacidad', '/terminos']
 
 async function collectLocationPaths() {
   const client = new ConvexHttpClient(CONVEX_URL)

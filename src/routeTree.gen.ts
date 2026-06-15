@@ -9,10 +9,12 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TerminosRouteImport } from './routes/terminos'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RestablecerRouteImport } from './routes/restablecer'
 import { Route as RegistroRouteImport } from './routes/registro'
 import { Route as RecuperarRouteImport } from './routes/recuperar'
+import { Route as PrivacidadRouteImport } from './routes/privacidad'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as OgDotpngRouteImport } from './routes/og[.]png'
 import { Route as MetricasRouteImport } from './routes/metricas'
@@ -27,6 +29,11 @@ import { Route as AdminIngestionRouteImport } from './routes/admin.ingestion'
 import { Route as EstadoStateSlugMunicipalitySlugRouteImport } from './routes/estado.$stateSlug_.$municipalitySlug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
+const TerminosRoute = TerminosRouteImport.update({
+  id: '/terminos',
+  path: '/terminos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
@@ -45,6 +52,11 @@ const RegistroRoute = RegistroRouteImport.update({
 const RecuperarRoute = RecuperarRouteImport.update({
   id: '/recuperar',
   path: '/recuperar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacidadRoute = PrivacidadRouteImport.update({
+  id: '/privacidad',
+  path: '/privacidad',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PerfilRoute = PerfilRouteImport.update({
@@ -123,10 +135,12 @@ export interface FileRoutesByFullPath {
   '/metricas': typeof MetricasRoute
   '/og.png': typeof OgDotpngRoute
   '/perfil': typeof PerfilRoute
+  '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/restablecer': typeof RestablecerRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terminos': typeof TerminosRoute
   '/admin/ingestion': typeof AdminIngestionRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/estado/$stateSlug': typeof EstadoStateSlugRoute
@@ -142,10 +156,12 @@ export interface FileRoutesByTo {
   '/metricas': typeof MetricasRoute
   '/og.png': typeof OgDotpngRoute
   '/perfil': typeof PerfilRoute
+  '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/restablecer': typeof RestablecerRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terminos': typeof TerminosRoute
   '/admin/ingestion': typeof AdminIngestionRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/estado/$stateSlug': typeof EstadoStateSlugRoute
@@ -162,10 +178,12 @@ export interface FileRoutesById {
   '/metricas': typeof MetricasRoute
   '/og.png': typeof OgDotpngRoute
   '/perfil': typeof PerfilRoute
+  '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/restablecer': typeof RestablecerRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terminos': typeof TerminosRoute
   '/admin/ingestion': typeof AdminIngestionRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/estado/$stateSlug': typeof EstadoStateSlugRoute
@@ -183,10 +201,12 @@ export interface FileRouteTypes {
     | '/metricas'
     | '/og.png'
     | '/perfil'
+    | '/privacidad'
     | '/recuperar'
     | '/registro'
     | '/restablecer'
     | '/sitemap.xml'
+    | '/terminos'
     | '/admin/ingestion'
     | '/estacion/$'
     | '/estado/$stateSlug'
@@ -202,10 +222,12 @@ export interface FileRouteTypes {
     | '/metricas'
     | '/og.png'
     | '/perfil'
+    | '/privacidad'
     | '/recuperar'
     | '/registro'
     | '/restablecer'
     | '/sitemap.xml'
+    | '/terminos'
     | '/admin/ingestion'
     | '/estacion/$'
     | '/estado/$stateSlug'
@@ -221,10 +243,12 @@ export interface FileRouteTypes {
     | '/metricas'
     | '/og.png'
     | '/perfil'
+    | '/privacidad'
     | '/recuperar'
     | '/registro'
     | '/restablecer'
     | '/sitemap.xml'
+    | '/terminos'
     | '/admin/ingestion'
     | '/estacion/$'
     | '/estado/$stateSlug'
@@ -241,10 +265,12 @@ export interface RootRouteChildren {
   MetricasRoute: typeof MetricasRoute
   OgDotpngRoute: typeof OgDotpngRoute
   PerfilRoute: typeof PerfilRoute
+  PrivacidadRoute: typeof PrivacidadRoute
   RecuperarRoute: typeof RecuperarRoute
   RegistroRoute: typeof RegistroRoute
   RestablecerRoute: typeof RestablecerRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  TerminosRoute: typeof TerminosRoute
   AdminIngestionRoute: typeof AdminIngestionRoute
   EstacionSplatRoute: typeof EstacionSplatRoute
   EstadoStateSlugRoute: typeof EstadoStateSlugRoute
@@ -254,6 +280,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terminos': {
+      id: '/terminos'
+      path: '/terminos'
+      fullPath: '/terminos'
+      preLoaderRoute: typeof TerminosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
@@ -280,6 +313,13 @@ declare module '@tanstack/react-router' {
       path: '/recuperar'
       fullPath: '/recuperar'
       preLoaderRoute: typeof RecuperarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacidad': {
+      id: '/privacidad'
+      path: '/privacidad'
+      fullPath: '/privacidad'
+      preLoaderRoute: typeof PrivacidadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/perfil': {
@@ -385,10 +425,12 @@ const rootRouteChildren: RootRouteChildren = {
   MetricasRoute: MetricasRoute,
   OgDotpngRoute: OgDotpngRoute,
   PerfilRoute: PerfilRoute,
+  PrivacidadRoute: PrivacidadRoute,
   RecuperarRoute: RecuperarRoute,
   RegistroRoute: RegistroRoute,
   RestablecerRoute: RestablecerRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  TerminosRoute: TerminosRoute,
   AdminIngestionRoute: AdminIngestionRoute,
   EstacionSplatRoute: EstacionSplatRoute,
   EstadoStateSlugRoute: EstadoStateSlugRoute,

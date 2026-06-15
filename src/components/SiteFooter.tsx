@@ -34,6 +34,20 @@ export function SiteFooter({ className }: Props) {
               Acerca
             </Link>
             <span className="text-white/20">·</span>
+            <Link
+              to="/privacidad"
+              className="text-white/55 underline decoration-white/20 underline-offset-2 hover:text-brand"
+            >
+              Privacidad
+            </Link>
+            <span className="text-white/20">·</span>
+            <Link
+              to="/terminos"
+              className="text-white/55 underline decoration-white/20 underline-offset-2 hover:text-brand"
+            >
+              Términos
+            </Link>
+            <span className="text-white/20">·</span>
             <a
               href="https://www.cne.gob.mx/"
               target="_blank"
@@ -69,6 +83,22 @@ export function SiteFooter({ className }: Props) {
               className="text-white/60 underline decoration-white/20 underline-offset-2 hover:text-brand"
             >
               Acerca
+            </Link>
+            {' '}
+            ·{' '}
+            <Link
+              to="/privacidad"
+              className="text-white/60 underline decoration-white/20 underline-offset-2 hover:text-brand"
+            >
+              Privacidad
+            </Link>
+            {' '}
+            ·{' '}
+            <Link
+              to="/terminos"
+              className="text-white/60 underline decoration-white/20 underline-offset-2 hover:text-brand"
+            >
+              Términos
             </Link>
           </p>
           <a
