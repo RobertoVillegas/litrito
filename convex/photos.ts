@@ -1,11 +1,12 @@
 import { v } from 'convex/values'
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   query,
 } from './_generated/server'
-import { internal } from './_generated/api'
+import { api, internal } from './_generated/api'
 
 const MAPILLARY_GRAPH_URL = 'https://graph.mapillary.com/images'
 // How close a street-level image must be to count as "this station". Forecourt
@@ -14,6 +15,10 @@ const MAPILLARY_MATCH_METERS = 60
 // Re-check coverage at most this often for stations we found nothing for, so a
 // 'none' result doesn't pin us forever as Mapillary's coverage grows.
 const RECHECK_NONE_AFTER_MS = 1000 * 60 * 60 * 24 * 30
+// National photo backfill: small batches with a pause between them so we stay
+// gentle on Mapillary's rate limits. ~8 stations per ~2s ≈ under 1 req/s.
+const PHOTO_BACKFILL_BATCH = 8
+const PHOTO_BACKFILL_DELAY_MS = 2000
 
 const toRad = (d: number) => (d * Math.PI) / 180
 function distanceMeters(
@@ -118,6 +123,58 @@ export const writeStationPhoto = internalMutation({
     } else {
       await ctx.db.insert('stationPhotos', value)
     }
+  },
+})
+
+export const listStationPermitsPage = internalQuery({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    numItems: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query('stations')
+      .paginate({ cursor: args.cursor ?? null, numItems: args.numItems })
+    return {
+      permits: page.page.map((s) => s.permitNumber),
+      continueCursor: page.continueCursor,
+      isDone: page.isDone,
+    }
+  },
+})
+
+// Proactively cache a Mapillary photo for every station, nationwide. Self-
+// reschedules in small batches with a delay between them to respect rate
+// limits, and reuses ensureStationPhoto so already-cached stations are skipped
+// (idempotent; safe to re-run). Pass maxBatches to bound a test run; omit it
+// for the full national pass. Kick off: `bunx convex run photos:backfillStationPhotos '{}'`.
+export const backfillStationPhotos = internalAction({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    maxBatches: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ processed: number; isDone: boolean }> => {
+    if (!process.env.MAPILLARY_TOKEN) return { processed: 0, isDone: true }
+    const page = await ctx.runQuery(internal.photos.listStationPermitsPage, {
+      cursor: args.cursor ?? null,
+      numItems: PHOTO_BACKFILL_BATCH,
+    })
+    for (const permitNumber of page.permits) {
+      await ctx.runAction(api.photos.ensureStationPhoto, { permitNumber })
+    }
+    const remaining =
+      args.maxBatches === undefined ? undefined : args.maxBatches - 1
+    if (!page.isDone && (remaining === undefined || remaining > 0)) {
+      await ctx.scheduler.runAfter(
+        PHOTO_BACKFILL_DELAY_MS,
+        internal.photos.backfillStationPhotos,
+        { cursor: page.continueCursor, maxBatches: remaining },
+      )
+    }
+    return { processed: page.permits.length, isDone: page.isDone }
   },
 })
 
