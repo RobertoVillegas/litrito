@@ -7,6 +7,14 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   signInEmail: vi.fn(),
   signUpEmail: vi.fn(),
+  signInSocial: vi.fn(),
+  isGoogleEnabled: false as boolean | undefined,
+}))
+
+// GoogleSignInButton reads its visibility from a Convex query; stub it so the
+// forms render without a ConvexProvider.
+vi.mock('convex/react', () => ({
+  useQuery: () => mocks.isGoogleEnabled,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -29,7 +37,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('#/lib/auth-client', () => ({
   authClient: {
-    signIn: { email: mocks.signInEmail },
+    signIn: { email: mocks.signInEmail, social: mocks.signInSocial },
     signUp: { email: mocks.signUpEmail },
   },
 }))
@@ -43,6 +51,8 @@ describe('auth forms', () => {
     mocks.navigate.mockReset()
     mocks.signInEmail.mockReset()
     mocks.signUpEmail.mockReset()
+    mocks.signInSocial.mockReset()
+    mocks.isGoogleEnabled = false
   })
 
   it('does not navigate after a rejected sign up response', async () => {
@@ -102,5 +112,25 @@ describe('auth forms', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Crear cuenta' }))
 
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({ to: '/perfil' }))
+  })
+
+  it('hides the Google button when the provider is disabled', () => {
+    mocks.isGoogleEnabled = false
+    render(<SignIn />)
+    expect(screen.queryByRole('button', { name: /Google/ })).toBeNull()
+  })
+
+  it('starts the Google social flow when enabled', () => {
+    mocks.isGoogleEnabled = true
+    mocks.signInSocial.mockResolvedValue({ data: null, error: null })
+
+    render(<SignIn />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Google/ }))
+
+    expect(mocks.signInSocial).toHaveBeenCalledWith({
+      provider: 'google',
+      callbackURL: '/perfil',
+    })
   })
 })
