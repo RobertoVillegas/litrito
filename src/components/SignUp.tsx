@@ -7,7 +7,7 @@ import { emailSchema, fieldError, newPasswordSchema } from '#/lib/forms'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { AuthLayout } from './AuthLayout'
-import { GoogleSignInButton } from './GoogleSignInButton'
+import { SocialSignIn } from './SocialSignIn'
 
 type AuthResult = {
   error?: { message?: string } | null
@@ -50,7 +50,7 @@ export function SignUp() {
         </div>
       }
     >
-      <GoogleSignInButton label="Registrarte con Google" />
+      <SocialSignIn verb="Registrarte" />
       <form
         onSubmit={(e) => {
           e.preventDefault()

@@ -8,13 +8,15 @@ const mocks = vi.hoisted(() => ({
   signInEmail: vi.fn(),
   signUpEmail: vi.fn(),
   signInSocial: vi.fn(),
-  isGoogleEnabled: false as boolean | undefined,
+  socialEnabled: { google: false, facebook: false } as
+    | { google: boolean; facebook: boolean }
+    | undefined,
 }))
 
-// GoogleSignInButton reads its visibility from a Convex query; stub it so the
-// forms render without a ConvexProvider.
+// SocialSignIn reads which providers are enabled from a Convex query; stub it
+// so the forms render without a ConvexProvider.
 vi.mock('convex/react', () => ({
-  useQuery: () => mocks.isGoogleEnabled,
+  useQuery: () => mocks.socialEnabled,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -52,7 +54,7 @@ describe('auth forms', () => {
     mocks.signInEmail.mockReset()
     mocks.signUpEmail.mockReset()
     mocks.signInSocial.mockReset()
-    mocks.isGoogleEnabled = false
+    mocks.socialEnabled = { google: false, facebook: false }
   })
 
   it('does not navigate after a rejected sign up response', async () => {
@@ -114,22 +116,38 @@ describe('auth forms', () => {
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({ to: '/perfil' }))
   })
 
-  it('hides the Google button when the provider is disabled', () => {
-    mocks.isGoogleEnabled = false
+  it('hides social buttons when no provider is enabled', () => {
+    mocks.socialEnabled = { google: false, facebook: false }
     render(<SignIn />)
     expect(screen.queryByRole('button', { name: /Google/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Facebook/ })).toBeNull()
   })
 
   it('starts the Google social flow when enabled', () => {
-    mocks.isGoogleEnabled = true
+    mocks.socialEnabled = { google: true, facebook: false }
     mocks.signInSocial.mockResolvedValue({ data: null, error: null })
 
     render(<SignIn />)
 
+    expect(screen.queryByRole('button', { name: /Facebook/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Google/ }))
 
     expect(mocks.signInSocial).toHaveBeenCalledWith({
       provider: 'google',
+      callbackURL: '/perfil',
+    })
+  })
+
+  it('starts the Facebook social flow when enabled', () => {
+    mocks.socialEnabled = { google: false, facebook: true }
+    mocks.signInSocial.mockResolvedValue({ data: null, error: null })
+
+    render(<SignIn />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Facebook/ }))
+
+    expect(mocks.signInSocial).toHaveBeenCalledWith({
+      provider: 'facebook',
       callbackURL: '/perfil',
     })
   })
