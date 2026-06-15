@@ -161,4 +161,15 @@ export default defineSchema({
   })
     .index('by_user', ['userId'])
     .index('by_user_station', ['userId', 'stationPermitNumber']),
+  // Self-service account deletion requests, held during a grace period before a
+  // daily cron purges the user. authUserId is the Better Auth user `_id` string.
+  accountDeletions: defineTable({
+    authUserId: v.string(),
+    email: v.string(),
+    name: v.optional(v.string()),
+    requestedAt: v.string(),
+    scheduledAt: v.number(), // epoch ms; cron purges once now >= scheduledAt
+  })
+    .index('by_user', ['authUserId'])
+    .index('by_scheduled', ['scheduledAt']),
 })

@@ -57,7 +57,15 @@ function DeleteDataPage() {
           uso. Si quieres que eliminemos esa información, sigue estos pasos.
         </p>
 
-        <h2>Cómo solicitar la eliminación</h2>
+        <h2>Desde tu cuenta (más rápido)</h2>
+        <p>
+          Si puedes iniciar sesión, ve a tu{' '}
+          <Link to="/perfil">perfil</Link>, abre “Opciones avanzadas” y pulsa
+          “Eliminar mi cuenta”. Tendrás 15 días para cancelar volviendo a iniciar
+          sesión antes de que la eliminación sea permanente.
+        </p>
+
+        <h2>Por correo</h2>
         <ol>
           <li>
             Escríbenos a{' '}

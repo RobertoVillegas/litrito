@@ -1,12 +1,14 @@
 import { ClientOnly, createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { lazy, Suspense, useEffect, useMemo } from 'react'
 import Avatar from 'boring-avatars'
-import { LogOut, MapPin, Star } from 'lucide-react'
+import { CalendarClock, LogOut, MapPin, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 import { useFavorites } from '#/lib/useFavorites'
 import { Button } from '#/components/ui/button'
+import { useToast } from '#/components/ui/toast'
+import { DeleteAccount } from '../components/DeleteAccount'
 import { MapSkeleton } from '../components/Skeleton'
 import { StationTable, type StationRow } from '../components/StationTable'
 import { boundsOfLatLngs } from '../components/mapGeo'
@@ -55,6 +57,22 @@ function Profile() {
   }, [session.isPending, user, navigate])
 
   const { favoriteSet, toggleFavorite } = useFavorites()
+  const toast = useToast()
+  const deletion = useQuery(api.accountDeletion.myDeletion, {})
+  const cancelDeletion = useMutation(api.accountDeletion.cancel)
+
+  async function handleCancelDeletion() {
+    try {
+      await cancelDeletion({})
+      toast.add({
+        title: 'Eliminación cancelada',
+        description: 'Tu cuenta y tus datos se conservan.',
+        type: 'success',
+      })
+    } catch {
+      toast.add({ title: 'No se pudo cancelar', type: 'error' })
+    }
+  }
 
   const permitNumbers = useMemo(() => [...favoriteSet], [favoriteSet])
   const favoriteRows = useQuery(
@@ -115,32 +133,34 @@ function Profile() {
             <div>
               <div className="eyebrow text-white/50">Tu perfil</div>
               <h1 className="font-display text-3xl text-white sm:text-4xl">
-                {user ? (user.name ?? user.email) : 'Invitado'}
+                {user.name ?? user.email}
               </h1>
-              {user?.email && (
+              {user.email && (
                 <div className="text-sm text-white/60">{user.email}</div>
               )}
             </div>
           </div>
-          {user ? (
-            <Button variant="outline-white" onClick={() => void authClient.signOut()}>
-              <LogOut className="h-4 w-4" />
-              Cerrar sesión
-            </Button>
-          ) : (
-            <Button render={<Link to="/entrar" />}>Entrar</Button>
-          )}
+          <Button variant="outline-white" onClick={() => void authClient.signOut()}>
+            <LogOut className="h-4 w-4" />
+            Cerrar sesión
+          </Button>
         </div>
       </section>
 
       <section className="mx-auto w-full max-w-6xl space-y-4 px-4 py-8 sm:px-6 lg:px-8">
-        {!user && permitNumbers.length > 0 && (
-          <div className="rounded-[6px] border border-line border-l-4 border-l-brand bg-canvas-soft px-4 py-3 text-sm font-semibold text-ink">
-            Tus favoritas están guardadas en este navegador.{' '}
-            <Link to="/entrar" className="text-brand hover:text-brand-dark">
-              Inicia sesión
-            </Link>{' '}
-            para sincronizarlas.
+        {deletion && (
+          <div className="rounded-[6px] border border-line border-l-4 border-l-brand bg-canvas-soft px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-start gap-2 text-sm font-semibold text-ink">
+                <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                <span>
+                  Tu cuenta se eliminará el {formatDeletionDate(deletion.scheduledAt)}.
+                </span>
+              </div>
+              <Button variant="outline-red" size="sm" onClick={() => void handleCancelDeletion()}>
+                Cancelar eliminación
+              </Button>
+            </div>
           </div>
         )}
 
@@ -199,7 +219,15 @@ function Profile() {
             />
           </>
         )}
+
+        {!deletion && <DeleteAccount email={user.email} />}
       </section>
     </main>
+  )
+}
+
+function formatDeletionDate(scheduledAt: number): string {
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'long' }).format(
+    new Date(scheduledAt),
   )
 }

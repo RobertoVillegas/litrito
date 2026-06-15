@@ -52,4 +52,11 @@ crons.daily(
   {},
 )
 
+crons.daily(
+  'purge-scheduled-account-deletions',
+  { hourUTC: 9, minuteUTC: 0 },
+  internal.accountDeletion.purgeDue,
+  {},
+)
+
 export default crons

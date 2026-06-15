@@ -8,13 +8,16 @@
  * @module
  */
 
+import type * as accountDeletion from "../accountDeletion.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as email_config from "../email/config.js";
+import type * as email_sendAccountDeletionEmail from "../email/sendAccountDeletionEmail.js";
 import type * as email_sendPasswordResetEmail from "../email/sendPasswordResetEmail.js";
 import type * as email_smtp from "../email/smtp.js";
+import type * as email_templates_accountDeletion from "../email/templates/accountDeletion.js";
 import type * as email_templates_passwordReset from "../email/templates/passwordReset.js";
 import type * as email_templates_theme from "../email/templates/theme.js";
 import type * as favorites from "../favorites.js";
@@ -34,13 +37,16 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountDeletion: typeof accountDeletion;
   admin: typeof admin;
   auth: typeof auth;
   catalog: typeof catalog;
   crons: typeof crons;
   "email/config": typeof email_config;
+  "email/sendAccountDeletionEmail": typeof email_sendAccountDeletionEmail;
   "email/sendPasswordResetEmail": typeof email_sendPasswordResetEmail;
   "email/smtp": typeof email_smtp;
+  "email/templates/accountDeletion": typeof email_templates_accountDeletion;
   "email/templates/passwordReset": typeof email_templates_passwordReset;
   "email/templates/theme": typeof email_templates_theme;
   favorites: typeof favorites;
