@@ -102,9 +102,9 @@ function buildIcon({
   return L.divIcon({
     className: 'litrito-marker',
     html: `<div style="background:${color}" class="litrito-marker__pin${dimClass}"><span>${label}</span></div>`,
-    iconSize: [44, 28],
-    iconAnchor: [22, 14],
-    popupAnchor: [0, -14],
+    iconSize: [60, 30],
+    iconAnchor: [30, 15],
+    popupAnchor: [0, -15],
   })
 }
 
