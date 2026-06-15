@@ -1,6 +1,6 @@
 import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { ArrowRight, Fuel, LocateFixed, MapPin, Navigation } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { RouteErrorFallback } from '../components/RouteError'
@@ -114,15 +114,27 @@ function Home() {
   const seoFilterOptions =
     filterOptions ?? (loaderData.filterOptions as FilterOptionsResult | undefined)
 
+  // Keep the last loaded results so the map doesn't unmount (disappear) while a
+  // new query is in flight — Convex returns undefined during refetch when args
+  // (fuel/radius/location) change. The map shows the previous data until the
+  // fresh data arrives, like the explore view.
+  const [stickyRows, setStickyRows] = useState<NearbyBestRow[] | undefined>(
+    undefined,
+  )
+  useEffect(() => {
+    if (rows !== undefined) setStickyRows(rows)
+  }, [rows])
+  const displayRows = rows ?? stickyRows
+
   const rankedRows = useMemo(
     () =>
-      rows?.map((row, index) => ({
+      displayRows?.map((row, index) => ({
         station: row.station,
         prices: { [fuelType]: { price: row.price } },
         highlightedPrice: row.price,
         rank: index + 1,
       })) ?? [],
-    [rows, fuelType],
+    [displayRows, fuelType],
   )
 
   const hasLocation = Boolean(userLoc.location)
@@ -245,7 +257,7 @@ function Home() {
 
       {dialogElement}
 
-      {hasLocation && rows && rows.length > 0 && (
+      {hasLocation && displayRows && displayRows.length > 0 && (
         <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="mb-4 grid gap-3 sm:flex sm:items-end sm:justify-between sm:gap-4">
             <div>
