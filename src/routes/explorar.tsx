@@ -386,6 +386,12 @@ function Explore() {
     mapBounds && !showFavoritesOnly
       ? {
           fuelTypes: filters.fuelTypes.length > 0 ? filters.fuelTypes : undefined,
+          stateExternalIds:
+            filters.stateIds.length > 0 ? filters.stateIds : undefined,
+          municipalityExternalIds:
+            filters.municipalityIds.length > 0
+              ? filters.municipalityIds
+              : undefined,
           swLat: mapBounds.swLat,
           swLon: mapBounds.swLon,
           neLat: mapBounds.neLat,

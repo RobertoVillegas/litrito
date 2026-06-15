@@ -76,6 +76,34 @@ function parseOffset(cursor: string | null | undefined): number {
   return Number.isFinite(value) && value >= 0 ? value : 0
 }
 
+function cleanExternalId(value: string | null | undefined): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      return typeof parsed === 'string' && parsed.trim()
+        ? parsed.trim()
+        : undefined
+    } catch {
+      return trimmed.slice(1, -1) || undefined
+    }
+  }
+  return trimmed
+}
+
+function cleanMunicipalityExternalId(
+  value: string | null | undefined,
+): string | undefined {
+  const clean = cleanExternalId(value)
+  if (!clean) return undefined
+  return clean.includes('|') ? clean.split('|')[1] : clean
+}
+
 function paginateArray<T>(
   rows: T[],
   cursor: string | null,
@@ -425,11 +453,11 @@ export const areaBounds = query({
     municipalityExternalId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { stateExternalId } = args
+    const stateExternalId = cleanExternalId(args.stateExternalId)
     if (!stateExternalId) return null
-    const municipalityExternalId = args.municipalityExternalId?.includes('|')
-      ? args.municipalityExternalId.split('|')[1]
-      : args.municipalityExternalId
+    const municipalityExternalId = cleanMunicipalityExternalId(
+      args.municipalityExternalId,
+    )
 
     const cachedKey = municipalityExternalId
       ? `${stateExternalId}|${municipalityExternalId}`
@@ -884,8 +912,14 @@ export const listStations = query({
   },
   handler: async (ctx, args) => {
     const term = args.search?.trim() ?? ''
-    const stateIds = args.stateExternalIds ?? []
-    const muniIds = args.municipalityExternalIds ?? []
+    const stateIds = (args.stateExternalIds ?? []).flatMap((id) => {
+      const clean = cleanExternalId(id)
+      return clean ? [clean] : []
+    })
+    const muniIds = (args.municipalityExternalIds ?? []).flatMap((id) => {
+      const clean = cleanExternalId(id)
+      return clean ? [clean] : []
+    })
     const fuelTypes = args.fuelTypes ?? []
 
     // The UI sends municipality ids as "stateExternalId|municipalityExternalId"
@@ -1050,6 +1084,8 @@ export const listStations = query({
 export const listStationsInBounds = query({
   args: {
     fuelTypes: v.optional(v.array(fuelType)),
+    stateExternalIds: v.optional(v.array(v.string())),
+    municipalityExternalIds: v.optional(v.array(v.string())),
     swLat: v.number(),
     swLon: v.number(),
     neLat: v.number(),
@@ -1068,6 +1104,18 @@ export const listStationsInBounds = query({
     }
 
     const fuelTypes = args.fuelTypes ?? []
+    const stateIds = (args.stateExternalIds ?? []).flatMap((id) => {
+      const clean = cleanExternalId(id)
+      return clean ? [clean] : []
+    })
+    const parsedMunis = (args.municipalityExternalIds ?? []).flatMap((id) => {
+      const clean = cleanExternalId(id)
+      if (!clean) return []
+      const sep = clean.indexOf('|')
+      return sep >= 0
+        ? [{ state: clean.slice(0, sep), muni: clean.slice(sep + 1) }]
+        : [{ state: null as string | null, muni: clean }]
+    })
 
     // Stream the by_lat index and stop as soon as we have enough so a national
     // view doesn't read all 8k+ stations at once. We must NOT use `.paginate()`
@@ -1079,31 +1127,47 @@ export const listStationsInBounds = query({
     // the self-hosted op budget once the catalog filled up.
     const selected: Doc<'stations'>[] = []
     let truncated = false
-    let scanned = 0
+    const selectionScoped =
+      stateIds.length > 0 || parsedMunis.length > 0
+        ? await loadStationsForSelections(ctx, stateIds, parsedMunis)
+        : null
 
-    for await (const station of ctx.db
-      .query('stations')
-      .withIndex('by_lat', (q) =>
-        q.gte('latitude', swLat).lte('latitude', neLat),
-      )) {
-      scanned++
+    const considerStation = (station: Doc<'stations'>) => {
       const lat = station.latitude
       const lon = station.longitude
       if (
         typeof lat === 'number' &&
         typeof lon === 'number' &&
+        stationMatchesSelections(station, stateIds, parsedMunis) &&
         lon >= swLon &&
         lon <= neLon
       ) {
         selected.push(station)
         if (selected.length >= limit) {
           truncated = true
-          break
+          return false
         }
       }
-      if (scanned >= MAX_STATION_SCAN) {
-        truncated = true
-        break
+      return true
+    }
+
+    if (selectionScoped) {
+      for (const station of selectionScoped) {
+        if (!considerStation(station)) break
+      }
+    } else {
+      let scanned = 0
+      for await (const station of ctx.db
+        .query('stations')
+        .withIndex('by_lat', (q) =>
+          q.gte('latitude', swLat).lte('latitude', neLat),
+        )) {
+        scanned++
+        if (!considerStation(station)) break
+        if (scanned >= MAX_STATION_SCAN) {
+          truncated = true
+          break
+        }
       }
     }
 
