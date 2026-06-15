@@ -1,0 +1,219 @@
+import { v } from 'convex/values'
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  query,
+} from './_generated/server'
+import { internal } from './_generated/api'
+
+const MAPILLARY_GRAPH_URL = 'https://graph.mapillary.com/images'
+// How close a street-level image must be to count as "this station". Forecourt
+// imagery on the road in front of the station sits within a few tens of meters.
+const MAPILLARY_MATCH_METERS = 60
+// Re-check coverage at most this often for stations we found nothing for, so a
+// 'none' result doesn't pin us forever as Mapillary's coverage grows.
+const RECHECK_NONE_AFTER_MS = 1000 * 60 * 60 * 24 * 30
+
+const toRad = (d: number) => (d * Math.PI) / 180
+function distanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371000
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+// Public read: the cached photo state for a station. Returns 'unchecked' when we
+// have not looked yet (the client then calls `ensureStationPhoto`), 'none' when
+// Mapillary has no nearby coverage, or 'found' with a resolved image URL.
+export const getStationPhoto = query({
+  args: { permitNumber: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query('stationPhotos')
+      .withIndex('by_station', (q) =>
+        q.eq('stationPermitNumber', args.permitNumber),
+      )
+      .unique()
+
+    if (!row) return { status: 'unchecked' as const }
+    if (row.status === 'none' || !row.storageId) {
+      return { status: 'none' as const }
+    }
+    return {
+      status: 'found' as const,
+      source: row.source,
+      url: await ctx.storage.getUrl(row.storageId),
+      attribution: row.attribution ?? null,
+      capturedAt: row.capturedAt ?? null,
+    }
+  },
+})
+
+export const photoFetchContext = internalQuery({
+  args: { permitNumber: v.string() },
+  handler: async (ctx, args) => {
+    const station = await ctx.db
+      .query('stations')
+      .withIndex('by_permit', (q) =>
+        q.eq('permitNumber', args.permitNumber),
+      )
+      .unique()
+    const existing = await ctx.db
+      .query('stationPhotos')
+      .withIndex('by_station', (q) =>
+        q.eq('stationPermitNumber', args.permitNumber),
+      )
+      .unique()
+    return {
+      latitude: station?.latitude ?? null,
+      longitude: station?.longitude ?? null,
+      existing: existing
+        ? { status: existing.status, checkedAt: existing.checkedAt }
+        : null,
+    }
+  },
+})
+
+export const writeStationPhoto = internalMutation({
+  args: {
+    permitNumber: v.string(),
+    status: v.union(v.literal('found'), v.literal('none')),
+    storageId: v.optional(v.id('_storage')),
+    mapillaryImageId: v.optional(v.string()),
+    attribution: v.optional(v.string()),
+    capturedAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query('stationPhotos')
+      .withIndex('by_station', (q) =>
+        q.eq('stationPermitNumber', args.permitNumber),
+      )
+      .unique()
+    const value = {
+      stationPermitNumber: args.permitNumber,
+      source: 'mapillary' as const,
+      status: args.status,
+      storageId: args.storageId,
+      mapillaryImageId: args.mapillaryImageId,
+      attribution: args.attribution,
+      capturedAt: args.capturedAt,
+      checkedAt: new Date().toISOString(),
+    }
+    if (existing) {
+      // Drop a stale cached image when replacing it so storage doesn't leak.
+      if (existing.storageId && existing.storageId !== args.storageId) {
+        await ctx.storage.delete(existing.storageId)
+      }
+      await ctx.db.patch(existing._id, value)
+    } else {
+      await ctx.db.insert('stationPhotos', value)
+    }
+  },
+})
+
+type MapillaryImage = {
+  id: string
+  thumb_1024_url?: string
+  captured_at?: number
+  geometry?: { coordinates?: [number, number] }
+}
+
+// Lazily resolve and cache one Mapillary photo for a station. Idempotent and
+// safe to call on every detail view: it no-ops when a photo is already cached
+// (and only re-checks 'none' results after RECHECK_NONE_AFTER_MS).
+export const ensureStationPhoto = action({
+  args: { permitNumber: v.string() },
+  handler: async (ctx, args): Promise<{ status: 'found' | 'none' | 'skipped' }> => {
+    const token = process.env.MAPILLARY_TOKEN
+    if (!token) return { status: 'skipped' }
+
+    const context = await ctx.runQuery(internal.photos.photoFetchContext, {
+      permitNumber: args.permitNumber,
+    })
+    if (context.existing) {
+      const fresh =
+        context.existing.status === 'found' ||
+        Date.now() - Date.parse(context.existing.checkedAt) <
+          RECHECK_NONE_AFTER_MS
+      if (fresh) return { status: 'skipped' }
+    }
+    const { latitude, longitude } = context
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      await ctx.runMutation(internal.photos.writeStationPhoto, {
+        permitNumber: args.permitNumber,
+        status: 'none',
+      })
+      return { status: 'none' }
+    }
+
+    const latPad = MAPILLARY_MATCH_METERS / 111_320
+    const lonPad =
+      MAPILLARY_MATCH_METERS /
+      (111_320 * Math.max(Math.cos(toRad(latitude)), 0.01))
+    const bbox = [
+      longitude - lonPad,
+      latitude - latPad,
+      longitude + lonPad,
+      latitude + latPad,
+    ].join(',')
+
+    const url = new URL(MAPILLARY_GRAPH_URL)
+    url.searchParams.set('access_token', token)
+    url.searchParams.set('fields', 'id,thumb_1024_url,captured_at,geometry')
+    url.searchParams.set('bbox', bbox)
+    url.searchParams.set('limit', '25')
+
+    let nearest: { image: MapillaryImage; distance: number } | null = null
+    try {
+      const res = await fetch(url)
+      if (!res.ok) return { status: 'skipped' }
+      const data = (await res.json()) as { data?: MapillaryImage[] }
+      for (const image of data.data ?? []) {
+        const coords = image.geometry?.coordinates
+        if (!coords || !image.thumb_1024_url) continue
+        const distance = distanceMeters(latitude, longitude, coords[1], coords[0])
+        if (distance > MAPILLARY_MATCH_METERS) continue
+        if (!nearest || distance < nearest.distance) nearest = { image, distance }
+      }
+    } catch {
+      return { status: 'skipped' }
+    }
+
+    if (!nearest) {
+      await ctx.runMutation(internal.photos.writeStationPhoto, {
+        permitNumber: args.permitNumber,
+        status: 'none',
+      })
+      return { status: 'none' }
+    }
+
+    try {
+      const imageRes = await fetch(nearest.image.thumb_1024_url as string)
+      if (!imageRes.ok) return { status: 'skipped' }
+      const storageId = await ctx.storage.store(await imageRes.blob())
+      await ctx.runMutation(internal.photos.writeStationPhoto, {
+        permitNumber: args.permitNumber,
+        status: 'found',
+        storageId,
+        mapillaryImageId: nearest.image.id,
+        attribution: '© contributors · Mapillary',
+        capturedAt: nearest.image.captured_at
+          ? new Date(nearest.image.captured_at).toISOString()
+          : undefined,
+      })
+      return { status: 'found' }
+    } catch {
+      return { status: 'skipped' }
+    }
+  },
+})

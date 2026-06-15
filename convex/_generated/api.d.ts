@@ -27,6 +27,7 @@ import type * as ingestion from "../ingestion.js";
 import type * as locationBounds from "../locationBounds.js";
 import type * as metrics from "../metrics.js";
 import type * as normalization from "../normalization.js";
+import type * as photos from "../photos.js";
 import type * as prices from "../prices.js";
 import type * as stations from "../stations.js";
 import type * as validators from "../validators.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   locationBounds: typeof locationBounds;
   metrics: typeof metrics;
   normalization: typeof normalization;
+  photos: typeof photos;
   prices: typeof prices;
   stations: typeof stations;
   validators: typeof validators;

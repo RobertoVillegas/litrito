@@ -21,6 +21,7 @@ import { Button } from '#/components/ui/button'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
+import { StationPhoto } from '../components/StationPhoto'
 import { AnimatedPrice } from '../components/AnimatedNumber'
 import { ChartSkeleton, DarkSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
@@ -229,6 +230,7 @@ function StationDetail() {
           <p className="mt-3 text-xs font-semibold tracking-wide text-white/40">
             Actualizado {formatDate(station.lastSeenAt, true)}
           </p>
+          <StationPhoto permitNumber={permitNumber} stationName={station.name} />
           <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
             {directionsHref && (
               <Button
