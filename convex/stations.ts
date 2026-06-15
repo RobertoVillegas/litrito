@@ -425,8 +425,27 @@ export const areaBounds = query({
     municipalityExternalId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { stateExternalId, municipalityExternalId } = args
+    const { stateExternalId } = args
     if (!stateExternalId) return null
+    const municipalityExternalId = args.municipalityExternalId?.includes('|')
+      ? args.municipalityExternalId.split('|')[1]
+      : args.municipalityExternalId
+
+    const cachedKey = municipalityExternalId
+      ? `${stateExternalId}|${municipalityExternalId}`
+      : stateExternalId
+    const cached = await ctx.db
+      .query('locationBounds')
+      .withIndex('by_key', (q) => q.eq('key', cachedKey))
+      .unique()
+    if (cached) {
+      return {
+        swLat: cached.swLat,
+        swLon: cached.swLon,
+        neLat: cached.neLat,
+        neLon: cached.neLon,
+      }
+    }
 
     const rows = municipalityExternalId
       ? await ctx.db

@@ -22,6 +22,19 @@ export default defineSchema({
   })
     .index('by_external_id', ['stateExternalId', 'externalId'])
     .index('by_state', ['stateExternalId']),
+  locationBounds: defineTable({
+    key: v.string(),
+    stateExternalId: v.string(),
+    municipalityExternalId: v.optional(v.string()),
+    swLat: v.number(),
+    swLon: v.number(),
+    neLat: v.number(),
+    neLon: v.number(),
+    source: v.string(),
+    updatedAt: v.string(),
+  })
+    .index('by_key', ['key'])
+    .index('by_state', ['stateExternalId']),
   stations: defineTable({
     placeId: v.optional(v.string()),
     permitNumber: v.string(),
