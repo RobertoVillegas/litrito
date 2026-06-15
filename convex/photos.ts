@@ -180,7 +180,7 @@ export const backfillStationPhotos = internalAction({
 
 type MapillaryImage = {
   id: string
-  thumb_1024_url?: string
+  thumb_512_url?: string
   captured_at?: number
   geometry?: { coordinates?: [number, number] }
 }
@@ -226,7 +226,7 @@ export const ensureStationPhoto = action({
 
     const url = new URL(MAPILLARY_GRAPH_URL)
     url.searchParams.set('access_token', token)
-    url.searchParams.set('fields', 'id,thumb_1024_url,captured_at,geometry')
+    url.searchParams.set('fields', 'id,thumb_512_url,captured_at,geometry')
     url.searchParams.set('bbox', bbox)
     url.searchParams.set('limit', '25')
 
@@ -237,7 +237,7 @@ export const ensureStationPhoto = action({
       const data = (await res.json()) as { data?: MapillaryImage[] }
       for (const image of data.data ?? []) {
         const coords = image.geometry?.coordinates
-        if (!coords || !image.thumb_1024_url) continue
+        if (!coords || !image.thumb_512_url) continue
         const distance = distanceMeters(latitude, longitude, coords[1], coords[0])
         if (distance > MAPILLARY_MATCH_METERS) continue
         if (!nearest || distance < nearest.distance) nearest = { image, distance }
@@ -255,7 +255,7 @@ export const ensureStationPhoto = action({
     }
 
     try {
-      const imageRes = await fetch(nearest.image.thumb_1024_url as string)
+      const imageRes = await fetch(nearest.image.thumb_512_url as string)
       if (!imageRes.ok) return { status: 'skipped' }
       const storageId = await ctx.storage.store(await imageRes.blob())
       await ctx.runMutation(internal.photos.writeStationPhoto, {
