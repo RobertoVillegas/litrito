@@ -1,6 +1,6 @@
-import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
-import { lazy, Suspense, useMemo } from 'react'
+import { lazy, Suspense, useEffect, useMemo } from 'react'
 import Avatar from 'boring-avatars'
 import { LogOut, MapPin, Star } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
@@ -42,8 +42,18 @@ type FavoriteRow = {
 }
 
 function Profile() {
+  const navigate = useNavigate()
   const session = authClient.useSession()
   const user = session?.data?.user ?? null
+
+  // /perfil requires a session. Once the session resolves with no user (direct
+  // visit or right after sign-out), send them to sign in.
+  useEffect(() => {
+    if (!session.isPending && !user) {
+      void navigate({ to: '/entrar', replace: true })
+    }
+  }, [session.isPending, user, navigate])
+
   const { favoriteSet, toggleFavorite } = useFavorites()
 
   const permitNumbers = useMemo(() => [...favoriteSet], [favoriteSet])
@@ -84,6 +94,12 @@ function Profile() {
     const b = boundsOfLatLngs(mappableRows.map((r) => r.station))
     return b ? { key: `fav:${mappableRows.length}`, type: 'bounds', bounds: b } : null
   }, [mappableRows])
+
+  // Hold an empty shell while the session resolves or the redirect runs, so the
+  // signed-out state never renders here.
+  if (session.isPending || !user) {
+    return <main className="min-h-screen" />
+  }
 
   return (
     <main className="min-h-screen">

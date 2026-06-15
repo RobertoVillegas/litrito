@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 
@@ -96,10 +96,15 @@ export type ToggleResult = { favorited: boolean; message: string }
 export function useFavorites() {
   const session = authClient.useSession()
   const sessionUser = session?.data?.user ?? null
+  // Gate the remote query on Convex's own auth state, not just the Better Auth
+  // session. During sign-out the session can linger for a tick after Convex has
+  // already dropped the token, which would otherwise fire favorites.list without
+  // auth and throw. isAuthenticated flips in lockstep with the token.
+  const { isAuthenticated } = useConvexAuth()
   const localFavorites = useLocalFavorites()
   const hydrated = useIsHydrated()
   const syncedUserIdRef = useRef<string | null>(null)
-  const remoteQuery = useQuery(api.favorites.list, sessionUser ? {} : 'skip')
+  const remoteQuery = useQuery(api.favorites.list, isAuthenticated ? {} : 'skip')
   const remoteFavorites = useMemo(() => remoteQuery ?? [], [remoteQuery])
   const setFavorite = useMutation(api.favorites.set)
 
@@ -111,13 +116,15 @@ export function useFavorites() {
   // Favorite state is knowable once the browser store is loaded and, for signed-in
   // users, the remote list has resolved. Consumers gate UI on this to avoid a
   // wrong-state flash.
-  const ready = hydrated && (sessionUser ? remoteQuery !== undefined : true)
+  const ready = hydrated && (isAuthenticated ? remoteQuery !== undefined : true)
 
   // On sign-in, push any browser-only favorites up to the account once.
   useEffect(() => {
     const userId = sessionUser?.id ?? null
-    if (!userId) {
-      syncedUserIdRef.current = null
+    // Wait for the Convex token too, or the setFavorite mutations below would
+    // run unauthenticated and fail.
+    if (!userId || !isAuthenticated) {
+      if (!userId) syncedUserIdRef.current = null
       return
     }
     if (syncedUserIdRef.current === userId) return
@@ -134,7 +141,7 @@ export function useFavorites() {
         syncedUserIdRef.current = userId
       })
       .catch(() => undefined)
-  }, [remoteFavorites, localFavorites, sessionUser?.id, setFavorite])
+  }, [remoteFavorites, localFavorites, sessionUser?.id, isAuthenticated, setFavorite])
 
   async function toggleFavorite(permitNumber: string): Promise<ToggleResult> {
     const favorited = !favoriteSet.has(permitNumber)
