@@ -37,20 +37,13 @@ const DISTANCE_SCAN_CAP = 4000
 
 // The home "Top 10" ranks by price among the stations nearest the user. We pull
 // the closest N (S2-ordered) within the radius and pick the cheapest among
-// them. N is derived from the user's selected radius rather than fixed: station
-// counts grow with the radius squared, so a small radius needs few candidates
-// (lighter, faster query) while a larger one needs more to surface a cheaper
-// station a worthwhile drive away (a few km is worth it; 50km is not). It clamps
-// to a ceiling that keeps per-query reads under the self-hosted system-op limit
-// — beyond it the extra stations are too far to matter in a city — and the
-// geo query stops at whichever comes first, this cap or the radius.
-const MAX_NEARBY_CANDIDATES = 256
-const MIN_NEARBY_CANDIDATES = 48
-
-function nearbyCandidateLimit(maxDistanceKm: number): number {
-  const byArea = Math.round(MAX_NEARBY_CANDIDATES * (maxDistanceKm / 10) ** 2)
-  return Math.min(Math.max(byArea, MIN_NEARBY_CANDIDATES), MAX_NEARBY_CANDIDATES)
-}
+// them. N is fixed: the selected radius already scales the result via
+// maxDistance — a small radius is distance-bound (every station within it, up
+// to N), while a large radius is cap-bound (the N nearest, so far-away stations
+// that don't matter in a city are ignored). 256 covers a dense-city radius and
+// is the ceiling that keeps per-query reads under the self-hosted system-op
+// limit; the geo query stops at whichever comes first, this cap or the radius.
+const NEARBY_CANDIDATE_LIMIT = 256
 
 // Cap on stations read to compute a state/municipality bounding box for map
 // framing. States top out around ~1500 docs, so this covers the whole catalog;
@@ -565,7 +558,7 @@ async function loadStationsWithinRadius(
       latitude: userLocation.latitude,
       longitude: userLocation.longitude,
     },
-    limit: nearbyCandidateLimit(maxDistanceKm),
+    limit: NEARBY_CANDIDATE_LIMIT,
     maxDistance: maxDistanceKm * 1000,
   })
 
