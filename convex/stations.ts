@@ -671,6 +671,67 @@ export const backfillLatBuckets = internalMutation({
   },
 })
 
+// Distinct enriched brands with station counts, for the brand filter UI.
+export const listBrands = query({
+  args: {},
+  handler: async (ctx) => {
+    const counts = new Map<string, number>()
+    for await (const row of ctx.db.query('stationEnrichment').withIndex('by_brand')) {
+      if (row.brand) counts.set(row.brand, (counts.get(row.brand) ?? 0) + 1)
+    }
+    return [...counts.entries()]
+      .map(([brand, count]) => ({ brand, count }))
+      .sort((a, b) => b.count - a.count || a.brand.localeCompare(b.brand))
+  },
+})
+
+// Stations of a given enriched brand, paginated via the by_brand index on
+// stationEnrichment. Hydrates CNE station rows + prices and re-attaches the
+// enrichment so the list shows the recognizable name.
+export const listStationsByBrand = query({
+  args: {
+    brand: v.string(),
+    fuelTypes: v.optional(v.array(fuelType)),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const fuelTypes = args.fuelTypes ?? []
+    const page = await ctx.db
+      .query('stationEnrichment')
+      .withIndex('by_brand', (q) => q.eq('brand', args.brand))
+      .paginate(args.paginationOpts)
+
+    const stations = (
+      await Promise.all(
+        page.page.map((e) =>
+          ctx.db
+            .query('stations')
+            .withIndex('by_permit', (q) =>
+              q.eq('permitNumber', e.stationPermitNumber),
+            )
+            .unique(),
+        ),
+      )
+    ).filter((s): s is Doc<'stations'> => s !== null)
+
+    const rows = filterRowsByFuel(
+      await hydrateStationRows(ctx, stations, fuelTypes),
+      fuelTypes,
+    )
+    const enrichmentMap = await loadEnrichment(
+      ctx,
+      rows.map((r) => r.station.permitNumber),
+    )
+    return {
+      ...page,
+      page: rows.map((r) => ({
+        ...r,
+        enrichment: enrichmentMap.get(r.station.permitNumber) ?? null,
+      })),
+    }
+  },
+})
+
 export const bestNearbyStations = query({
   args: {
     fuelType,
