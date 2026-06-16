@@ -21,6 +21,7 @@ import type * as email_smtp from "../email/smtp.js";
 import type * as email_templates_accountDeletion from "../email/templates/accountDeletion.js";
 import type * as email_templates_passwordReset from "../email/templates/passwordReset.js";
 import type * as email_templates_theme from "../email/templates/theme.js";
+import type * as enrichment from "../enrichment.js";
 import type * as favorites from "../favorites.js";
 import type * as geocells from "../geocells.js";
 import type * as http from "../http.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "email/templates/accountDeletion": typeof email_templates_accountDeletion;
   "email/templates/passwordReset": typeof email_templates_passwordReset;
   "email/templates/theme": typeof email_templates_theme;
+  enrichment: typeof enrichment;
   favorites: typeof favorites;
   geocells: typeof geocells;
   http: typeof http;

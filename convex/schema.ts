@@ -228,4 +228,28 @@ export default defineSchema({
     capturedAt: v.optional(v.string()),
     checkedAt: v.string(),
   }).index('by_station', ['stationPermitNumber']),
+  // Brand / display-name enrichment from EXTERNAL sources (Overture, Foursquare,
+  // OSM, manual). Kept entirely separate from the CNE station record — it never
+  // overwrites stations.name (the CNE razón social, the source of truth). Each
+  // row documents where the value came from (source + dataset release + raw POI
+  // id/name) and how it was matched (distance) for full traceability.
+  stationEnrichment: defineTable({
+    stationPermitNumber: v.string(),
+    brand: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    source: v.union(
+      v.literal('overture'),
+      v.literal('foursquare'),
+      v.literal('osm'),
+      v.literal('legal_name'),
+      v.literal('manual'),
+    ),
+    sourceRelease: v.optional(v.string()),
+    sourceId: v.optional(v.string()),
+    sourceName: v.optional(v.string()),
+    matchDistanceMeters: v.optional(v.number()),
+    enrichedAt: v.string(),
+  })
+    .index('by_station', ['stationPermitNumber'])
+    .index('by_brand', ['brand']),
 })
