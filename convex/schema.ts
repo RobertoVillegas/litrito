@@ -46,6 +46,9 @@ export default defineSchema({
     municipalityName: v.optional(v.string()),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
+    // Coarse latitude bucket (floor(lat/0.1)) for the 2D nearby search; paired
+    // with longitude so a radius query reads only the cells around the user.
+    latBucket: v.optional(v.number()),
     source: v.literal('CNE'),
     firstSeenAt: v.string(),
     lastSeenAt: v.string(),
@@ -55,6 +58,7 @@ export default defineSchema({
     .index('by_state', ['stateExternalId'])
     .index('by_name', ['name'])
     .index('by_lat', ['latitude'])
+    .index('by_lat_lon', ['latBucket', 'longitude'])
     .searchIndex('search_station', {
       searchField: 'name',
       filterFields: ['stateExternalId', 'municipalityExternalId'],

@@ -9,6 +9,7 @@ import {
 import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
+import { latBucketFor } from './geocells'
 import { fuelTypeValidator, sortModeValidator } from './validators'
 
 const fuelType = fuelTypeValidator
@@ -34,14 +35,6 @@ const MAX_STATION_SCAN = 4000
 // nearest stations fall inside this latitude-centered window.
 const DISTANCE_SCAN_CAP = 4000
 
-// The home "Top 10" reads stations inside the selected radius from the by_lat
-// index, centred on the user. We tried the S2 geospatial component here, but its
-// nearest() traversal costs ~2.5s on the self-hosted backend (vs ~tens of ms for
-// a raw index scan) and tripped the system-op limit under load. This cap bounds
-// how many band rows we read; it is split half north / half south of the user's
-// latitude so a dense band can't drop the user's own nearby stations (the
-// original silent-drop bug) the way a one-directional scan did.
-const NEARBY_SCAN_CAP = 1200
 // Of the stations inside the radius, only the closest this-many get a price
 // lookup (the home ranks by price among them). Bounds the price N+1 cost.
 const NEARBY_PRICE_CANDIDATES = 120
@@ -543,12 +536,12 @@ async function loadNearestByLatitude(
   return [...north, ...south]
 }
 
-// Stations inside the radius, read straight from the by_lat index. Walk outward
-// from the user's latitude in both directions (each capped at half the budget)
-// so a dense band that exceeds the cap still keeps the rows closest in latitude
-// to the user — the only ones that can fall inside the radius — instead of the
-// southernmost rows a one-directional scan would return. Then filter by the
-// longitude box and exact haversine distance.
+// Stations inside the radius via the 2D [latBucket, longitude] index. Iterate
+// only the latitude buckets the radius box touches (a handful) and, within each,
+// range-scan the longitude box — so we read only the cells around the user, not
+// the whole country-wide latitude band. That country-wide read was the original
+// cause of the system-op timeouts. Filter by exact haversine and keep the
+// closest NEARBY_PRICE_CANDIDATES (the only ones we price-check downstream).
 async function loadStationsWithinRadius(
   ctx: QueryCtx,
   userLocation: { latitude: number; longitude: number },
@@ -561,46 +554,32 @@ async function loadStationsWithinRadius(
   const maxLat = userLocation.latitude + latDelta
   const minLon = userLocation.longitude - lonDelta
   const maxLon = userLocation.longitude + lonDelta
+  const minBucket = latBucketFor(minLat)
+  const maxBucket = latBucketFor(maxLat)
 
-  const half = Math.ceil(NEARBY_SCAN_CAP / 2)
-  const north = await collectUpTo(
-    ctx.db
+  const found: Array<{ station: Doc<'stations'>; distanceKm: number }> = []
+  for (let bucket = minBucket; bucket <= maxBucket; bucket++) {
+    const inBucket = await ctx.db
       .query('stations')
-      .withIndex('by_lat', (q) =>
-        q.gte('latitude', userLocation.latitude).lte('latitude', maxLat),
-      ),
-    half,
-  )
-  const south = await collectUpTo(
-    ctx.db
-      .query('stations')
-      .withIndex('by_lat', (q) =>
-        q.gte('latitude', minLat).lt('latitude', userLocation.latitude),
+      .withIndex('by_lat_lon', (q) =>
+        q.eq('latBucket', bucket).gte('longitude', minLon).lte('longitude', maxLon),
       )
-      .order('desc'),
-    half,
-  )
-
-  const withinRadius = [...north, ...south].flatMap((station) => {
-    const lat = station.latitude
-    const lon = station.longitude
-    if (
-      typeof lat !== 'number' ||
-      typeof lon !== 'number' ||
-      lon < minLon ||
-      lon > maxLon
-    ) {
-      return []
+      .collect()
+    for (const station of inBucket) {
+      const lat = station.latitude
+      const lon = station.longitude
+      if (typeof lat !== 'number' || typeof lon !== 'number') continue
+      const distanceKm = haversineKm(
+        userLocation.latitude,
+        userLocation.longitude,
+        lat,
+        lon,
+      )
+      if (distanceKm <= maxDistanceKm) found.push({ station, distanceKm })
     }
-    const distanceKm = haversineKm(userLocation.latitude, userLocation.longitude, lat, lon)
-    return distanceKm <= maxDistanceKm ? [{ station, distanceKm }] : []
-  })
+  }
 
-  // Only the closest NEARBY_PRICE_CANDIDATES get a price lookup. The home ranks
-  // by price, but a cheaper station tens of km away in a dense city is not worth
-  // it; bounding the price N+1 to the nearest candidates keeps the query fast
-  // and well under the system-op limit regardless of how many fall in radius.
-  return withinRadius
+  return found
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, NEARBY_PRICE_CANDIDATES)
 }
@@ -665,6 +644,31 @@ async function listStationsByDistance(
 
   return { ...page, page: rows }
 }
+
+// One-time backfill of latBucket for existing stations so the 2D nearby search
+// can find them. Idempotent (skips rows that already have it); self-reschedules.
+// Run: `bunx convex run stations:backfillLatBuckets '{}'`.
+export const backfillLatBuckets = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query('stations')
+      .paginate({ cursor: args.cursor ?? null, numItems: 200 })
+    let updated = 0
+    for (const station of page.page) {
+      if (typeof station.latitude === 'number' && station.latBucket === undefined) {
+        await ctx.db.patch(station._id, { latBucket: latBucketFor(station.latitude) })
+        updated += 1
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.stations.backfillLatBuckets, {
+        cursor: page.continueCursor,
+      })
+    }
+    return { updated, isDone: page.isDone }
+  },
+})
 
 export const bestNearbyStations = query({
   args: {

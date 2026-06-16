@@ -8,7 +8,7 @@ import {
   type ActionCtx,
 } from './_generated/server'
 import { internal } from './_generated/api'
-import { indexStationLocation } from './geo'
+import { latBucketFor } from './geocells'
 import {
   municipalityId,
   normalizeFuelType,
@@ -565,14 +565,9 @@ export const matchPlacesBatch = internalMutation({
         placeId: place.placeId,
         latitude: place.latitude,
         longitude: place.longitude,
+        latBucket: latBucketFor(place.latitude),
         name: existing.name || place.name,
       })
-      await indexStationLocation(
-        ctx,
-        existing.permitNumber,
-        place.latitude,
-        place.longitude,
-      )
       matched += 1
     }
     return { matched }
@@ -975,16 +970,8 @@ export const patchStationCoordinates = internalMutation({
     await ctx.db.patch(args.stationId, {
       latitude: args.latitude,
       longitude: args.longitude,
+      latBucket: latBucketFor(args.latitude),
     })
-    const station = await ctx.db.get(args.stationId)
-    if (station) {
-      await indexStationLocation(
-        ctx,
-        station.permitNumber,
-        args.latitude,
-        args.longitude,
-      )
-    }
   },
 })
 

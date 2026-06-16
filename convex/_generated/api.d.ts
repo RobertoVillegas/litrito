@@ -24,6 +24,7 @@ import type * as email_templates_passwordReset from "../email/templates/password
 import type * as email_templates_theme from "../email/templates/theme.js";
 import type * as favorites from "../favorites.js";
 import type * as geo from "../geo.js";
+import type * as geocells from "../geocells.js";
 import type * as http from "../http.js";
 import type * as ingestion from "../ingestion.js";
 import type * as locationBounds from "../locationBounds.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   "email/templates/theme": typeof email_templates_theme;
   favorites: typeof favorites;
   geo: typeof geo;
+  geocells: typeof geocells;
   http: typeof http;
   ingestion: typeof ingestion;
   locationBounds: typeof locationBounds;
