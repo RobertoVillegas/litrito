@@ -1,5 +1,45 @@
 import { v } from 'convex/values'
 import { internalMutation } from './_generated/server'
+import type { QueryCtx } from './_generated/server'
+
+export type StationEnrichment = {
+  brand: string | null
+  displayName: string | null
+  source: string
+}
+
+// Look up external enrichment (brand / display name) for a set of stations.
+// Read-only and never touches the CNE station record. Chunked to stay under the
+// parallel-read ceiling; callers pass only the rows they actually return.
+export async function loadEnrichment(
+  ctx: QueryCtx,
+  permitNumbers: string[],
+): Promise<Map<string, StationEnrichment>> {
+  const map = new Map<string, StationEnrichment>()
+  const CHUNK = 16
+  for (let i = 0; i < permitNumbers.length; i += CHUNK) {
+    const batch = permitNumbers.slice(i, i + CHUNK)
+    const rows = await Promise.all(
+      batch.map((permitNumber) =>
+        ctx.db
+          .query('stationEnrichment')
+          .withIndex('by_station', (q) =>
+            q.eq('stationPermitNumber', permitNumber),
+          )
+          .unique(),
+      ),
+    )
+    for (const row of rows) {
+      if (!row) continue
+      map.set(row.stationPermitNumber, {
+        brand: row.brand ?? null,
+        displayName: row.displayName ?? null,
+        source: row.source,
+      })
+    }
+  }
+  return map
+}
 
 const enrichmentSource = v.union(
   v.literal('overture'),

@@ -43,6 +43,11 @@ type NearbyBestRow = {
   price: number
   distanceKm: number
   reportedAt?: string
+  enrichment?: {
+    brand: string | null
+    displayName: string | null
+    source: string
+  } | null
 }
 
 type FilterOptionsResult = {
@@ -129,7 +134,13 @@ function Home() {
   const rankedRows = useMemo(
     () =>
       displayRows?.map((row, index) => ({
-        station: row.station,
+        station: {
+          ...row.station,
+          name:
+            row.enrichment?.displayName ||
+            row.enrichment?.brand ||
+            row.station.name,
+        },
         prices: { [fuelType]: { price: row.price } },
         highlightedPrice: row.price,
         rank: index + 1,
@@ -431,7 +442,7 @@ function StationRankCard({
         className="min-w-0 hover:text-white"
       >
         <span className="block truncate text-sm font-black text-white">
-          {row.station.name}
+          {row.enrichment?.displayName || row.enrichment?.brand || row.station.name}
         </span>
         <span className="mt-0.5 block truncate text-xs font-semibold text-white/50">
           {[row.station.municipalityName, row.station.stateName].filter(Boolean).join(', ')}

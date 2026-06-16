@@ -10,6 +10,7 @@ import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { latBucketFor } from './geocells'
+import { loadEnrichment } from './enrichment'
 import { fuelTypeValidator, sortModeValidator } from './validators'
 
 const fuelType = fuelTypeValidator
@@ -723,7 +724,7 @@ export const bestNearbyStations = query({
       }
     }
 
-    return rows
+    const top = rows
       .sort(
         (a, b) =>
           a.price - b.price ||
@@ -731,6 +732,15 @@ export const bestNearbyStations = query({
           a.station.name.localeCompare(b.station.name),
       )
       .slice(0, limit)
+
+    const enrichmentMap = await loadEnrichment(
+      ctx,
+      top.map((r) => r.station.permitNumber),
+    )
+    return top.map((r) => ({
+      ...r,
+      enrichment: enrichmentMap.get(r.station.permitNumber) ?? null,
+    }))
   },
 })
 
@@ -1269,6 +1279,8 @@ export const getStationDetail = query({
 
     if (!station) return null
 
+    const enrichmentMap = await loadEnrichment(ctx, [args.permitNumber])
+
     const [currentPrices, history] = await Promise.all([
       ctx.db
         .query('fuelPricesCurrent')
@@ -1287,6 +1299,7 @@ export const getStationDetail = query({
 
     return {
       station,
+      enrichment: enrichmentMap.get(args.permitNumber) ?? null,
       currentPrices: Object.fromEntries(
         currentPrices.map((p) => [p.fuelType, { price: p.price, reportedAt: p.reportedAt }]),
       ),
