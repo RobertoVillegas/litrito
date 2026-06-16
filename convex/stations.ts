@@ -10,7 +10,7 @@ import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import { latBucketFor } from './geocells'
-import { loadEnrichment } from './enrichment'
+import { loadEnrichment, type StationEnrichment } from './enrichment'
 import { fuelTypeValidator, sortModeValidator } from './validators'
 
 const fuelType = fuelTypeValidator
@@ -997,6 +997,25 @@ export const seoSitemapLocations = query({
   },
 })
 
+// Attach external enrichment (brand / display name) to a page of station rows
+// for the explore list, without changing the CNE data behind them.
+async function withEnrichment<T extends { page: StationRow[] }>(
+  ctx: QueryCtx,
+  result: T,
+): Promise<Omit<T, 'page'> & { page: Array<StationRow & { enrichment: StationEnrichment | null }> }> {
+  const enr = await loadEnrichment(
+    ctx,
+    result.page.map((r) => r.station.permitNumber),
+  )
+  return {
+    ...result,
+    page: result.page.map((r) => ({
+      ...r,
+      enrichment: enr.get(r.station.permitNumber) ?? null,
+    })),
+  }
+}
+
 export const listStations = query({
   args: {
     fuelTypes: v.optional(v.array(fuelType)),
@@ -1038,24 +1057,30 @@ export const listStations = query({
     const singleState = singleStateFromState ?? singleMuni?.state ?? null
 
     if (!useSearch && args.sortMode === 'distance' && args.userLocation) {
-      return await listStationsByDistance(ctx, {
-        fuelTypes,
-        stateIds,
-        parsedMunis,
-        userLocation: args.userLocation,
-        paginationOpts: args.paginationOpts,
-      })
+      return await withEnrichment(
+        ctx,
+        await listStationsByDistance(ctx, {
+          fuelTypes,
+          stateIds,
+          parsedMunis,
+          userLocation: args.userLocation,
+          paginationOpts: args.paginationOpts,
+        }),
+      )
     }
 
     if (!useSearch && args.sortMode === 'price') {
-      return await listStationsByPrice(ctx, {
-        fuelTypes,
-        stateIds,
-        parsedMunis,
-        singleState,
-        singleMuni,
-        paginationOpts: args.paginationOpts,
-      })
+      return await withEnrichment(
+        ctx,
+        await listStationsByPrice(ctx, {
+          fuelTypes,
+          stateIds,
+          parsedMunis,
+          singleState,
+          singleMuni,
+          paginationOpts: args.paginationOpts,
+        }),
+      )
     }
 
     let paginated: {
@@ -1173,10 +1198,10 @@ export const listStations = query({
       })
     }
 
-    return {
+    return await withEnrichment(ctx, {
       ...paginated,
       page: rows,
-    }
+    })
   },
 })
 

@@ -157,6 +157,11 @@ type StationFromQuery = {
   prices: Record<string, { price: number } | undefined>
   highlightedPrice: number | null
   distanceKm?: number | null
+  enrichment?: {
+    brand: string | null
+    displayName: string | null
+    source: string
+  } | null
 }
 
 type BoundsStationsResult = {
@@ -408,7 +413,10 @@ function Explore() {
     return paginated.results.map((row) => ({
       station: {
         permitNumber: row.station.permitNumber,
-        name: row.station.name,
+        name:
+          row.enrichment?.displayName ||
+          row.enrichment?.brand ||
+          row.station.name,
         address: row.station.address,
         municipalityName: row.station.municipalityName,
         stateName: row.station.stateName,
