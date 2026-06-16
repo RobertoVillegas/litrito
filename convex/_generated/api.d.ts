@@ -12,7 +12,6 @@ import type * as accountDeletion from "../accountDeletion.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as brandRules from "../brandRules.js";
-import type * as brands from "../brands.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as email_config from "../email/config.js";
@@ -23,7 +22,6 @@ import type * as email_templates_accountDeletion from "../email/templates/accoun
 import type * as email_templates_passwordReset from "../email/templates/passwordReset.js";
 import type * as email_templates_theme from "../email/templates/theme.js";
 import type * as favorites from "../favorites.js";
-import type * as geo from "../geo.js";
 import type * as geocells from "../geocells.js";
 import type * as http from "../http.js";
 import type * as ingestion from "../ingestion.js";
@@ -46,7 +44,6 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
   brandRules: typeof brandRules;
-  brands: typeof brands;
   catalog: typeof catalog;
   crons: typeof crons;
   "email/config": typeof email_config;
@@ -57,7 +54,6 @@ declare const fullApi: ApiFromModules<{
   "email/templates/passwordReset": typeof email_templates_passwordReset;
   "email/templates/theme": typeof email_templates_theme;
   favorites: typeof favorites;
-  geo: typeof geo;
   geocells: typeof geocells;
   http: typeof http;
   ingestion: typeof ingestion;
@@ -98,5 +94,4 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
-  geospatial: import("@convex-dev/geospatial/_generated/component.js").ComponentApi<"geospatial">;
 };
