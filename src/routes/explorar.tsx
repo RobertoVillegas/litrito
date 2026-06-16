@@ -11,6 +11,7 @@ import { RouteErrorFallback } from '../components/RouteError'
 import { SiteFooter } from '../components/SiteFooter'
 import { MapSkeleton, Skeleton } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
+import { resolveStationName } from '#/lib/stationDisplay'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 import { AnimatedPrice } from '../components/AnimatedNumber'
 import { buildSeoMeta } from '../lib/seo'
@@ -413,10 +414,7 @@ function Explore() {
     return paginated.results.map((row) => ({
       station: {
         permitNumber: row.station.permitNumber,
-        name:
-          row.enrichment?.displayName ||
-          row.enrichment?.brand ||
-          row.station.name,
+        name: resolveStationName(row.station.name, row.enrichment),
         address: row.station.address,
         municipalityName: row.station.municipalityName,
         stateName: row.station.stateName,

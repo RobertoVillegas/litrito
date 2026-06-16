@@ -22,6 +22,11 @@ import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
 import { StationPhoto } from '../components/StationPhoto'
+import {
+  SHOW_STATION_PHOTOS,
+  resolveStationBrand,
+  resolveStationName,
+} from '#/lib/stationDisplay'
 import { AnimatedPrice } from '../components/AnimatedNumber'
 import { ChartSkeleton, DarkSkeleton, Skeleton, SkeletonLine } from '../components/Skeleton'
 import { track } from '#/lib/analytics'
@@ -200,7 +205,8 @@ function StationDetail() {
   const { station, currentPrices, history, enrichment } = data
   // Show the recognizable name (brand / Overture display name) as the title and
   // keep the CNE razón social as a secondary line. Never replace the CNE data.
-  const displayTitle = enrichment?.displayName || enrichment?.brand || station.name
+  const displayTitle = resolveStationName(station.name, enrichment)
+  const displayBrand = resolveStationBrand(enrichment)
   const showLegalName = displayTitle !== station.name
   const fuels = FUEL_ORDER.filter((f) => currentPrices[f])
   const hasCoords =
@@ -220,13 +226,13 @@ function StationDetail() {
               Permiso {station.permitNumber}
             </span>
           </div>
-          {enrichment?.brand && (
+          {displayBrand && (
             <span className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-brand/15 px-3 py-1 text-xs font-black uppercase tracking-wider text-brand">
-              {enrichment.brand}
+              {displayBrand}
             </span>
           )}
           <h1
-            className={`font-display text-4xl text-white sm:text-6xl ${enrichment?.brand ? 'mt-2' : 'mt-6'}`}
+            className={`font-display text-4xl text-white sm:text-6xl ${displayBrand ? 'mt-2' : 'mt-6'}`}
           >
             {displayTitle}
           </h1>
@@ -251,11 +257,13 @@ function StationDetail() {
           <p className="mt-3 text-xs font-semibold tracking-wide text-white/40">
             Actualizado {formatDate(station.lastSeenAt, true)}
           </p>
-          <StationPhoto
-            permitNumber={permitNumber}
-            stationName={displayTitle}
-            brand={enrichment?.brand ?? undefined}
-          />
+          {SHOW_STATION_PHOTOS && (
+            <StationPhoto
+              permitNumber={permitNumber}
+              stationName={displayTitle}
+              brand={displayBrand}
+            />
+          )}
           <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
             {directionsHref && (
               <Button

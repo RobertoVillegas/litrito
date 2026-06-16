@@ -12,6 +12,7 @@ import { track } from '#/lib/analytics'
 import { slugifyLocationName } from '#/lib/slug'
 import { AnimatedPrice } from '../components/AnimatedNumber'
 import { formatDistance } from '#/lib/format'
+import { resolveStationName } from '#/lib/stationDisplay'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
 import { buildSeoMeta } from '../lib/seo'
 import { useLocationPermissionFlow } from '../components/LocationPermissionDialog'
@@ -136,10 +137,7 @@ function Home() {
       displayRows?.map((row, index) => ({
         station: {
           ...row.station,
-          name:
-            row.enrichment?.displayName ||
-            row.enrichment?.brand ||
-            row.station.name,
+          name: resolveStationName(row.station.name, row.enrichment),
         },
         prices: { [fuelType]: { price: row.price } },
         highlightedPrice: row.price,
@@ -442,7 +440,7 @@ function StationRankCard({
         className="min-w-0 hover:text-white"
       >
         <span className="block truncate text-sm font-black text-white">
-          {row.enrichment?.displayName || row.enrichment?.brand || row.station.name}
+          {resolveStationName(row.station.name, row.enrichment)}
         </span>
         <span className="mt-0.5 block truncate text-xs font-semibold text-white/50">
           {[row.station.municipalityName, row.station.stateName].filter(Boolean).join(', ')}
