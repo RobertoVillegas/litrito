@@ -974,21 +974,25 @@ export const seoLocationOverview = query({
 
 export const seoSitemapLocations = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<SitemapLocationsPayload> => {
     const cached = await ctx.db
       .query('filterOptionsCache')
-      .withIndex('by_key', (q) => q.eq('key', FILTER_OPTIONS_CACHE_KEY))
+      .withIndex('by_key', (q) => q.eq('key', SITEMAP_LOCATIONS_CACHE_KEY))
       .unique()
-    const nav = cached
-      ? (JSON.parse(cached.data) as FilterOptionsPayload)
-      : EMPTY_FILTER_OPTIONS
+    if (cached) return JSON.parse(cached.data) as SitemapLocationsPayload
+
+    const [states, municipalities] = await Promise.all([
+      ctx.db.query('states').collect(),
+      ctx.db.query('municipalities').collect(),
+    ])
+    if (!states.length) return EMPTY_SITEMAP_LOCATIONS
 
     return {
-      states: nav.states.map((s) => ({
+      states: states.map((s) => ({
         externalId: s.externalId,
         slug: slugifyLocationName(s.name),
       })),
-      municipalities: nav.municipalities.map((m) => ({
+      municipalities: municipalities.map((m) => ({
         externalId: m.externalId,
         stateExternalId: m.stateExternalId,
         slug: slugifyLocationName(m.name),
@@ -1443,10 +1447,41 @@ type FilterOptionsPayload = {
 }
 
 const FILTER_OPTIONS_CACHE_KEY = 'default'
+const SITEMAP_LOCATIONS_CACHE_KEY = 'sitemap-locations'
 
 const EMPTY_FILTER_OPTIONS: FilterOptionsPayload = {
   states: [],
   municipalities: [],
+}
+
+type SitemapLocationsPayload = {
+  states: { externalId: string; slug: string }[]
+  municipalities: {
+    externalId: string
+    stateExternalId: string
+    slug: string
+  }[]
+}
+
+const EMPTY_SITEMAP_LOCATIONS: SitemapLocationsPayload = {
+  states: [],
+  municipalities: [],
+}
+
+function buildSitemapLocationsPayload(
+  nav: FilterOptionsPayload,
+): SitemapLocationsPayload {
+  return {
+    states: nav.states.map((s) => ({
+      externalId: s.externalId,
+      slug: slugifyLocationName(s.name),
+    })),
+    municipalities: nav.municipalities.map((m) => ({
+      externalId: m.externalId,
+      stateExternalId: m.stateExternalId,
+      slug: slugifyLocationName(m.name),
+    })),
+  }
 }
 
 export const listFilterOptions = query({
@@ -1524,21 +1559,30 @@ export const listStateExternalIds = internalQuery({
 })
 
 export const writeFilterOptionsCache = internalMutation({
-  args: { data: v.string() },
+  args: { data: v.string(), sitemapData: v.string() },
   handler: async (ctx, args) => {
-    const value = {
-      key: FILTER_OPTIONS_CACHE_KEY,
-      data: args.data,
-      updatedAt: new Date().toISOString(),
-    }
-    const existing = await ctx.db
-      .query('filterOptionsCache')
-      .withIndex('by_key', (q) => q.eq('key', FILTER_OPTIONS_CACHE_KEY))
-      .unique()
-    if (existing) {
-      await ctx.db.patch(existing._id, value)
-    } else {
-      await ctx.db.insert('filterOptionsCache', value)
+    const updatedAt = new Date().toISOString()
+    for (const value of [
+      {
+        key: FILTER_OPTIONS_CACHE_KEY,
+        data: args.data,
+        updatedAt,
+      },
+      {
+        key: SITEMAP_LOCATIONS_CACHE_KEY,
+        data: args.sitemapData,
+        updatedAt,
+      },
+    ]) {
+      const existing = await ctx.db
+        .query('filterOptionsCache')
+        .withIndex('by_key', (q) => q.eq('key', value.key))
+        .unique()
+      if (existing) {
+        await ctx.db.patch(existing._id, value)
+      } else {
+        await ctx.db.insert('filterOptionsCache', value)
+      }
     }
   },
 })
@@ -1573,6 +1617,7 @@ export const rebuildFilterOptionsCache = internalAction({
     const payload: FilterOptionsPayload = { states, municipalities }
     await ctx.runMutation(internal.stations.writeFilterOptionsCache, {
       data: JSON.stringify(payload),
+      sitemapData: JSON.stringify(buildSitemapLocationsPayload(payload)),
     })
 
     return {
