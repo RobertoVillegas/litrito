@@ -5,6 +5,16 @@ export function getConfiguredSiteOrigin(): string {
     runtimeEnv?.VITE_APP_DOMAIN ||
     (import.meta.env.VITE_APP_DOMAIN as string | undefined) ||
     ''
-  if (!appDomain) return ''
-  return appDomain.startsWith('http') ? appDomain : `https://${appDomain}`
+  if (appDomain) return normalizeSiteOrigin(appDomain)
+
+  if (typeof window !== 'undefined' && window.location.origin) {
+    return normalizeSiteOrigin(window.location.origin)
+  }
+
+  return ''
+}
+
+function normalizeSiteOrigin(origin: string): string {
+  const withProtocol = origin.startsWith('http') ? origin : `https://${origin}`
+  return withProtocol.replace(/\/+$/, '')
 }

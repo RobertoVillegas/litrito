@@ -69,7 +69,9 @@ export function buildLocationJsonLd({ placeName, url, topRegular }: LocationJson
         },
         makesOffer: {
           '@type': 'Offer',
-          itemOffered: { '@type': 'Product', name: 'Gasolina regular' },
+          name: 'Gasolina regular',
+          price: row.price,
+          priceCurrency: 'MXN',
           priceSpecification: {
             '@type': 'UnitPriceSpecification',
             price: row.price,
