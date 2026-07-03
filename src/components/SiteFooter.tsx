@@ -12,7 +12,7 @@ export function SiteFooter({ className }: Props) {
         <div>
           <div className="flex items-center gap-2.5">
             <img
-              src="/litrito-logo.webp"
+              src="/litrito-logo-128.webp"
               alt=""
               className="h-10 w-10 object-contain"
               width={40}

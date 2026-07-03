@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
-import * as Sentry from '@sentry/tanstackstart-react'
-import { logger, errorFields } from '#/lib/logger'
+import { captureError } from '#/lib/report'
 
 // Shared route error fallback. Logs structured context (which screen, what was
 // being viewed/filtered, the error) so failures are debuggable, and renders a
@@ -18,12 +17,8 @@ export function RouteErrorFallback({
   context?: Record<string, unknown>
 }) {
   useEffect(() => {
-    logger.error('route render failed', {
-      screen,
-      ...context,
-      ...errorFields(error),
-    })
-    Sentry.captureException(error, {
+    captureError(error, {
+      logMessage: 'route render failed',
       tags: { screen },
       extra: context,
     })

@@ -17,7 +17,7 @@ export function AuthLayout({
       <div className="mx-auto flex min-h-[78vh] w-full max-w-md flex-col justify-center px-4 py-12 sm:px-6">
         <Link to="/" className="flex items-center gap-2.5 self-start">
           <img
-            src="/litrito-logo.webp"
+            src="/litrito-logo-128.webp"
             alt=""
             className="h-10 w-10 object-contain"
             width={40}

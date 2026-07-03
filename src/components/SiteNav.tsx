@@ -20,7 +20,7 @@ export function SiteNav() {
         <Link to="/" className="flex items-center gap-2.5 text-white hover:text-white">
           <span className="flex h-9 w-9 items-center justify-center overflow-visible">
             <img
-              src="/litrito-logo.webp"
+              src="/litrito-logo-128.webp"
               alt=""
               className="h-9 w-9 object-contain"
               width={32}
