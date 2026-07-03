@@ -637,7 +637,7 @@ function Explore() {
               <HeroFact label="Combustibles" value="Regular, Premium, Diésel" />
               <HeroFact label="Orden" value="Precio o cercanía" />
             </div>
-            <div className="mt-4 text-xs leading-5 text-white/45">
+            <div className="mt-4 text-xs leading-5 text-white/70">
               <a
                 href="https://www.cne.gob.mx/"
                 target="_blank"
@@ -808,7 +808,7 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
 function HeroFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 py-2.5">
-      <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+      <span className="text-[10px] font-black uppercase tracking-widest text-white/65">
         {label}
       </span>
       <span className="text-right text-xs font-bold text-white/80">{value}</span>

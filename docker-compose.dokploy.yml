@@ -90,6 +90,21 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # Traefik middlewares for the web service. Dokploy injects the router/domain
+    # labels from its UI; these add gzip/brotli compression for the dynamic SSR
+    # HTML document (static assets are pre-compressed by Nitro) and security
+    # response headers (HSTS/COOP/XFO) that PageSpeed's Best-Practices audit
+    # flagged as missing. In Dokploy, attach both middlewares to the web router
+    # (Advanced → Middlewares) if it doesn't pick up compose labels automatically.
+    labels:
+      - "traefik.http.middlewares.litrito-compress.compress=true"
+      - "traefik.http.middlewares.litrito-sechdrs.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.litrito-sechdrs.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.litrito-sechdrs.headers.stsPreload=true"
+      - "traefik.http.middlewares.litrito-sechdrs.headers.frameDeny=true"
+      - "traefik.http.middlewares.litrito-sechdrs.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.litrito-sechdrs.headers.customResponseHeaders.Cross-Origin-Opener-Policy=same-origin"
+      - "traefik.http.middlewares.litrito-sechdrs.headers.referrerPolicy=strict-origin-when-cross-origin"
 
 volumes:
   convex_data:

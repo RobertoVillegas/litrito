@@ -155,7 +155,7 @@ export function LocationSeoPage({ data }: { data: LocationOverview }) {
           </div>
 
           <div className="rounded-[6px] border border-white/15 bg-white/[0.04] p-5">
-            <div className="eyebrow text-white/45">Promedio regular</div>
+            <div className="eyebrow text-white/70">Promedio regular</div>
             <div className="mt-3 text-5xl font-black text-white">
               <AnimatedPrice value={regularMetric?.average ?? null} fallback="Sin datos" />
             </div>
@@ -495,7 +495,7 @@ function InfoTooltip({ text }: { text: string }) {
 function MetricPill({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-[6px] border border-white/10 bg-white/[0.04] p-3">
-      <div className="text-[10px] font-black uppercase tracking-wider text-white/40">
+      <div className="text-[10px] font-black uppercase tracking-wider text-white/65">
         {label}
       </div>
       <div className="mt-1 font-black text-white">{value}</div>

@@ -39,7 +39,14 @@ const config = defineConfig({
   },
   plugins: [
     devtools(),
-    nitro({ rollupConfig: { external: [/^@sentry\//, RESVG] } }),
+    // Pre-compress public assets (JS/CSS) at build time so the Bun server
+    // serves .br/.gz variants — the origin was shipping them uncompressed
+    // (667 KB JS, 76 KB CSS). Covers static assets only; the dynamic SSR HTML
+    // document is compressed at the Traefik layer (see docker-compose.dokploy).
+    nitro({
+      compressPublicAssets: { gzip: true, brotli: true },
+      rollupConfig: { external: [/^@sentry\//, RESVG] },
+    }),
     tailwindcss(),
     tanstackStart(),
     ...sentryPlugins,

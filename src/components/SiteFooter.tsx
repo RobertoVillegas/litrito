@@ -68,7 +68,7 @@ export function SiteFooter({ className }: Props) {
           </div>
         </div>
         <div className="hidden md:flex md:items-center md:justify-between">
-          <p className="eyebrow text-white/40">
+          <p className="eyebrow text-white/65">
             <a
               href="https://www.cne.gob.mx/"
               target="_blank"
@@ -105,7 +105,7 @@ export function SiteFooter({ className }: Props) {
             href="https://athas.mx"
             target="_blank"
             rel="noopener noreferrer"
-            className="eyebrow text-white/40 hover:text-brand"
+            className="eyebrow text-white/65 hover:text-brand"
           >
             Hecho por Athas
           </a>

@@ -28,7 +28,10 @@ export function PromoMarquee() {
               <Item key={i} />
             ))}
           </div>
-          <div className="flex shrink-0 items-center" aria-hidden>
+          {/* `inert` (not just aria-hidden) so the duplicated links are removed
+              from both the accessibility tree AND the tab order — aria-hidden
+              alone left focusable descendants, which PageSpeed flagged. */}
+          <div className="flex shrink-0 items-center" aria-hidden inert>
             {Array.from({ length: 5 }).map((_, i) => (
               <Item key={i} />
             ))}

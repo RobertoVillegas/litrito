@@ -157,7 +157,7 @@ function AboutPage() {
                   href={ATHAS_MAIL}
                   className="group flex flex-col gap-1 rounded-[10px] border border-white/10 px-3.5 py-3 transition hover:border-white/30"
                 >
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-white/40">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-white/65">
                     <Mail className="h-3.5 w-3.5" />
                     Correo
                   </span>
@@ -171,7 +171,7 @@ function AboutPage() {
                   rel="noopener noreferrer"
                   className="group flex flex-col gap-1 rounded-[10px] border border-white/10 px-3.5 py-3 transition hover:border-white/30"
                 >
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-white/40">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-white/65">
                     <MessageCircle className="h-3.5 w-3.5" />
                     WhatsApp
                   </span>

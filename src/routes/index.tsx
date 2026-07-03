@@ -173,7 +173,7 @@ function Home() {
 
             <div className="space-y-4">
               <div>
-                <div className="eyebrow text-white/45">Combustible</div>
+                <div className="eyebrow text-white/70">Combustible</div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {FUEL_OPTIONS.map((option) => (
                     <button
@@ -196,7 +196,7 @@ function Home() {
               </div>
 
               <div>
-                <div className="eyebrow text-white/45">Radio</div>
+                <div className="eyebrow text-white/70">Radio</div>
                 <div className="mt-2 grid grid-cols-5 gap-2">
                   {RADIUS_OPTIONS.map((radius) => (
                     <button
@@ -351,7 +351,7 @@ function ResultsPanel({
     <div className="self-start rounded-[6px] border border-white/15 bg-white/[0.04] p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="eyebrow text-white/45">Top 10</div>
+          <div className="eyebrow text-white/70">Top 10</div>
           {/* clamp keeps the heading on a single line across device widths;
               tweak the min/preferred/max here to adjust the fit. */}
           <h2 className="font-display mt-1 whitespace-nowrap text-[clamp(1.05rem,4.5vw,1.5rem)] text-white">

@@ -242,7 +242,7 @@ function StationDetail() {
             {displayTitle}
           </h1>
           {showLegalName && (
-            <p className="mt-2 text-xs font-semibold text-white/40">
+            <p className="mt-2 text-xs font-semibold text-white/65">
               Razón social (CNE): {station.name}
             </p>
           )}
@@ -259,7 +259,7 @@ function StationDetail() {
               )}
             </span>
           </p>
-          <p className="mt-3 text-xs font-semibold tracking-wide text-white/40">
+          <p className="mt-3 text-xs font-semibold tracking-wide text-white/65">
             Actualizado {formatDate(station.lastSeenAt, true)}
           </p>
           {SHOW_STATION_PHOTOS && (
