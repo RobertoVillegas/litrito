@@ -4,7 +4,7 @@ import { Button } from '#/components/ui/button'
 import { LocationSeoPage } from '../components/LocationSeoPage'
 import { RouteErrorFallback } from '../components/RouteError'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
-import { buildLocationJsonLd, buildSeoMeta } from '../lib/seo'
+import { buildBreadcrumbJsonLd, buildLocationJsonLd, buildSeoMeta } from '../lib/seo'
 
 export const Route = createFileRoute('/estado/$stateSlug_/$municipalitySlug')({
   loader: async ({ context, params }) => {
@@ -40,6 +40,21 @@ export const Route = createFileRoute('/estado/$stateSlug_/$municipalitySlug')({
           topRegular: data.topRegular,
         })
       : null
+    const breadcrumbJsonLd = data?.municipality
+      ? buildBreadcrumbJsonLd({
+          items: [
+            { name: 'Litrito', url: origin || '/' },
+            {
+              name: data.state.name,
+              url: origin ? `${origin}/estado/${data.state.slug}` : `/estado/${data.state.slug}`,
+            },
+            { name: data.municipality.name, url },
+          ],
+        })
+      : null
+    const scripts = [jsonLd, breadcrumbJsonLd].flatMap((item) =>
+      item ? [{ type: 'application/ld+json', children: JSON.stringify(item) }] : [],
+    )
     return {
       meta: buildSeoMeta({
         title,
@@ -53,9 +68,7 @@ export const Route = createFileRoute('/estado/$stateSlug_/$municipalitySlug')({
         url,
       }),
       links: [{ rel: 'canonical', href: url }],
-      ...(jsonLd
-        ? { scripts: [{ type: 'application/ld+json', children: JSON.stringify(jsonLd) }] }
-        : {}),
+      ...(scripts.length ? { scripts } : {}),
     }
   },
   component: MunicipalityPage,

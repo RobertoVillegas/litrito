@@ -44,6 +44,13 @@ type LocationJsonLdInput = {
   }[]
 }
 
+type BreadcrumbJsonLdInput = {
+  items: {
+    name: string
+    url: string
+  }[]
+}
+
 // ItemList of the cheapest regular-gas stations for a location page, so search
 // engines can surface the list (mirrors the GasStation JSON-LD on detail pages).
 export function buildLocationJsonLd({ placeName, url, topRegular }: LocationJsonLdInput) {
@@ -80,6 +87,20 @@ export function buildLocationJsonLd({ placeName, url, topRegular }: LocationJson
           },
         },
       },
+    })),
+  }
+}
+
+export function buildBreadcrumbJsonLd({ items }: BreadcrumbJsonLdInput) {
+  if (!items.length) return null
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: item.url,
     })),
   }
 }

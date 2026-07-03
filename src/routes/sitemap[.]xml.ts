@@ -2,6 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../../convex/_generated/api'
 
+let cachedLocationPaths: string[] | null = null
+
 function siteOrigin(request: Request) {
   const runtimeEnv = typeof process !== 'undefined' ? process.env : undefined
   const appDomain =
@@ -41,21 +43,30 @@ export const Route = createFileRoute('/sitemap.xml')({
         ]
 
         if (convexUrl) {
-          const client = new ConvexHttpClient(convexUrl)
-          const locations = await client.query(api.stations.seoSitemapLocations, {})
-          const stateSlugById = new Map(
-            locations.states.map((state) => [state.externalId, state.slug]),
-          )
-          for (const state of locations.states) {
-            urls.push(`/estado/${state.slug}`)
-          }
-          for (const municipality of locations.municipalities) {
-            const stateSlug = stateSlugById.get(municipality.stateExternalId)
-            if (stateSlug) {
-              urls.push(`/estado/${stateSlug}/${municipality.slug}`)
+          try {
+            const client = new ConvexHttpClient(convexUrl)
+            const locations = await client.query(api.stations.seoSitemapLocations, {})
+            const stateSlugById = new Map(
+              locations.states.map((state) => [state.externalId, state.slug]),
+            )
+            const locationPaths: string[] = []
+            for (const state of locations.states) {
+              locationPaths.push(`/estado/${state.slug}`)
             }
+            for (const municipality of locations.municipalities) {
+              const stateSlug = stateSlugById.get(municipality.stateExternalId)
+              if (stateSlug) {
+                locationPaths.push(`/estado/${stateSlug}/${municipality.slug}`)
+              }
+            }
+            cachedLocationPaths = locationPaths
+          } catch (error) {
+            console.error('sitemap_location_fetch_failed', {
+              message: error instanceof Error ? error.message : String(error),
+            })
           }
         }
+        if (cachedLocationPaths) urls.push(...cachedLocationPaths)
 
         const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
           .map(
