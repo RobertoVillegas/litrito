@@ -76,15 +76,23 @@ export const Route = createFileRoute('/explorar')({
   },
   loaderDeps: () => ({}),
   loader: async ({ context }) => {
-    const [filterOptions, latestRun] = await Promise.all([
-      context.queryClient.ensureQueryData(
-        context.convexQueryClient.queryOptions(api.stations.listFilterOptions, {}),
-      ),
-      context.queryClient.ensureQueryData(
-        context.convexQueryClient.queryOptions(api.prices.latestRun, {}),
-      ),
-    ])
-    return { filterOptions, latestRun }
+    try {
+      const [filterOptions, latestRun] = await Promise.all([
+        context.queryClient.ensureQueryData(
+          context.convexQueryClient.queryOptions(api.stations.listFilterOptions, {}),
+        ),
+        context.queryClient.ensureQueryData(
+          context.convexQueryClient.queryOptions(api.prices.latestRun, {}),
+        ),
+      ])
+      return { filterOptions, latestRun }
+    } catch {
+      // A transient Convex hiccup during SSR must not surface as a 5xx —
+      // Googlebot penalizes crawl rate on repeated server errors. Degrade to a
+      // 200 shell; the station list, filters and metrics all load via reactive
+      // Convex queries on the client regardless of this preload.
+      return { filterOptions: undefined, latestRun: undefined }
+    }
   },
   head: () => {
     const title = 'Explorar gasolineras - Litrito'

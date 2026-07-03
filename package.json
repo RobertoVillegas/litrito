@@ -16,8 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "check": "bun run type-check && bun run lint && bun run test && bun run build",
     "generate:og": "node scripts/generate-og-image.mjs",
-    "generate:sitemap": "node scripts/generate-sitemap.mjs",
-    "prebuild": "bun run generate:og && bun run generate:sitemap",
+    "prebuild": "bun run generate:og",
     "dump:stations": "node scripts/dump-stations.mjs",
     "dump:stations:csv": "node scripts/dump-stations.mjs csv"
   },

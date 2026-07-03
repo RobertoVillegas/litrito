@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 import { api } from '../../convex/_generated/api'
 import { Button } from '#/components/ui/button'
 import { LocationSeoPage } from '../components/LocationSeoPage'
@@ -8,12 +8,15 @@ import { buildLocationJsonLd, buildSeoMeta } from '../lib/seo'
 
 export const Route = createFileRoute('/estado/$stateSlug_/$municipalitySlug')({
   loader: async ({ context, params }) => {
-    return await context.queryClient.ensureQueryData(
+    const data = await context.queryClient.ensureQueryData(
       context.convexQueryClient.queryOptions(api.stations.seoLocationOverview, {
         stateSlug: params.stateSlug,
         municipalitySlug: params.municipalitySlug,
       }),
     )
+    // Unknown state/municipality slug → real 404, not a 200 shell.
+    if (!data) throw notFound()
+    return data
   },
   head: ({ loaderData, params }) => {
     const data = loaderData

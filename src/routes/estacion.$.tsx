@@ -1,4 +1,4 @@
-import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
+import { ClientOnly, createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { useQuery } from 'convex/react'
 import { lazy, Suspense, useState } from 'react'
 import { ArrowLeft, Check, Info, MapPin, Navigation, Share2, Star } from 'lucide-react'
@@ -39,11 +39,16 @@ const StationMiniMap = lazy(() =>
 export const Route = createFileRoute('/estacion/$')({
   loader: async ({ context, params }) => {
     const permitNumber = params._splat ?? ''
-    return await context.queryClient.ensureQueryData(
+    const data = await context.queryClient.ensureQueryData(
       context.convexQueryClient.queryOptions(api.stations.getStationDetail, {
         permitNumber,
       }),
     )
+    // A missing permit must return a real HTTP 404, not a 200 "No encontrada"
+    // shell — otherwise Google treats delisted stations as soft-404s and keeps
+    // them in the crawl queue.
+    if (!data) throw notFound()
+    return data
   },
   head: ({ loaderData, params }) => {
     const data = loaderData as StationDetailData | null | undefined
