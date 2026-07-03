@@ -1,0 +1,59 @@
+# Traefik dynamic configuration for the Litrito stack.
+#
+# WHY THIS FILE EXISTS (not compose labels):
+# Dokploy regenerates each service's Traefik labels from its Domains UI and
+# STRIPS custom middleware labels you put in docker-compose (Dokploy issue #484).
+# So middlewares must be defined in Traefik's dynamic-config directory, which is
+# watched by the file provider and survives redeploys.
+#
+# INSTALL (on the Dokploy host, one time):
+#   1. Copy this file to the watched dynamic dir:
+#        scp deploy/traefik/litrito-dynamic.yml \
+#            <host>:/etc/dokploy/traefik/dynamic/litrito-dynamic.yml
+#      (Traefik hot-reloads dynamic files — no restart needed for this file.)
+#
+#   2. Attach the middlewares to the HTTPS entrypoint so EVERY router gets them.
+#      Edit /etc/dokploy/traefik/traefik.yml and add the `http.middlewares` block
+#      under the websecure entryPoint:
+#
+#        entryPoints:
+#          websecure:
+#            address: ":443"
+#            http:
+#              middlewares:
+#                - litrito-compress@file
+#                - litrito-secheaders@file
+#
+#      Then restart Traefik so the static-config change takes effect:
+#        docker restart dokploy-traefik
+#
+# VERIFY:
+#   curl -sI https://litrito.com/ -H "Accept-Encoding: br,gzip" \
+#     | grep -i "content-encoding\|strict-transport\|x-frame\|x-content-type"
+#   -> expect: content-encoding: gzip (or br), strict-transport-security, etc.
+#
+# SCOPE NOTE: attaching on the entrypoint applies to ALL apps on this Dokploy
+# instance. Compression and HSTS/nosniff/referrer/COOP are safe everywhere.
+# `frameDeny` (X-Frame-Options: DENY) blocks iframing — drop it from the headers
+# middleware below if any app on this host relies on being embedded (e.g. Umami
+# shared-report embeds). Litrito's OAuth is redirect-based, so COOP is safe.
+
+http:
+  middlewares:
+    # gzip/brotli/zstd for the dynamic SSR HTML document. Static /assets/* are
+    # already pre-compressed by Nitro (compressPublicAssets); this covers the
+    # ~148 KB HTML that Nitro doesn't compress (PSI "document request latency").
+    litrito-compress:
+      compress: {}
+
+    # Security response headers flagged by PageSpeed's Best-Practices audit.
+    litrito-secheaders:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: strict-origin-when-cross-origin
+        customResponseHeaders:
+          Cross-Origin-Opener-Policy: same-origin

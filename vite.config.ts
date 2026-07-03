@@ -45,6 +45,18 @@ const config = defineConfig({
     // document is compressed at the Traefik layer (see docker-compose.dokploy).
     nitro({
       compressPublicAssets: { gzip: true, brotli: true },
+      // Non-fingerprinted files in public/ were served with NO cache-control, so
+      // browsers revalidated them on every visit (PSI "use efficient cache
+      // lifetimes"). They change rarely — cache 30 days. Hashed /assets/* are
+      // already immutable and untouched by these rules.
+      routeRules: {
+        '/favicon.ico': { headers: { 'cache-control': 'public, max-age=2592000' } },
+        '/favicon-32x32.png': { headers: { 'cache-control': 'public, max-age=2592000' } },
+        '/apple-touch-icon.png': { headers: { 'cache-control': 'public, max-age=2592000' } },
+        '/litrito-logo.webp': { headers: { 'cache-control': 'public, max-age=2592000' } },
+        '/litrito-logo-128.webp': { headers: { 'cache-control': 'public, max-age=2592000' } },
+        '/manifest.json': { headers: { 'cache-control': 'public, max-age=86400' } },
+      },
       rollupConfig: { external: [/^@sentry\//, RESVG] },
     }),
     tailwindcss(),
