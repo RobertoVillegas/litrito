@@ -225,7 +225,7 @@ export const retryMunicipalityPrices = action({
 
     try {
       const result = (await ctx.runAction(
-        internal.ingestion.refreshMunicipalityInternal,
+        internal.ingestion.refreshMunicipalityNow,
         args,
       )) as { runId: unknown; recordsWritten: number }
       await ctx.runMutation(internal.admin.recordAuditEvent, {

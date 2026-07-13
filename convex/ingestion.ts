@@ -26,12 +26,13 @@ const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 const NOMINATIM_MIN_INTERVAL_MS = 1100
 const GEOCODE_BATCH_SIZE = 300
 
-// Convex actions cap at 1000 system operations per invocation. Each
-// `ctx.scheduler.runAfter` counts as one, so chunk municipality refreshes into
-// batches that fit comfortably under the limit and run in parallel.
-const MUNICIPALITY_BATCH_SIZE = 800
-const MUNICIPALITY_REFRESH_STAGGER_MS = 750
-const MUNICIPALITY_BATCH_START_STAGGER_MS = 2_000
+// Process the national refresh through one self-chaining worker. Keeping only
+// one page in flight prevents overdue scheduled functions from stampeding the
+// backend after a restart and bounds both isolate memory and write contention.
+const MUNICIPALITY_REFRESH_PAGE_SIZE = 25
+const MUNICIPALITY_REFRESH_STAGGER_MS = 1_000
+const MUNICIPALITY_PAGE_PAUSE_MS = 2_000
+const ACTIVE_DAILY_QUEUE_TIMEOUT_MS = 6 * 60 * 60 * 1000
 
 type CneState = {
   EntidadFederativaId: string | number
@@ -470,7 +471,7 @@ export const latestDailyQueueRun = internalQuery({
   },
 })
 
-export const recordDailyQueue = internalMutation({
+export const startDailyQueue = internalMutation({
   args: {
     queuedMunicipalities: v.number(),
     message: v.string(),
@@ -480,12 +481,48 @@ export const recordDailyQueue = internalMutation({
 
     return await ctx.db.insert('ingestionRuns', {
       kind: 'daily_queue',
-      status: args.queuedMunicipalities > 0 ? 'success' : 'skipped',
+      status: args.queuedMunicipalities > 0 ? 'running' : 'skipped',
       startedAt: now,
-      finishedAt: now,
+      finishedAt: args.queuedMunicipalities > 0 ? undefined : now,
       recordsRead: args.queuedMunicipalities,
-      recordsWritten: args.queuedMunicipalities,
+      recordsWritten: 0,
       message: args.message,
+    })
+  },
+})
+
+export const updateDailyQueueProgress = internalMutation({
+  args: {
+    runId: v.id('ingestionRuns'),
+    processed: v.number(),
+    failed: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId)
+    if (!run || run.kind !== 'daily_queue' || run.status !== 'running') return
+
+    const recordsWritten = (run.recordsWritten ?? 0) + args.processed
+    await ctx.db.patch(args.runId, {
+      recordsWritten,
+      message: `Procesados ${recordsWritten} de ${run.recordsRead ?? 0} municipios; ${args.failed} fallidos hasta ahora.`,
+    })
+  },
+})
+
+export const completeDailyQueue = internalMutation({
+  args: {
+    runId: v.id('ingestionRuns'),
+    failed: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId)
+    if (!run || run.kind !== 'daily_queue' || run.status !== 'running') return
+
+    const processed = run.recordsWritten ?? 0
+    await ctx.db.patch(args.runId, {
+      status: 'success',
+      finishedAt: new Date().toISOString(),
+      message: `Carga nacional terminada: ${processed} municipios procesados; ${args.failed} fallidos.`,
     })
   },
 })
@@ -622,34 +659,92 @@ export const refreshMunicipalityInternal = internalAction({
     stateExternalId: v.string(),
     municipalityExternalId: v.string(),
   },
+  handler: async (): Promise<MunicipalityRefreshResult & { skipped: true }> => {
+    // Legacy fan-out jobs used this function name. Keep it as a no-op until
+    // those durable scheduled entries have drained after deployment.
+    return { runId: null, recordsWritten: 0, skipped: true }
+  },
+})
+
+export const refreshMunicipalityNow = internalAction({
+  args: {
+    stateExternalId: v.string(),
+    municipalityExternalId: v.string(),
+  },
   handler: async (ctx, args): Promise<MunicipalityRefreshResult> => {
     return await refreshMunicipalityData(ctx, args.stateExternalId, args.municipalityExternalId)
   },
 })
 
-export const queueMunicipalityBatch = internalAction({
-  args: {
-    batch: v.array(
-      v.object({
-        stateExternalId: v.string(),
-        municipalityExternalId: v.string(),
-      }),
-    ),
-    staggerMs: v.number(),
-  },
+export const listMunicipalityRefreshPage = internalQuery({
+  args: { cursor: v.union(v.string(), v.null()) },
   handler: async (ctx, args) => {
-    // Each `runAfter` is a system operation. With 800 municipalities per batch
-    // we stay under Convex's 1000-op action limit and the outer queue action
-    // only spends a handful of ops fanning out the batches.
-    let delayMs = 0
-    for (const m of args.batch) {
-      await ctx.scheduler.runAfter(delayMs, internal.ingestion.refreshMunicipalityInternal, {
-        stateExternalId: m.stateExternalId,
-        municipalityExternalId: m.municipalityExternalId,
-      })
-      delayMs += args.staggerMs
+    return await ctx.db.query('municipalities').paginate({
+      cursor: args.cursor,
+      numItems: MUNICIPALITY_REFRESH_PAGE_SIZE,
+    })
+  },
+})
+
+export const runMunicipalityRefreshWorker = internalAction({
+  args: {
+    runId: v.id('ingestionRuns'),
+    cursor: v.union(v.string(), v.null()),
+    failed: v.number(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ processed: number; failed: number; isDone: boolean }> => {
+    const page = await ctx.runQuery(internal.ingestion.listMunicipalityRefreshPage, {
+      cursor: args.cursor,
+    })
+
+    let processed = 0
+    let failed = args.failed
+    for (const municipality of page.page) {
+      try {
+        await refreshMunicipalityData(
+          ctx,
+          municipality.stateExternalId,
+          municipality.externalId,
+        )
+      } catch {
+        // refreshMunicipalityData already records the failure. Continue so one
+        // bad municipality cannot strand the rest of the national refresh.
+        failed += 1
+      }
+      processed += 1
+      if (processed < page.page.length) await sleep(MUNICIPALITY_REFRESH_STAGGER_MS)
     }
-    return { queued: args.batch.length }
+
+    await ctx.runMutation(internal.ingestion.updateDailyQueueProgress, {
+      runId: args.runId,
+      processed,
+      failed,
+    })
+
+    if (page.isDone) {
+      await ctx.runMutation(internal.ingestion.completeDailyQueue, {
+        runId: args.runId,
+        failed,
+      })
+      // Geolocation matching also writes stations. Run it after price updates
+      // finish so the two bulk jobs cannot generate OCC retry storms.
+      await ctx.scheduler.runAfter(0, internal.ingestion.capturePlacesSnapshot, {})
+    } else {
+      await ctx.scheduler.runAfter(
+        MUNICIPALITY_PAGE_PAUSE_MS,
+        internal.ingestion.runMunicipalityRefreshWorker,
+        {
+          runId: args.runId,
+          cursor: page.continueCursor,
+          failed,
+        },
+      )
+    }
+
+    return { processed, failed, isDone: page.isDone }
   },
 })
 
@@ -711,20 +806,20 @@ export const capturePlacesSnapshot = internalAction({
       const xml = await response.text()
       const allPlaces = parsePlaceRows(xml)
 
-      // Fan out the matching: this action does the expensive fetch + regex
-      // parse on 3.17 MB of XML, then schedules one mutation per 1000 places.
-      // Each mutation does a single collect() of all stations and a join in
-      // memory — the previous approach (one indexed lookup per place inside a
-      // single mutation) blew the per-mutation op budget.
+      // Run small matching mutations serially. This stays under the per-call
+      // operation budget without leaving dozens of scheduled writes that all
+      // become due together after a backend restart.
       const batchCount = Math.max(1, Math.ceil(allPlaces.length / PLACES_MATCH_CHUNK))
+      let matched = 0
       for (let i = 0; i < allPlaces.length; i += PLACES_MATCH_CHUNK) {
         const slice = allPlaces.slice(i, i + PLACES_MATCH_CHUNK)
-        const batchIndex = i / PLACES_MATCH_CHUNK
-        await ctx.scheduler.runAfter(
-          batchIndex * PLACES_BATCH_START_STAGGER_MS,
-          internal.ingestion.matchPlacesBatch,
-          { places: slice },
-        )
+        const result = await ctx.runMutation(internal.ingestion.matchPlacesBatch, {
+          places: slice,
+        })
+        matched += result.matched
+        if (i + PLACES_MATCH_CHUNK < allPlaces.length) {
+          await sleep(PLACES_BATCH_START_STAGGER_MS)
+        }
       }
 
       const { runId } = await ctx.runMutation(internal.ingestion.recordPlacesRun, {
@@ -732,8 +827,8 @@ export const capturePlacesSnapshot = internalAction({
         contentLength: xml.length,
         sample: xml.slice(0, 1800),
         placeCount: allPlaces.length,
-        matched: 0, // filled in async by the batch actions
-        message: `Snapshot XML validado. ${batchCount} lote(s) de matching encolados.`,
+        matched,
+        message: `Snapshot XML validado. ${matched} estaciones enlazadas en ${batchCount} lote(s) secuenciales.`,
       })
 
       return { runId, places: allPlaces.length }
@@ -769,13 +864,19 @@ export const queueDailyRefresh = internalAction({
   args: {},
   handler: async (ctx): Promise<QueueDailyRefreshResult> => {
     // The cron fires a primary run plus several retries. Only do real work if
-    // today's national queue hasn't already succeeded, so retries are no-ops
-    // unless the primary run failed.
+    // today's national queue succeeded or still has a live worker. A stale
+    // running marker eventually expires so a later retry can recover it.
     const latest = await ctx.runQuery(internal.ingestion.latestDailyQueueRun, {})
+    const now = new Date()
+    const latestStartedAt = latest ? Date.parse(latest.startedAt) : 0
+    const latestAgeMs = Number.isFinite(latestStartedAt)
+      ? Date.now() - latestStartedAt
+      : Infinity
     if (
       latest &&
-      latest.status === 'success' &&
-      isSameUtcDay(latest.startedAt, new Date())
+      isSameUtcDay(latest.startedAt, now) &&
+      (latest.status === 'success' ||
+        (latest.status === 'running' && latestAgeMs < ACTIVE_DAILY_QUEUE_TIMEOUT_MS))
     ) {
       return {
         queuedMunicipalities: 0,
@@ -794,9 +895,10 @@ export const bootstrapNationalRefresh = action({
     const startedAt = latestQueueRun?.startedAt
       ? Date.parse(latestQueueRun.startedAt)
       : 0
-    const queuedRecently = Number.isFinite(startedAt)
-      ? Date.now() - startedAt < 30 * 60 * 1000
-      : false
+    const ageMs = Number.isFinite(startedAt) ? Date.now() - startedAt : Infinity
+    const queuedRecently =
+      ageMs < 30 * 60 * 1000 ||
+      (latestQueueRun?.status === 'running' && ageMs < ACTIVE_DAILY_QUEUE_TIMEOUT_MS)
 
     if (queuedRecently) {
       return {
@@ -856,31 +958,20 @@ async function queueNationalRefresh(ctx: ActionCtx): Promise<QueueDailyRefreshRe
     const catalog = await fetchCatalog()
     await ctx.runMutation(internal.ingestion.applyCatalog, catalog)
     await ctx.scheduler.runAfter(0, internal.ingestion.captureXmlSnapshot, {})
-    await ctx.scheduler.runAfter(0, internal.ingestion.capturePlacesSnapshot, {})
 
-    // Fan out across batches so the outer action stays under Convex's 1000
-    // system-op limit. Each batch runs as its own action and re-staggers the
-    // per-municipality refreshes so we don't hammer the CNE API.
     const totalMunicipalities = catalog.municipalities.length
-    const batchCount = Math.max(1, Math.ceil(totalMunicipalities / MUNICIPALITY_BATCH_SIZE))
-    for (let i = 0; i < totalMunicipalities; i += MUNICIPALITY_BATCH_SIZE) {
-      const slice = catalog.municipalities.slice(i, i + MUNICIPALITY_BATCH_SIZE)
-      const batch = slice.map((m) => ({
-        stateExternalId: stateId(m.EntidadFederativaId),
-        municipalityExternalId: municipalityId(m.MunicipioId),
-      }))
-      const batchIndex = i / MUNICIPALITY_BATCH_SIZE
-      await ctx.scheduler.runAfter(
-        batchIndex * MUNICIPALITY_BATCH_START_STAGGER_MS,
-        internal.ingestion.queueMunicipalityBatch,
-        { batch, staggerMs: MUNICIPALITY_REFRESH_STAGGER_MS },
-      )
-    }
-
-    await ctx.runMutation(internal.ingestion.recordDailyQueue, {
+    const runId = await ctx.runMutation(internal.ingestion.startDailyQueue, {
       queuedMunicipalities: totalMunicipalities,
-      message: `Carga nacional encolada para ${totalMunicipalities} municipios en ${batchCount} lote(s).`,
+      message: `Carga nacional encolada para ${totalMunicipalities} municipios con un worker secuencial.`,
     })
+
+    if (totalMunicipalities > 0) {
+      await ctx.scheduler.runAfter(0, internal.ingestion.runMunicipalityRefreshWorker, {
+        runId,
+        cursor: null,
+        failed: 0,
+      })
+    }
 
     return {
       queuedMunicipalities: totalMunicipalities,

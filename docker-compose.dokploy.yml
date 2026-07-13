@@ -18,6 +18,7 @@ services:
     # Pinned by digest (= :latest as of 2026-06-07) for reproducible pulls and to
     # avoid flaky :latest resolution. Update both images together when upgrading.
     image: ghcr.io/get-convex/convex-backend@sha256:edd7959f3464ed661f6663f646db205d5d61bda606c969b074dfb3c69ed71463
+    restart: unless-stopped
     stop_grace_period: 10s
     stop_signal: SIGINT
     mem_limit: 4g

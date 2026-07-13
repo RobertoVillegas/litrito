@@ -10,6 +10,7 @@
 services:
   backend:
     image: ghcr.io/get-convex/convex-backend:latest
+    restart: unless-stopped
     stop_grace_period: 10s
     stop_signal: SIGINT
     ports:
