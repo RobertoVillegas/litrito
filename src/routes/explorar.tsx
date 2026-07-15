@@ -362,10 +362,12 @@ function Explore() {
             filters.municipalityIds.length > 0
               ? filters.municipalityIds
               : undefined,
-          swLat: mapBounds.swLat,
-          swLon: mapBounds.swLon,
-          neLat: mapBounds.neLat,
-          neLon: mapBounds.neLon,
+          // Expand to a ~11 m grid. Tiny Leaflet float differences otherwise
+          // create distinct reactive subscriptions for the same viewport.
+          swLat: Math.floor(mapBounds.swLat * 10_000) / 10_000,
+          swLon: Math.floor(mapBounds.swLon * 10_000) / 10_000,
+          neLat: Math.ceil(mapBounds.neLat * 10_000) / 10_000,
+          neLon: Math.ceil(mapBounds.neLon * 10_000) / 10_000,
           limit: 800,
         }
       : ('skip' as const)

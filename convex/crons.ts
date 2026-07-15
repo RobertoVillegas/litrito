@@ -31,24 +31,24 @@ crons.daily(
   {},
 )
 
-crons.daily(
-  'geocode-stations-2100-mexico-city',
-  { hourUTC: 3, minuteUTC: 0 },
-  internal.ingestion.runNationalBulkRefresh,
+crons.interval(
+  'resume-stale-national-refresh',
+  { minutes: 15 },
+  internal.ingestion.resumeStaleDailyQueue,
   {},
 )
 
 crons.daily(
-  'rebuild-filter-options-cache-2130-mexico-city',
-  { hourUTC: 3, minuteUTC: 30 },
-  internal.stations.rebuildFilterOptionsCache,
+  'purge-old-ingestion-runs',
+  { hourUTC: 8, minuteUTC: 30 },
+  internal.ingestion.startIngestionRetention,
   {},
 )
 
 crons.daily(
-  'rebuild-metrics-cache-2145-mexico-city',
-  { hourUTC: 3, minuteUTC: 45 },
-  internal.metrics.rebuildMetricsCache,
+  'retry-stale-failed-geocodes',
+  { hourUTC: 8, minuteUTC: 45 },
+  internal.ingestion.requeueStaleFailedGeocodes,
   {},
 )
 

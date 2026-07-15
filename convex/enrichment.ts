@@ -91,6 +91,25 @@ export const applyEnrichmentBatch = internalMutation({
       }
       if (existing) await ctx.db.patch(existing._id, value)
       else await ctx.db.insert('stationEnrichment', value)
+      const listing = await ctx.db
+        .query('stationListings')
+        .withIndex('by_permit', (q) =>
+          q.eq('permitNumber', row.permitNumber),
+        )
+        .unique()
+      if (listing) {
+        const enrichment = {
+          brand: row.brand ?? null,
+          displayName: row.displayName ?? null,
+          source: args.source,
+        }
+        if (JSON.stringify(listing.enrichment) !== JSON.stringify(enrichment)) {
+          await ctx.db.patch(listing._id, {
+            enrichment,
+            updatedAt: now,
+          })
+        }
+      }
       written += 1
     }
     return { written }

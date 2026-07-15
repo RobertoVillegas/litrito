@@ -49,6 +49,10 @@ export default defineSchema({
     // Coarse latitude bucket (floor(lat/0.1)) for the 2D nearby search; paired
     // with longitude so a radius query reads only the cells around the user.
     latBucket: v.optional(v.number()),
+    coordinateStatus: v.optional(
+      v.union(v.literal('pending'), v.literal('located'), v.literal('failed')),
+    ),
+    coordinateCheckedAt: v.optional(v.string()),
     source: v.literal('CNE'),
     firstSeenAt: v.string(),
     lastSeenAt: v.string(),
@@ -59,6 +63,11 @@ export default defineSchema({
     .index('by_name', ['name'])
     .index('by_lat', ['latitude'])
     .index('by_lat_lon', ['latBucket', 'longitude'])
+    .index('by_coordinate_status', ['coordinateStatus'])
+    .index('by_coordinate_status_checked', [
+      'coordinateStatus',
+      'coordinateCheckedAt',
+    ])
     .searchIndex('search_station', {
       searchField: 'name',
       filterFields: ['stateExternalId', 'municipalityExternalId'],
@@ -114,8 +123,15 @@ export default defineSchema({
     message: v.optional(v.string()),
     recordsRead: v.optional(v.number()),
     recordsWritten: v.optional(v.number()),
+    parentRunId: v.optional(v.id('ingestionRuns')),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    failedCount: v.optional(v.number()),
+    newStations: v.optional(v.number()),
+    heartbeatAt: v.optional(v.string()),
   })
     .index('by_kind_started', ['kind', 'startedAt'])
+    .index('by_kind_status_started', ['kind', 'status', 'startedAt'])
+    .index('by_parent', ['parentRunId'])
     .index('by_location', ['stateExternalId', 'municipalityExternalId']),
   rawSnapshots: defineTable({
     kind: v.union(v.literal('cne_prices_xml'), v.literal('cne_places_xml')),
@@ -252,4 +268,85 @@ export default defineSchema({
   })
     .index('by_station', ['stationPermitNumber'])
     .index('by_brand', ['brand']),
+  // Read-optimized projection used by maps and station lists. Source tables
+  // remain authoritative; this document removes station/price/enrichment N+1
+  // joins from hot public queries.
+  stationListings: defineTable({
+    stationId: v.id('stations'),
+    permitNumber: v.string(),
+    name: v.string(),
+    address: v.string(),
+    stateExternalId: v.string(),
+    municipalityExternalId: v.string(),
+    stateName: v.optional(v.string()),
+    municipalityName: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    latBucket: v.optional(v.number()),
+    firstSeenAt: v.string(),
+    regularPrice: v.optional(v.number()),
+    premiumPrice: v.optional(v.number()),
+    dieselPrice: v.optional(v.number()),
+    dubaPrice: v.optional(v.number()),
+    unknownPrice: v.optional(v.number()),
+    prices: v.object({
+      regular: v.optional(v.object({ price: v.number(), reportedAt: v.optional(v.string()) })),
+      premium: v.optional(v.object({ price: v.number(), reportedAt: v.optional(v.string()) })),
+      diesel: v.optional(v.object({ price: v.number(), reportedAt: v.optional(v.string()) })),
+      duba: v.optional(v.object({ price: v.number(), reportedAt: v.optional(v.string()) })),
+      unknown: v.optional(v.object({ price: v.number(), reportedAt: v.optional(v.string()) })),
+    }),
+    enrichment: v.optional(
+      v.object({
+        brand: v.union(v.string(), v.null()),
+        displayName: v.union(v.string(), v.null()),
+        source: v.string(),
+      }),
+    ),
+    updatedAt: v.string(),
+  })
+    .index('by_permit', ['permitNumber'])
+    .index('by_location', ['stateExternalId', 'municipalityExternalId'])
+    .index('by_state', ['stateExternalId'])
+    .index('by_name', ['name'])
+    .index('by_lat_lon', ['latBucket', 'longitude'])
+    .index('by_regular_price', ['regularPrice'])
+    .index('by_premium_price', ['premiumPrice'])
+    .index('by_diesel_price', ['dieselPrice'])
+    .index('by_duba_price', ['dubaPrice'])
+    .index('by_unknown_price', ['unknownPrice'])
+    .index('by_state_regular_price', ['stateExternalId', 'regularPrice'])
+    .index('by_state_premium_price', ['stateExternalId', 'premiumPrice'])
+    .index('by_state_diesel_price', ['stateExternalId', 'dieselPrice'])
+    .index('by_state_duba_price', ['stateExternalId', 'dubaPrice'])
+    .index('by_state_unknown_price', ['stateExternalId', 'unknownPrice'])
+    .index('by_location_regular_price', [
+      'stateExternalId',
+      'municipalityExternalId',
+      'regularPrice',
+    ])
+    .index('by_location_premium_price', [
+      'stateExternalId',
+      'municipalityExternalId',
+      'premiumPrice',
+    ])
+    .index('by_location_diesel_price', [
+      'stateExternalId',
+      'municipalityExternalId',
+      'dieselPrice',
+    ])
+    .index('by_location_duba_price', [
+      'stateExternalId',
+      'municipalityExternalId',
+      'dubaPrice',
+    ])
+    .index('by_location_unknown_price', [
+      'stateExternalId',
+      'municipalityExternalId',
+      'unknownPrice',
+    ])
+    .searchIndex('search_station', {
+      searchField: 'name',
+      filterFields: ['stateExternalId', 'municipalityExternalId'],
+    }),
 })

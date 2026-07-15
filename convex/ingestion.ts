@@ -4,11 +4,15 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
-  query,
   type ActionCtx,
 } from './_generated/server'
 import { internal } from './_generated/api'
+import type { Id } from './_generated/dataModel'
 import { latBucketFor } from './geocells'
+import {
+  upsertStationListing,
+  type ListingPrices,
+} from './listings'
 import {
   municipalityId,
   normalizeFuelType,
@@ -24,7 +28,8 @@ const CNE_XML_URL = 'https://publicacionexterna.azurewebsites.net/publicaciones/
 const CNE_PLACES_URL = 'https://publicacionexterna.azurewebsites.net/publicaciones/places'
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 const NOMINATIM_MIN_INTERVAL_MS = 1100
-const GEOCODE_BATCH_SIZE = 300
+const GEOCODE_BATCH_SIZE = 40
+const COORDINATE_BOUNDS_MARGIN_DEGREES = 0.05
 
 // Process exactly one municipality per worker invocation. Keeping 25 fetch and
 // mutation results alive in one action still caused memory carry-over restarts.
@@ -78,10 +83,32 @@ type CnePlace = {
 type MunicipalityRefreshResult = {
   runId: unknown
   recordsWritten: number
+  newStations: number
 }
 
 type SnapshotResult = {
   runId: unknown
+}
+
+type CoordinateBounds = {
+  swLat: number
+  swLon: number
+  neLat: number
+  neLon: number
+}
+
+function coordinateWithinBounds(
+  latitude: number,
+  longitude: number,
+  bounds: CoordinateBounds | null,
+): boolean {
+  if (!bounds) return true
+  return (
+    latitude >= bounds.swLat - COORDINATE_BOUNDS_MARGIN_DEGREES &&
+    latitude <= bounds.neLat + COORDINATE_BOUNDS_MARGIN_DEGREES &&
+    longitude >= bounds.swLon - COORDINATE_BOUNDS_MARGIN_DEGREES &&
+    longitude <= bounds.neLon + COORDINATE_BOUNDS_MARGIN_DEGREES
+  )
 }
 
 type PlacesSnapshotResult = {
@@ -200,7 +227,7 @@ function normalizePriceRows(
   return { rows: validRows, mismatches }
 }
 
-function parsePlaceRows(xml: string): CnePlace[] {
+function parsePlaceRows(xml: string, permitFilter?: Set<string>): CnePlace[] {
   const places: CnePlace[] = []
   const placeMatches = xml.matchAll(/<place\s+place_id="([^"]+)">([\s\S]*?)<\/place>/g)
 
@@ -215,6 +242,7 @@ function parsePlaceRows(xml: string): CnePlace[] {
     if (!permitNumber || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       continue
     }
+    if (permitFilter && !permitFilter.has(permitNumber)) continue
 
     places.push({
       placeId: match[1] ?? '',
@@ -248,25 +276,29 @@ export const applyCatalog = internalMutation({
     const updatedAt = new Date().toISOString()
 
     const existingStates = await ctx.db.query('states').collect()
-    const stateIdByExternalId = new Map(existingStates.map((row) => [row.externalId, row._id]))
+    const stateByExternalId = new Map(existingStates.map((row) => [row.externalId, row]))
 
     for (const state of args.states) {
       const externalId = stateId(state.EntidadFederativaId)
       const value = { externalId, name: normalizeText(state.Nombre), updatedAt }
-      const existingId = stateIdByExternalId.get(externalId)
-      if (existingId) {
-        await ctx.db.patch(existingId, value)
+      const existing = stateByExternalId.get(externalId)
+      if (existing) {
+        if (existing.name !== value.name) await ctx.db.patch(existing._id, value)
       } else {
         const newId = await ctx.db.insert('states', value)
-        stateIdByExternalId.set(externalId, newId)
+        stateByExternalId.set(externalId, {
+          _id: newId,
+          _creationTime: Date.now(),
+          ...value,
+        })
       }
     }
 
     const existingMunicipalities = await ctx.db.query('municipalities').collect()
     const municipalityKey = (stateExternalId: string, externalId: string) =>
       `${stateExternalId}|${externalId}`
-    const municipalityIdByKey = new Map(
-      existingMunicipalities.map((row) => [municipalityKey(row.stateExternalId, row.externalId), row._id]),
+    const municipalityByKey = new Map(
+      existingMunicipalities.map((row) => [municipalityKey(row.stateExternalId, row.externalId), row]),
     )
 
     let written = 0
@@ -280,12 +312,16 @@ export const applyCatalog = internalMutation({
         updatedAt,
       }
       const key = municipalityKey(stateExternalId, externalId)
-      const existingId = municipalityIdByKey.get(key)
-      if (existingId) {
-        await ctx.db.patch(existingId, value)
+      const existing = municipalityByKey.get(key)
+      if (existing) {
+        if (existing.name !== value.name) await ctx.db.patch(existing._id, value)
       } else {
         const newId = await ctx.db.insert('municipalities', value)
-        municipalityIdByKey.set(key, newId)
+        municipalityByKey.set(key, {
+          _id: newId,
+          _creationTime: Date.now(),
+          ...value,
+        })
       }
       written += 1
     }
@@ -299,6 +335,7 @@ export const applyMunicipalityPrices = internalMutation({
     stateExternalId: v.string(),
     municipalityExternalId: v.string(),
     sourceUrl: v.string(),
+    parentRunId: v.optional(v.id('ingestionRuns')),
     records: v.array(
       v.object({
         permitNumber: v.string(),
@@ -323,6 +360,7 @@ export const applyMunicipalityPrices = internalMutation({
       municipalityExternalId: args.municipalityExternalId,
       sourceUrl: args.sourceUrl,
       recordsRead: args.records.length,
+      parentRunId: args.parentRunId,
     })
 
     const state = await ctx.db
@@ -344,11 +382,23 @@ export const applyMunicipalityPrices = internalMutation({
     // system timeout. These bulk index reads keep the working set bounded.
     const existingStations = await ctx.db
       .query('stations')
-      .withIndex('by_state', (q) => q.eq('stateExternalId', args.stateExternalId))
+      .withIndex('by_location', (q) =>
+        q
+          .eq('stateExternalId', args.stateExternalId)
+          .eq('municipalityExternalId', args.municipalityExternalId),
+      )
       .collect()
     const existingPrices = await ctx.db
       .query('fuelPricesCurrent')
       .withIndex('by_location_fuel_price', (q) =>
+        q
+          .eq('stateExternalId', args.stateExternalId)
+          .eq('municipalityExternalId', args.municipalityExternalId),
+      )
+      .collect()
+    const existingListings = await ctx.db
+      .query('stationListings')
+      .withIndex('by_location', (q) =>
         q
           .eq('stateExternalId', args.stateExternalId)
           .eq('municipalityExternalId', args.municipalityExternalId),
@@ -359,15 +409,26 @@ export const applyMunicipalityPrices = internalMutation({
       existingStations.map((station) => [station.permitNumber, station]),
     )
     const pricesByStationFuel = new Map<string, typeof existingPrices>()
+    const listingPricesByPermit = new Map<string, ListingPrices>()
     for (const price of existingPrices) {
       const key = `${price.stationPermitNumber}:${price.fuelType}`
       const prices = pricesByStationFuel.get(key)
       if (prices) prices.push(price)
       else pricesByStationFuel.set(key, [price])
+      const listingPrices = listingPricesByPermit.get(price.stationPermitNumber) ?? {}
+      listingPrices[price.fuelType] = {
+        price: price.price,
+        ...(price.reportedAt ? { reportedAt: price.reportedAt } : {}),
+      }
+      listingPricesByPermit.set(price.stationPermitNumber, listingPrices)
     }
+    const listingByPermit = new Map(
+      existingListings.map((listing) => [listing.permitNumber, listing]),
+    )
 
     let processed = 0
     let changed = 0
+    let newStations = 0
     const ingestedAt = new Date().toISOString()
     const stationRecords = new Map(
       args.records.map((record) => [record.permitNumber, record]),
@@ -375,7 +436,16 @@ export const applyMunicipalityPrices = internalMutation({
 
     // A station appears once per fuel in the CNE response; write it only once.
     for (const record of stationRecords.values()) {
-      const existingStation = stationByPermit.get(record.permitNumber)
+      let existingStation = stationByPermit.get(record.permitNumber)
+      if (!existingStation) {
+        existingStation =
+          (await ctx.db
+            .query('stations')
+            .withIndex('by_permit', (q) =>
+              q.eq('permitNumber', record.permitNumber),
+            )
+            .unique()) ?? undefined
+      }
 
       const stationValue = {
         permitNumber: record.permitNumber,
@@ -390,13 +460,34 @@ export const applyMunicipalityPrices = internalMutation({
       }
 
       if (existingStation) {
-        await ctx.db.patch(existingStation._id, stationValue)
+        const metadataChanged =
+          existingStation.name !== stationValue.name ||
+          existingStation.address !== stationValue.address ||
+          existingStation.stateExternalId !== stationValue.stateExternalId ||
+          existingStation.municipalityExternalId !==
+            stationValue.municipalityExternalId ||
+          existingStation.stateName !== stationValue.stateName ||
+          existingStation.municipalityName !== stationValue.municipalityName
+        if (metadataChanged) {
+          await ctx.db.patch(existingStation._id, stationValue)
+          existingStation = { ...existingStation, ...stationValue }
+        }
       } else {
-        await ctx.db.insert('stations', {
+        const stationId = await ctx.db.insert('stations', {
           ...stationValue,
           firstSeenAt: ingestedAt,
+          coordinateStatus: 'pending',
         })
+        existingStation = {
+          _id: stationId,
+          _creationTime: Date.now(),
+          ...stationValue,
+          firstSeenAt: ingestedAt,
+          coordinateStatus: 'pending',
+        }
+        newStations += 1
       }
+      stationByPermit.set(record.permitNumber, existingStation)
     }
 
     for (const record of args.records) {
@@ -423,6 +514,11 @@ export const applyMunicipalityPrices = internalMutation({
       }
 
       processed += 1
+      const listingPrices = listingPricesByPermit.get(record.permitNumber) ?? {}
+      listingPrices[record.fuelType] = {
+        price: record.price,
+      }
+      listingPricesByPermit.set(record.permitNumber, listingPrices)
 
       // Only touch the current row and append history when the price actually
       // changed. Most stations report the same price for days, so this avoids
@@ -438,6 +534,16 @@ export const applyMunicipalityPrices = internalMutation({
       }
     }
 
+    for (const record of stationRecords.values()) {
+      const station = stationByPermit.get(record.permitNumber)
+      if (!station) continue
+      await upsertStationListing(ctx, {
+        station,
+        prices: listingPricesByPermit.get(record.permitNumber) ?? {},
+        existing: listingByPermit.get(record.permitNumber),
+      })
+    }
+
     await ctx.db.patch(runId, {
       status: processed > 0 ? 'success' : 'skipped',
       finishedAt: new Date().toISOString(),
@@ -448,7 +554,7 @@ export const applyMunicipalityPrices = internalMutation({
           : 'La fuente no regreso precios validos para este municipio.',
     })
 
-    return { runId, recordsWritten: changed }
+    return { runId, recordsWritten: changed, newStations }
   },
 })
 
@@ -463,6 +569,7 @@ export const recordFailure = internalMutation({
     sourceUrl: v.optional(v.string()),
     stateExternalId: v.optional(v.string()),
     municipalityExternalId: v.optional(v.string()),
+    parentRunId: v.optional(v.id('ingestionRuns')),
     message: v.string(),
   },
   handler: async (ctx, args) => {
@@ -475,6 +582,7 @@ export const recordFailure = internalMutation({
       sourceUrl: args.sourceUrl,
       stateExternalId: args.stateExternalId,
       municipalityExternalId: args.municipalityExternalId,
+      parentRunId: args.parentRunId,
       message: args.message,
     })
   },
@@ -508,6 +616,10 @@ export const startDailyQueue = internalMutation({
       finishedAt: args.queuedMunicipalities > 0 ? undefined : now,
       recordsRead: args.queuedMunicipalities,
       recordsWritten: 0,
+      cursor: null,
+      failedCount: 0,
+      newStations: 0,
+      heartbeatAt: now,
       message: args.message,
     })
   },
@@ -518,16 +630,31 @@ export const updateDailyQueueProgress = internalMutation({
     runId: v.id('ingestionRuns'),
     processed: v.number(),
     failed: v.number(),
+    expectedCursor: v.optional(v.union(v.string(), v.null())),
+    nextCursor: v.optional(v.union(v.string(), v.null())),
+    newStations: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId)
-    if (!run || run.kind !== 'daily_queue' || run.status !== 'running') return
+    if (!run || run.kind !== 'daily_queue' || run.status !== 'running') return false
+    if (
+      args.expectedCursor !== undefined &&
+      (run.cursor ?? null) !== args.expectedCursor
+    ) {
+      return false
+    }
 
     const recordsWritten = (run.recordsWritten ?? 0) + args.processed
     await ctx.db.patch(args.runId, {
       recordsWritten,
+      cursor:
+        args.nextCursor !== undefined ? args.nextCursor : run.cursor ?? null,
+      failedCount: args.failed,
+      newStations: (run.newStations ?? 0) + (args.newStations ?? 0),
+      heartbeatAt: new Date().toISOString(),
       message: `Procesados ${recordsWritten} de ${run.recordsRead ?? 0} municipios; ${args.failed} fallidos hasta ahora.`,
     })
+    return true
   },
 })
 
@@ -546,6 +673,139 @@ export const completeDailyQueue = internalMutation({
       finishedAt: new Date().toISOString(),
       message: `Carga nacional terminada: ${processed} municipios procesados; ${args.failed} fallidos.`,
     })
+    return {
+      newStations: run.newStations ?? 0,
+      failed: args.failed,
+      processed,
+    }
+  },
+})
+
+export const getDailyQueueState = internalQuery({
+  args: { runId: v.id('ingestionRuns') },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId)
+    return run?.kind === 'daily_queue' ? run : null
+  },
+})
+
+// Scheduler watchdog. Claiming and scheduling happen transactionally, so
+// repeated cron ticks cannot create a recovery stampede.
+export const resumeStaleDailyQueue = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const latest = await ctx.db
+      .query('ingestionRuns')
+      .withIndex('by_kind_status_started', (q) =>
+        q.eq('kind', 'daily_queue').eq('status', 'running'),
+      )
+      .order('desc')
+      .first()
+    if (!latest) return { resumed: false }
+    const heartbeat = Date.parse(latest.heartbeatAt ?? latest.startedAt)
+    if (Number.isFinite(heartbeat) && Date.now() - heartbeat < 10 * 60 * 1000) {
+      return { resumed: false }
+    }
+    const now = new Date().toISOString()
+    await ctx.db.patch(latest._id, { heartbeatAt: now })
+    await ctx.scheduler.runAfter(0, internal.ingestion.runMunicipalityRefreshWorker, {
+      runId: latest._id,
+      cursor: latest.cursor ?? null,
+      failed: latest.failedCount ?? 0,
+    })
+    return { resumed: true, runId: latest._id }
+  },
+})
+
+export const purgeOldIngestionRuns = internalMutation({
+  args: {
+    kind: v.union(v.literal('municipality_prices'), v.literal('daily_queue')),
+    cutoff: v.string(),
+    status: v.union(
+      v.literal('success'),
+      v.literal('skipped'),
+      v.literal('failed'),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query('ingestionRuns')
+      .withIndex('by_kind_status_started', (q) =>
+        q
+          .eq('kind', args.kind)
+          .eq('status', args.status)
+          .lt('startedAt', args.cutoff),
+      )
+      .take(100)
+    for (const run of rows) {
+      await ctx.db.delete(run._id)
+    }
+    if (rows.length === 100) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.ingestion.purgeOldIngestionRuns,
+        { kind: args.kind, cutoff: args.cutoff, status: args.status },
+      )
+    }
+    return { deleted: rows.length, isDone: rows.length < 100 }
+  },
+})
+
+export const startIngestionRetention = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const municipalityCutoff = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000,
+    ).toISOString()
+    for (const status of ['success', 'skipped'] as const) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.ingestion.purgeOldIngestionRuns,
+        { kind: 'municipality_prices', cutoff: municipalityCutoff, status },
+      )
+    }
+    const auditCutoff = new Date(
+      Date.now() - 90 * 24 * 60 * 60 * 1000,
+    ).toISOString()
+    for (const status of ['failed', 'success', 'skipped'] as const) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.ingestion.purgeOldIngestionRuns,
+        { kind: 'daily_queue', cutoff: auditCutoff, status },
+      )
+    }
+    await ctx.scheduler.runAfter(0, internal.ingestion.purgeOldIngestionRuns, {
+      kind: 'municipality_prices',
+      cutoff: auditCutoff,
+      status: 'failed',
+    })
+    return { municipalityCutoff, auditCutoff }
+  },
+})
+
+export const requeueStaleFailedGeocodes = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const rows = await ctx.db
+      .query('stations')
+      .withIndex('by_coordinate_status_checked', (q) =>
+        q
+          .eq('coordinateStatus', 'failed')
+          .lt('coordinateCheckedAt', cutoff),
+      )
+      .take(100)
+    for (const row of rows) {
+      await ctx.db.patch(row._id, { coordinateStatus: 'pending' })
+    }
+    if (rows.length === 100) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.ingestion.requeueStaleFailedGeocodes,
+        {},
+      )
+    }
+    return { requeued: rows.length }
   },
 })
 
@@ -614,22 +874,81 @@ export const matchPlacesBatch = internalMutation({
     if (args.places.length === 0) return { matched: 0 }
 
     let matched = 0
+    let updated = 0
     for (const place of args.places) {
       const existing = await ctx.db
         .query('stations')
         .withIndex('by_permit', (q) => q.eq('permitNumber', place.permitNumber))
         .unique()
       if (!existing) continue
-      await ctx.db.patch(existing._id, {
-        placeId: place.placeId,
-        latitude: place.latitude,
-        longitude: place.longitude,
-        latBucket: latBucketFor(place.latitude),
-        name: existing.name || place.name,
-      })
+      const bounds = await ctx.db
+        .query('locationBounds')
+        .withIndex('by_key', (q) =>
+          q.eq(
+            'key',
+            `${existing.stateExternalId}|${existing.municipalityExternalId}`,
+          ),
+        )
+        .unique()
+      if (
+        !coordinateWithinBounds(
+          place.latitude,
+          place.longitude,
+          bounds,
+        )
+      ) {
+        continue
+      }
+      const latBucket = latBucketFor(place.latitude)
+      const changed =
+        existing.placeId !== place.placeId ||
+        existing.latitude !== place.latitude ||
+        existing.longitude !== place.longitude ||
+        existing.latBucket !== latBucket ||
+        existing.coordinateStatus !== 'located'
+      if (changed) {
+        const checkedAt = new Date().toISOString()
+        await ctx.db.patch(existing._id, {
+          placeId: place.placeId,
+          latitude: place.latitude,
+          longitude: place.longitude,
+          latBucket,
+          coordinateStatus: 'located',
+          coordinateCheckedAt: checkedAt,
+          name: existing.name || place.name,
+        })
+        const listing = await ctx.db
+          .query('stationListings')
+          .withIndex('by_permit', (q) =>
+            q.eq('permitNumber', place.permitNumber),
+          )
+          .unique()
+        if (listing) {
+          await ctx.db.patch(listing._id, {
+            latitude: place.latitude,
+            longitude: place.longitude,
+            latBucket,
+            updatedAt: checkedAt,
+          })
+        }
+        updated += 1
+      }
       matched += 1
     }
-    return { matched }
+    return { matched, updated }
+  },
+})
+
+export const listPendingCoordinatePermits = internalQuery({
+  args: { limit: v.number() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query('stations')
+      .withIndex('by_coordinate_status', (q) =>
+        q.eq('coordinateStatus', 'pending'),
+      )
+      .take(args.limit)
+    return rows.map((row) => row.permitNumber)
   },
 })
 
@@ -684,7 +1003,7 @@ export const refreshMunicipalityInternal = internalAction({
   handler: async (): Promise<MunicipalityRefreshResult & { skipped: true }> => {
     // Legacy fan-out jobs used this function name. Keep it as a no-op until
     // those durable scheduled entries have drained after deployment.
-    return { runId: null, recordsWritten: 0, skipped: true }
+    return { runId: null, recordsWritten: 0, newStations: 0, skipped: true }
   },
 })
 
@@ -718,19 +1037,32 @@ export const runMunicipalityRefreshWorker = internalAction({
     ctx,
     args,
   ): Promise<{ processed: number; failed: number; isDone: boolean }> => {
+    const run = await ctx.runQuery(internal.ingestion.getDailyQueueState, {
+      runId: args.runId,
+    })
+    if (
+      !run ||
+      run.status !== 'running' ||
+      (run.cursor ?? null) !== args.cursor
+    ) {
+      return { processed: 0, failed: run?.failedCount ?? args.failed, isDone: true }
+    }
     const page = await ctx.runQuery(internal.ingestion.listMunicipalityRefreshPage, {
       cursor: args.cursor,
     })
 
     let processed = 0
-    let failed = args.failed
+    let failed = run.failedCount ?? args.failed
+    let newStations = 0
     for (const municipality of page.page) {
       try {
-        await refreshMunicipalityData(
+        const result = await refreshMunicipalityData(
           ctx,
           municipality.stateExternalId,
           municipality.externalId,
+          args.runId,
         )
+        newStations += result.newStations
       } catch {
         // refreshMunicipalityData already records the failure. Continue so one
         // bad municipality cannot strand the rest of the national refresh.
@@ -739,20 +1071,33 @@ export const runMunicipalityRefreshWorker = internalAction({
       processed += 1
     }
 
-    await ctx.runMutation(internal.ingestion.updateDailyQueueProgress, {
+    const advanced = await ctx.runMutation(internal.ingestion.updateDailyQueueProgress, {
       runId: args.runId,
       processed,
       failed,
+      expectedCursor: args.cursor,
+      nextCursor: page.continueCursor,
+      newStations,
     })
+    if (!advanced) return { processed: 0, failed, isDone: page.isDone }
 
     if (page.isDone) {
-      await ctx.runMutation(internal.ingestion.completeDailyQueue, {
+      const completion = await ctx.runMutation(internal.ingestion.completeDailyQueue, {
         runId: args.runId,
         failed,
       })
-      // Geolocation matching also writes stations. Run it after price updates
-      // finish so the two bulk jobs cannot generate OCC retry storms.
-      await ctx.scheduler.runAfter(0, internal.ingestion.capturePlacesSnapshot, {})
+      if ((completion?.newStations ?? 0) > 0) {
+        await ctx.scheduler.runAfter(0, internal.ingestion.capturePlacesSnapshot, {
+          pendingOnly: true,
+          continueMaintenance: true,
+        })
+      } else {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.stations.rebuildFilterOptionsCache,
+          { scheduleMetrics: true },
+        )
+      }
     } else {
       await ctx.scheduler.runAfter(
         MUNICIPALITY_PAGE_PAUSE_MS,
@@ -808,9 +1153,27 @@ export const captureXmlSnapshot = internalAction({
 })
 
 export const capturePlacesSnapshot = internalAction({
-  args: {},
-  handler: async (ctx): Promise<PlacesSnapshotResult> => {
+  args: {
+    pendingOnly: v.optional(v.boolean()),
+    continueMaintenance: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<PlacesSnapshotResult> => {
     try {
+      const pendingPermits = args.pendingOnly
+        ? await ctx.runQuery(internal.ingestion.listPendingCoordinatePermits, {
+            limit: 5_000,
+          })
+        : null
+      if (pendingPermits && pendingPermits.length === 0) {
+        if (args.continueMaintenance) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.stations.rebuildFilterOptionsCache,
+            { scheduleMetrics: true },
+          )
+        }
+        return { runId: null, places: 0 }
+      }
       const response = await fetch(CNE_PLACES_URL, {
         headers: {
           accept: 'application/xml,text/xml,*/*',
@@ -825,19 +1188,24 @@ export const capturePlacesSnapshot = internalAction({
       }
 
       const xml = await response.text()
-      const allPlaces = parsePlaceRows(xml)
+      const allPlaces = parsePlaceRows(
+        xml,
+        pendingPermits ? new Set(pendingPermits) : undefined,
+      )
 
       // Run small matching mutations serially. This stays under the per-call
       // operation budget without leaving dozens of scheduled writes that all
       // become due together after a backend restart.
       const batchCount = Math.max(1, Math.ceil(allPlaces.length / PLACES_MATCH_CHUNK))
       let matched = 0
+      let updated = 0
       for (let i = 0; i < allPlaces.length; i += PLACES_MATCH_CHUNK) {
         const slice = allPlaces.slice(i, i + PLACES_MATCH_CHUNK)
         const result = await ctx.runMutation(internal.ingestion.matchPlacesBatch, {
           places: slice,
         })
         matched += result.matched
+        updated += result.updated ?? 0
         if (i + PLACES_MATCH_CHUNK < allPlaces.length) {
           await sleep(PLACES_BATCH_START_STAGGER_MS)
         }
@@ -849,8 +1217,16 @@ export const capturePlacesSnapshot = internalAction({
         sample: xml.slice(0, 1800),
         placeCount: allPlaces.length,
         matched,
-        message: `Snapshot XML validado. ${matched} estaciones enlazadas en ${batchCount} lote(s) secuenciales.`,
+        message: `Snapshot XML validado. ${matched} estaciones enlazadas y ${updated} actualizadas en ${batchCount} lote(s).`,
       })
+
+      if (args.continueMaintenance) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.stations.rebuildFilterOptionsCache,
+          { scheduleMetrics: true },
+        )
+      }
 
       return { runId, places: allPlaces.length }
     } catch (error) {
@@ -859,6 +1235,13 @@ export const capturePlacesSnapshot = internalAction({
         sourceUrl: CNE_PLACES_URL,
         message: error instanceof Error ? error.message : 'Places snapshot failed',
       })
+      if (args.continueMaintenance) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.stations.rebuildFilterOptionsCache,
+          { scheduleMetrics: true },
+        )
+      }
       throw error
     }
   },
@@ -867,7 +1250,10 @@ export const capturePlacesSnapshot = internalAction({
 export const refreshPlaces = action({
   args: {},
   handler: async (ctx): Promise<PlacesSnapshotResult> => {
-    return await ctx.runAction(internal.ingestion.capturePlacesSnapshot, {})
+    return await ctx.runAction(internal.ingestion.capturePlacesSnapshot, {
+      pendingOnly: false,
+      continueMaintenance: false,
+    })
   },
 })
 
@@ -937,6 +1323,7 @@ async function refreshMunicipalityData(
   ctx: ActionCtx,
   rawStateExternalId: string,
   rawMunicipalityExternalId: string,
+  parentRunId?: Id<'ingestionRuns'>,
 ): Promise<MunicipalityRefreshResult> {
   const stateExternalId = stateId(rawStateExternalId)
   const municipalityExternalId = municipalityId(rawMunicipalityExternalId)
@@ -961,6 +1348,7 @@ async function refreshMunicipalityData(
       municipalityExternalId,
       sourceUrl,
       records: rows,
+      parentRunId,
     })
   } catch (error) {
     await ctx.runMutation(internal.ingestion.recordFailure, {
@@ -968,6 +1356,7 @@ async function refreshMunicipalityData(
       sourceUrl,
       stateExternalId,
       municipalityExternalId,
+      parentRunId,
       message: error instanceof Error ? error.message : 'Municipality refresh failed',
     })
     throw error
@@ -1060,7 +1449,9 @@ export const listStationsNeedingGeocode = internalQuery({
   handler: async (ctx, args) => {
     const candidates = await ctx.db
       .query('stations')
-      .filter((q) => q.eq(q.field('latitude'), undefined))
+      .withIndex('by_coordinate_status', (q) =>
+        q.eq('coordinateStatus', 'pending'),
+      )
       .take(args.limit)
     return candidates.map((station) => ({
       _id: station._id,
@@ -1079,10 +1470,159 @@ export const patchStationCoordinates = internalMutation({
     longitude: v.number(),
   },
   handler: async (ctx, args) => {
+    const station = await ctx.db.get(args.stationId)
+    if (!station) return false
+    const bounds = await ctx.db
+      .query('locationBounds')
+      .withIndex('by_key', (q) =>
+        q.eq(
+          'key',
+          `${station.stateExternalId}|${station.municipalityExternalId}`,
+        ),
+      )
+      .unique()
+    if (!coordinateWithinBounds(args.latitude, args.longitude, bounds)) {
+      await ctx.db.patch(args.stationId, {
+        coordinateStatus: 'failed',
+        coordinateCheckedAt: new Date().toISOString(),
+      })
+      return false
+    }
+    const checkedAt = new Date().toISOString()
     await ctx.db.patch(args.stationId, {
       latitude: args.latitude,
       longitude: args.longitude,
       latBucket: latBucketFor(args.latitude),
+      coordinateStatus: 'located',
+      coordinateCheckedAt: checkedAt,
+    })
+    const listing = await ctx.db
+      .query('stationListings')
+      .withIndex('by_permit', (q) =>
+        q.eq('permitNumber', station.permitNumber),
+      )
+      .unique()
+    if (listing) {
+      await ctx.db.patch(listing._id, {
+        latitude: args.latitude,
+        longitude: args.longitude,
+        latBucket: latBucketFor(args.latitude),
+        updatedAt: checkedAt,
+      })
+    }
+    return true
+  },
+})
+
+// Repairs bad coordinates already accepted from CNE's places XML. The source
+// occasionally publishes a point in a different state; municipality bounds
+// prevent those stations from polluting nearby/map results.
+export const validateStationCoordinates = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, args) => {
+    if (args.cursor === undefined) {
+      const ready = await ctx.db
+        .query('filterOptionsCache')
+        .withIndex('by_key', (q) =>
+          q.eq('key', 'station-coordinate-validation-ready'),
+        )
+        .unique()
+      if (ready) await ctx.db.delete(ready._id)
+    }
+
+    const page = await ctx.db
+      .query('stations')
+      .paginate({ cursor: args.cursor ?? null, numItems: 40 })
+    const boundsByKey = new Map<string, CoordinateBounds | null>()
+    let invalid = 0
+    for (const station of page.page) {
+      if (
+        typeof station.latitude !== 'number' ||
+        typeof station.longitude !== 'number'
+      ) {
+        continue
+      }
+      const key = `${station.stateExternalId}|${station.municipalityExternalId}`
+      let bounds = boundsByKey.get(key)
+      if (bounds === undefined) {
+        bounds = await ctx.db
+          .query('locationBounds')
+          .withIndex('by_key', (q) => q.eq('key', key))
+          .unique()
+        boundsByKey.set(key, bounds)
+      }
+      if (coordinateWithinBounds(station.latitude, station.longitude, bounds)) {
+        continue
+      }
+
+      const checkedAt = new Date().toISOString()
+      await ctx.db.patch(station._id, {
+        placeId: undefined,
+        latitude: undefined,
+        longitude: undefined,
+        latBucket: undefined,
+        coordinateStatus: 'pending',
+        coordinateCheckedAt: checkedAt,
+      })
+      const listing = await ctx.db
+        .query('stationListings')
+        .withIndex('by_permit', (q) =>
+          q.eq('permitNumber', station.permitNumber),
+        )
+        .unique()
+      if (listing) {
+        await ctx.db.patch(listing._id, {
+          latitude: undefined,
+          longitude: undefined,
+          latBucket: undefined,
+          updatedAt: checkedAt,
+        })
+      }
+      invalid += 1
+    }
+
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.ingestion.validateStationCoordinates,
+        { cursor: page.continueCursor },
+      )
+    } else {
+      const readyAt = new Date().toISOString()
+      await ctx.db.insert('filterOptionsCache', {
+        key: 'station-coordinate-validation-ready',
+        data: JSON.stringify({ ready: true, readyAt }),
+        updatedAt: readyAt,
+      })
+      await ctx.scheduler.runAfter(
+        0,
+        internal.ingestion.geocodeStationsInternal,
+        {},
+      )
+    }
+    return { processed: page.page.length, invalid, isDone: page.isDone }
+  },
+})
+
+export const getCoordinateValidationStatus = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const ready = await ctx.db
+      .query('filterOptionsCache')
+      .withIndex('by_key', (q) =>
+        q.eq('key', 'station-coordinate-validation-ready'),
+      )
+      .unique()
+    return { ready: Boolean(ready), readyAt: ready?.updatedAt ?? null }
+  },
+})
+
+export const markStationGeocodeFailed = internalMutation({
+  args: { stationId: v.id('stations') },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.stationId, {
+      coordinateStatus: 'failed',
+      coordinateCheckedAt: new Date().toISOString(),
     })
   },
 })
@@ -1137,6 +1677,9 @@ export const geocodeStationsInternal = internalAction({
       const query = buildGeocodeQuery(station)
       if (!query) {
         failed += 1
+        await ctx.runMutation(internal.ingestion.markStationGeocodeFailed, {
+          stationId: station._id,
+        })
         await sleep(NOMINATIM_MIN_INTERVAL_MS)
         continue
       }
@@ -1147,17 +1690,27 @@ export const geocodeStationsInternal = internalAction({
           const latitude = Number(hit.lat)
           const longitude = Number(hit.lon)
           if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-            await ctx.runMutation(internal.ingestion.patchStationCoordinates, {
+            const accepted = await ctx.runMutation(
+              internal.ingestion.patchStationCoordinates,
+              {
               stationId: station._id,
               latitude,
               longitude,
-            })
-            geocoded += 1
+              },
+            )
+            if (accepted) geocoded += 1
+            else failed += 1
           } else {
             failed += 1
+            await ctx.runMutation(internal.ingestion.markStationGeocodeFailed, {
+              stationId: station._id,
+            })
           }
         } else {
           failed += 1
+          await ctx.runMutation(internal.ingestion.markStationGeocodeFailed, {
+            stationId: station._id,
+          })
         }
       } catch (error) {
         console.warn(`[ingestion] geocode failed for ${station.permitNumber}:`, error)
@@ -1180,7 +1733,12 @@ export const geocodeStationsInternal = internalAction({
     })
 
     if (!done) {
-      await ctx.scheduler.runAfter(60_000, internal.ingestion.geocodeStationsInternal, {})
+      const retryDelayMs = geocoded === 0 && failed > 0 ? 60 * 60_000 : 60_000
+      await ctx.scheduler.runAfter(
+        retryDelayMs,
+        internal.ingestion.geocodeStationsInternal,
+        {},
+      )
     }
 
     return {
@@ -1205,22 +1763,5 @@ export const runNationalBulkRefresh = internalAction({
   handler: async (ctx) => {
     await ctx.runAction(internal.ingestion.geocodeStationsInternal, {})
     return { ok: true as const }
-  },
-})
-
-export const stationGeocodingStats = query({
-  args: {},
-  handler: async (ctx) => {
-    const all = await ctx.db.query('stations').collect()
-    let withCoords = 0
-    let withoutCoords = 0
-    for (const station of all) {
-      if (typeof station.latitude === 'number' && typeof station.longitude === 'number') {
-        withCoords += 1
-      } else {
-        withoutCoords += 1
-      }
-    }
-    return { total: all.length, withCoords, withoutCoords }
   },
 })

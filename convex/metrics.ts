@@ -297,8 +297,8 @@ function buildNational(
 // memory, and persist a single blob (both raw and curated views). Cron-driven
 // after the daily price refresh.
 export const rebuildMetricsCache = internalAction({
-  args: {},
-  handler: async (ctx) => {
+  args: { scheduleGeocoding: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
     const stateIds = await ctx.runQuery(
       internal.metrics.listStateExternalIdsForMetrics,
       {},
@@ -329,6 +329,14 @@ export const rebuildMetricsCache = internalAction({
     await ctx.runMutation(internal.metrics.writeMetricsCache, {
       data: JSON.stringify(payload),
     })
+
+    if (args.scheduleGeocoding) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.ingestion.geocodeStationsInternal,
+        {},
+      )
+    }
 
     return {
       states: payload.curated.avgByState.length,

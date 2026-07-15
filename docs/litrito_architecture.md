@@ -50,6 +50,9 @@ Use these request rules for the internal CNE client:
   `latitude`, and `longitude` from the CNE places XML.
 - `fuelPricesCurrent`: latest known price per station and normalized fuel.
 - `fuelPricesHistory`: append-only price history per ingestion run.
+- `stationListings`: denormalized public read model with station metadata,
+  current prices, coordinates, and enrichment. It has price, location, search,
+  and geospatial indexes so public list/map queries do not perform N+1 joins.
 - `ingestionRuns`: status, timing, source URL, and counts for every fetch.
 - `rawSnapshots`: metadata and sample payloads for official XML snapshots.
 - `stationFavorites`: authenticated user favorites. Anonymous favorites live in
@@ -59,15 +62,27 @@ Use these request rules for the internal CNE client:
 
 1. Refresh CNE catalogs.
 2. Capture `prices` XML as a validation/audit snapshot.
-3. Capture `places` XML and patch coordinates onto known stations by permit.
-4. Start one durable self-chaining worker that refreshes one CNE municipality per invocation.
+3. Start one durable self-chaining worker that refreshes one CNE municipality per invocation.
+4. Persist the queue cursor, heartbeat, failure count, and new-station count after
+   each municipality. A watchdog resumes stale workers from that cursor.
 5. Normalize fuels to `regular`, `premium`, `diesel`, `duba`, or `unknown`.
-6. Replace current prices for the station/fuel pair and append history rows.
+6. Replace current prices for the station/fuel pair and append history rows only
+   when a price changed; update `stationListings` in the same transaction.
+7. When the queue finishes, match `places` XML only against newly discovered
+   stations, rebuild filter and metrics caches, then geocode remaining pending
+   stations. Each stage schedules the next, preventing overlapping bulk jobs.
 
-Convex crons are scheduled at 00:15, 00:30, 01:00, and 02:00 UTC, matching
+Coordinates from both XML and Nominatim are checked against the stored INEGI
+municipality bounding box (with a small boundary margin). Out-of-area legacy
+points are removed by a bounded self-chaining repair and returned to the pending
+geocoding queue; this protects nearby/map results from bad upstream points.
+
+Price crons are scheduled at 00:15, 00:30, 01:00, and 02:00 UTC, matching
 18:15, 18:30, 19:00, and 20:00 America/Mexico_City when the source is on GMT-6.
 Failures create `ingestionRuns` records and do not delete the last good current
-prices.
+prices. A 15-minute watchdog checks stale queues. Successful/skipped municipality
+runs are retained for 30 days; failed municipality runs and national summaries
+are retained for 90 days.
 
 On a fresh deployment, the UI can also call `bootstrapNationalRefresh` once when
 there are no price ingestion runs and no stations for the selected search. This
@@ -82,14 +97,14 @@ JSON by municipality is primary and XML is secondary. Remaining data hardening:
   a `partial_success` summary when some municipalities fail but valid data was
   ingested.
 - Add explicit request retries with backoff per municipality.
-- Add explicit queue health metrics and an operator-visible retry control for
-  failed municipalities.
+- Add an operator-visible retry control for all failed municipalities from a
+  selected national parent run.
 
 ## UI flow
 
 The `/` route is the product screen:
 
-- location filters backed by Convex catalogs,
+- location filters backed by cached Convex catalogs,
 - manual municipality refresh for development and spot checks,
 - fuel segmented control,
 - station search by name, permit, or address,
@@ -98,11 +113,9 @@ The `/` route is the product screen:
 - local favorites for anonymous users and Convex-backed favorites for signed-in
   users.
 
-The current map is dependency-free and projects points into the selected result
-bounds. A later production map should use MapLibre or another tile renderer once
-we decide on tile provider, marker clustering, and geolocation permissions. The
-map is not required for the data MVP; search by state, municipality, station,
-fuel, and price should continue working without coordinates.
+The map queries the materialized read model through latitude-bucket and longitude
+indexes. Client bounds are rounded outward to improve reactive-query cache reuse
+without excluding edge markers.
 
 ## Notes from the guides
 

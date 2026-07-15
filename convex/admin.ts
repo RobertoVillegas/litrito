@@ -35,7 +35,13 @@ type IngestionRun = {
   message?: string
   recordsRead?: number
   recordsWritten?: number
+  failedCount?: number
 }
+
+type RunSummary = Record<
+  string,
+  { count: number; recordsRead: number; recordsWritten: number }
+>
 
 type StationForBrandAudit = {
   permitNumber: string
@@ -123,26 +129,6 @@ export const getRoleByUserInternal = internalQuery({
   },
 })
 
-function sameOrAfter(iso: string, since: string): boolean {
-  return iso >= since
-}
-
-function summarizeRuns(runs: IngestionRun[]) {
-  const summary: Record<
-    string,
-    { count: number; recordsRead: number; recordsWritten: number }
-  > = {}
-
-  for (const run of runs) {
-    summary[run.status] ??= { count: 0, recordsRead: 0, recordsWritten: 0 }
-    summary[run.status].count += 1
-    summary[run.status].recordsRead += run.recordsRead ?? 0
-    summary[run.status].recordsWritten += run.recordsWritten ?? 0
-  }
-
-  return summary
-}
-
 export const me = query({
   args: {},
   handler: async (ctx) => {
@@ -168,16 +154,6 @@ export const ingestionOverview = query({
       .take(5)) as IngestionRun[]
 
     const latestDailyQueue = dailyQueues[0] ?? null
-    const municipalityRuns = latestDailyQueue
-      ? ((await ctx.db
-          .query('ingestionRuns')
-          .withIndex('by_kind_started', (q) => q.eq('kind', 'municipality_prices'))
-          .order('desc')
-          .collect()) as IngestionRun[]).filter((run) =>
-          sameOrAfter(run.startedAt, latestDailyQueue.startedAt),
-        )
-      : []
-
     const recentRuns = (await ctx.db
       .query('ingestionRuns')
       .withIndex('by_kind_started', (q) => q.eq('kind', 'municipality_prices'))
@@ -186,9 +162,11 @@ export const ingestionOverview = query({
 
     const recentFailures = (await ctx.db
       .query('ingestionRuns')
-      .withIndex('by_kind_started', (q) => q.eq('kind', 'municipality_prices'))
+      .withIndex('by_kind_status_started', (q) =>
+        q.eq('kind', 'municipality_prices').eq('status', 'failed'),
+      )
       .order('desc')
-      .take(500)) as IngestionRun[]
+      .take(20)) as IngestionRun[]
 
     const auditEvents = await ctx.db
       .query('adminAuditEvents')
@@ -196,16 +174,33 @@ export const ingestionOverview = query({
       .order('desc')
       .take(20)
 
+    const processed = latestDailyQueue?.recordsWritten ?? 0
+    const failed = latestDailyQueue?.failedCount ?? 0
+    const municipalitySummary: RunSummary = {}
+    if (processed - failed > 0) {
+      municipalitySummary.success = {
+        count: processed - failed,
+        recordsRead: 0,
+        recordsWritten: 0,
+      }
+    }
+    if (failed > 0) {
+      municipalitySummary.failed = {
+        count: failed,
+        recordsRead: 0,
+        recordsWritten: 0,
+      }
+    }
+
     return {
       latestDailyQueue,
       dailyQueues,
-      municipalitySummary: summarizeRuns(municipalityRuns),
-      municipalityTotal: municipalityRuns.length,
-      municipalityOldestStartedAt:
-        municipalityRuns[municipalityRuns.length - 1]?.startedAt ?? null,
-      municipalityNewestStartedAt: municipalityRuns[0]?.startedAt ?? null,
+      municipalitySummary,
+      municipalityTotal: processed,
+      municipalityOldestStartedAt: latestDailyQueue?.startedAt ?? null,
+      municipalityNewestStartedAt: recentRuns[0]?.startedAt ?? null,
       recentRuns,
-      recentFailures: recentFailures.filter((run) => run.status === 'failed').slice(0, 20),
+      recentFailures,
       auditEvents,
     }
   },

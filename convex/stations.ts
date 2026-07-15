@@ -36,8 +36,7 @@ const MAX_STATION_SCAN = 4000
 // nearest stations fall inside this latitude-centered window.
 const DISTANCE_SCAN_CAP = 4000
 
-// Of the stations inside the radius, only the closest this-many get a price
-// lookup (the home ranks by price among them). Bounds the price N+1 cost.
+// Bound the nearby candidate set before ranking the embedded listing prices.
 const NEARBY_PRICE_CANDIDATES = 120
 
 // Cap on stations read to compute a state/municipality bounding box for map
@@ -45,12 +44,6 @@ const NEARBY_PRICE_CANDIDATES = 120
 // a partial sample would still frame the area well.
 const AREA_BOUNDS_SCAN_CAP = 4000
 
-// N+1 price lookups, throttled to this many in flight at a time. Convex
-// queries have a per-call parallel-read ceiling (self-hosted is more
-// aggressive than cloud), so 800 simultaneous indexed reads get killed with
-// 'too many system operations'. Small parallel batches keep the in-flight
-// count well under the cap while still finishing an 800-station view quickly.
-const PRICE_LOOKUP_CHUNK = 16
 const MIN_PLAUSIBLE_PRICE = 15
 const MAX_PLAUSIBLE_PRICE = 50
 
@@ -61,6 +54,90 @@ type StationRow = {
   prices: Record<string, { price: number }>
   highlightedPrice: number | null
   distanceKm?: number | null
+}
+
+type ListingDoc = Doc<'stationListings'>
+
+function stationFromListing(listing: ListingDoc): Doc<'stations'> {
+  return {
+    _id: listing.stationId,
+    _creationTime: listing._creationTime,
+    permitNumber: listing.permitNumber,
+    name: listing.name,
+    address: listing.address,
+    stateExternalId: listing.stateExternalId,
+    municipalityExternalId: listing.municipalityExternalId,
+    stateName: listing.stateName,
+    municipalityName: listing.municipalityName,
+    latitude: listing.latitude,
+    longitude: listing.longitude,
+    latBucket: listing.latBucket,
+    source: 'CNE',
+    firstSeenAt: listing.firstSeenAt,
+    lastSeenAt: listing.updatedAt,
+  }
+}
+
+function rowFromListing(
+  listing: ListingDoc,
+  fuelTypes: FuelType[],
+  distanceKm: number | null = null,
+): StationRow & { enrichment: StationEnrichment | null } {
+  const prices = listing.prices as Record<string, { price: number }>
+  return {
+    station: stationFromListing(listing),
+    prices,
+    highlightedPrice: pickHighlightedPrice(prices, fuelTypes),
+    distanceKm,
+    enrichment: listing.enrichment ?? null,
+  }
+}
+
+function listingPrice(listing: ListingDoc, fuelType: FuelType): number | undefined {
+  return listing.prices[fuelType]?.price
+}
+
+async function loadListingsForSelections(
+  ctx: QueryCtx,
+  stateIds: string[],
+  parsedMunis: ParsedMunicipality[],
+): Promise<ListingDoc[]> {
+  const out: ListingDoc[] = []
+  const seen = new Set<string>()
+  const push = (rows: ListingDoc[]) => {
+    for (const row of rows) {
+      if (seen.has(row.permitNumber)) continue
+      seen.add(row.permitNumber)
+      out.push(row)
+    }
+  }
+  const munisWithState = parsedMunis.filter((m) => m.state)
+  if (munisWithState.length > 0) {
+    for (const m of munisWithState) {
+      push(
+        await ctx.db
+          .query('stationListings')
+          .withIndex('by_location', (q) =>
+            q
+              .eq('stateExternalId', m.state as string)
+              .eq('municipalityExternalId', m.muni),
+          )
+          .collect(),
+      )
+    }
+  } else {
+    for (const stateExternalId of stateIds) {
+      push(
+        await ctx.db
+          .query('stationListings')
+          .withIndex('by_state', (q) =>
+            q.eq('stateExternalId', stateExternalId),
+          )
+          .collect(),
+      )
+    }
+  }
+  return out
 }
 
 type FuelMetric = {
@@ -144,33 +221,6 @@ function stationMatchesSelections(
   return true
 }
 
-function priceMatchesSelections(
-  price: Doc<'fuelPricesCurrent'>,
-  stateIds: string[],
-  parsedMunis: ParsedMunicipality[],
-): boolean {
-  if (parsedMunis.length > 0) {
-    const muniKeys = new Set(
-      parsedMunis
-        .filter((p) => p.state)
-        .map((p) => `${p.state}|${p.muni}`),
-    )
-    const rawMunis = new Set(
-      parsedMunis.filter((p) => !p.state).map((p) => p.muni),
-    )
-    const allowedStates = stateIds.length > 0 ? new Set(stateIds) : null
-    const matchesComposite = muniKeys.has(
-      `${price.stateExternalId}|${price.municipalityExternalId}`,
-    )
-    const matchesRaw =
-      rawMunis.has(price.municipalityExternalId) &&
-      (allowedStates === null || allowedStates.has(price.stateExternalId))
-    return matchesComposite || matchesRaw
-  }
-  if (stateIds.length > 0) return stateIds.includes(price.stateExternalId)
-  return true
-}
-
 function pickHighlightedPrice(
   priceMap: Record<string, { price: number }>,
   fuelTypes: FuelType[],
@@ -226,37 +276,7 @@ function isPlausiblePrice(price: number): boolean {
   return price >= MIN_PLAUSIBLE_PRICE && price <= MAX_PLAUSIBLE_PRICE
 }
 
-async function hydrateStationRows(
-  ctx: QueryCtx,
-  stations: Doc<'stations'>[],
-  fuelTypes: FuelType[],
-): Promise<StationRow[]> {
-  const priceArrays = await Promise.all(
-    stations.map((station) =>
-      ctx.db
-        .query('fuelPricesCurrent')
-        .withIndex('by_station_fuel', (q) =>
-          q.eq('stationPermitNumber', station.permitNumber),
-        )
-        .collect(),
-    ),
-  )
-
-  return stations.map((station, i) => {
-    const priceMap: Record<string, { price: number }> = {}
-    for (const p of priceArrays[i]) {
-      priceMap[p.fuelType] = { price: p.price }
-    }
-    return {
-      station,
-      prices: priceMap,
-      highlightedPrice: pickHighlightedPrice(priceMap, fuelTypes),
-      distanceKm: null,
-    }
-  })
-}
-
-function filterRowsByFuel(rows: StationRow[], fuelTypes: FuelType[]) {
+function filterRowsByFuel<T extends StationRow>(rows: T[], fuelTypes: FuelType[]): T[] {
   if (fuelTypes.length === 0) return rows
   return rows.filter((r) => {
     const hasAnyPrice = Object.keys(r.prices).length > 0
@@ -281,6 +301,104 @@ function haversineKm(
   return 2 * R * Math.asin(Math.sqrt(a))
 }
 
+async function paginateListingPriceIndex(
+  ctx: QueryCtx,
+  args: {
+    fuelType: FuelType
+    stateExternalId?: string
+    municipalityExternalId?: string
+    paginationOpts: { cursor: string | null; numItems: number }
+  },
+) {
+  const state = args.stateExternalId
+  const municipality = args.municipalityExternalId
+  if (state && municipality) {
+    switch (args.fuelType) {
+      case 'premium':
+        return await ctx.db.query('stationListings').withIndex(
+          'by_location_premium_price',
+          (q) => q.eq('stateExternalId', state).eq('municipalityExternalId', municipality).gt('premiumPrice', 0),
+        ).paginate(args.paginationOpts)
+      case 'diesel':
+        return await ctx.db.query('stationListings').withIndex(
+          'by_location_diesel_price',
+          (q) => q.eq('stateExternalId', state).eq('municipalityExternalId', municipality).gt('dieselPrice', 0),
+        ).paginate(args.paginationOpts)
+      case 'duba':
+        return await ctx.db.query('stationListings').withIndex(
+          'by_location_duba_price',
+          (q) => q.eq('stateExternalId', state).eq('municipalityExternalId', municipality).gt('dubaPrice', 0),
+        ).paginate(args.paginationOpts)
+      case 'unknown':
+        return await ctx.db.query('stationListings').withIndex(
+          'by_location_unknown_price',
+          (q) => q.eq('stateExternalId', state).eq('municipalityExternalId', municipality).gt('unknownPrice', 0),
+        ).paginate(args.paginationOpts)
+      default:
+        return await ctx.db.query('stationListings').withIndex(
+          'by_location_regular_price',
+          (q) => q.eq('stateExternalId', state).eq('municipalityExternalId', municipality).gt('regularPrice', 0),
+        ).paginate(args.paginationOpts)
+    }
+  }
+  if (state) {
+    switch (args.fuelType) {
+      case 'premium':
+        return await ctx.db.query('stationListings').withIndex(
+          'by_state_premium_price',
+          (q) => q.eq('stateExternalId', state).gt('premiumPrice', 0),
+        ).paginate(args.paginationOpts)
+      case 'diesel':
+        return await ctx.db.query('stationListings').withIndex(
+          'by_state_diesel_price',
+          (q) => q.eq('stateExternalId', state).gt('dieselPrice', 0),
+        ).paginate(args.paginationOpts)
+      case 'duba':
+        return await ctx.db.query('stationListings').withIndex(
+          'by_state_duba_price',
+          (q) => q.eq('stateExternalId', state).gt('dubaPrice', 0),
+        ).paginate(args.paginationOpts)
+      case 'unknown':
+        return await ctx.db.query('stationListings').withIndex(
+          'by_state_unknown_price',
+          (q) => q.eq('stateExternalId', state).gt('unknownPrice', 0),
+        ).paginate(args.paginationOpts)
+      default:
+        return await ctx.db.query('stationListings').withIndex(
+          'by_state_regular_price',
+          (q) => q.eq('stateExternalId', state).gt('regularPrice', 0),
+        ).paginate(args.paginationOpts)
+    }
+  }
+  switch (args.fuelType) {
+    case 'premium':
+      return await ctx.db.query('stationListings').withIndex(
+        'by_premium_price',
+        (q) => q.gt('premiumPrice', 0),
+      ).paginate(args.paginationOpts)
+    case 'diesel':
+      return await ctx.db.query('stationListings').withIndex(
+        'by_diesel_price',
+        (q) => q.gt('dieselPrice', 0),
+      ).paginate(args.paginationOpts)
+    case 'duba':
+      return await ctx.db.query('stationListings').withIndex(
+        'by_duba_price',
+        (q) => q.gt('dubaPrice', 0),
+      ).paginate(args.paginationOpts)
+    case 'unknown':
+      return await ctx.db.query('stationListings').withIndex(
+        'by_unknown_price',
+        (q) => q.gt('unknownPrice', 0),
+      ).paginate(args.paginationOpts)
+    default:
+      return await ctx.db.query('stationListings').withIndex(
+        'by_regular_price',
+        (q) => q.gt('regularPrice', 0),
+      ).paginate(args.paginationOpts)
+  }
+}
+
 async function listStationsByPrice(
   ctx: QueryCtx,
   params: {
@@ -297,151 +415,49 @@ async function listStationsByPrice(
     params.singleState && params.singleMuni
       ? { state: params.singleState, muni: params.singleMuni.muni }
       : null
-
   const stateScoped = params.singleState
-  if (
-    !locationScopedMuni &&
-    !stateScoped &&
-    params.stateIds.length === 0 &&
-    params.parsedMunis.length === 0
-  ) {
-    const pagePrices = await ctx.db
-      .query('fuelPricesCurrent')
-      .withIndex('by_fuel_price', (q) => q.eq('fuelType', primaryFuel))
-      .paginate(params.paginationOpts)
-    const stations = (
-      await Promise.all(
-        pagePrices.page.map((price) =>
-          ctx.db
-            .query('stations')
-            .withIndex('by_permit', (q) =>
-              q.eq('permitNumber', price.stationPermitNumber),
-            )
-            .unique(),
-        ),
-      )
-    ).filter((station): station is Doc<'stations'> => station !== null)
+  const isSingleScope =
+    params.stateIds.length <= 1 &&
+    params.parsedMunis.length <= 1 &&
+    (!params.singleMuni || Boolean(locationScopedMuni))
 
+  if (isSingleScope) {
+    const page = await paginateListingPriceIndex(ctx, {
+      fuelType: primaryFuel,
+      stateExternalId: stateScoped ?? undefined,
+      municipalityExternalId: locationScopedMuni?.muni,
+      paginationOpts: params.paginationOpts,
+    })
     return {
-      ...pagePrices,
-      page: await hydrateStationRows(ctx, stations, params.fuelTypes),
+      ...page,
+      page: page.page.map((listing) =>
+        rowFromListing(listing, params.fuelTypes),
+      ),
     }
   }
 
-  const priceDocs = locationScopedMuni
-    ? await ctx.db
-        .query('fuelPricesCurrent')
-        .withIndex('by_location_fuel_price', (q) =>
-          q
-            .eq('stateExternalId', locationScopedMuni.state)
-            .eq('municipalityExternalId', locationScopedMuni.muni)
-            .eq('fuelType', primaryFuel),
-        )
-        .collect()
-    : stateScoped && params.stateIds.length <= 1
-      ? await ctx.db
-          .query('fuelPricesCurrent')
-          .withIndex('by_state_fuel_price', (q) =>
-            q.eq('stateExternalId', stateScoped).eq('fuelType', primaryFuel),
-          )
-          .collect()
-      : await ctx.db
-          .query('fuelPricesCurrent')
-          .withIndex('by_fuel_price', (q) => q.eq('fuelType', primaryFuel))
-          .collect()
-
-  const seenPermits = new Set<string>()
-  const orderedPrices = priceDocs.filter((price) => {
-    if (!priceMatchesSelections(price, params.stateIds, params.parsedMunis)) {
-      return false
-    }
-    if (seenPermits.has(price.stationPermitNumber)) return false
-    seenPermits.add(price.stationPermitNumber)
-    return true
-  })
-
-  const pagePrices = paginateArray(
-    orderedPrices,
+  const listings = await loadListingsForSelections(
+    ctx,
+    params.stateIds,
+    params.parsedMunis,
+  )
+  const ordered = listings
+    .filter((listing) => listingPrice(listing, primaryFuel) !== undefined)
+    .sort(
+      (a, b) =>
+        (listingPrice(a, primaryFuel) ?? Infinity) -
+          (listingPrice(b, primaryFuel) ?? Infinity) ||
+        a.name.localeCompare(b.name),
+    )
+  const page = paginateArray(
+    ordered,
     params.paginationOpts.cursor,
     params.paginationOpts.numItems,
   )
-  const stations = (
-    await Promise.all(
-      pagePrices.page.map((price) =>
-        ctx.db
-          .query('stations')
-          .withIndex('by_permit', (q) =>
-            q.eq('permitNumber', price.stationPermitNumber),
-          )
-          .unique(),
-      ),
-    )
-  ).filter((station): station is Doc<'stations'> => station !== null)
-
-  const rows = await hydrateStationRows(ctx, stations, params.fuelTypes)
   return {
-    ...pagePrices,
-    page: rows,
+    ...page,
+    page: page.page.map((listing) => rowFromListing(listing, params.fuelTypes)),
   }
-}
-
-// Read at most `limit` docs from an async-iterable query. Async iteration is
-// lazy, so this never reads the whole table — unlike `.collect()`.
-async function collectUpTo<T>(
-  iterable: AsyncIterable<T>,
-  limit: number,
-): Promise<T[]> {
-  const out: T[] = []
-  for await (const doc of iterable) {
-    out.push(doc)
-    if (out.length >= limit) break
-  }
-  return out
-}
-
-// Candidate stations for a state/municipality selection, read straight from the
-// most selective index (one state is ~600-1500 docs) instead of scanning the
-// whole catalog by latitude.
-async function loadStationsForSelections(
-  ctx: QueryCtx,
-  stateIds: string[],
-  parsedMunis: ParsedMunicipality[],
-): Promise<Doc<'stations'>[]> {
-  const out: Doc<'stations'>[] = []
-  const seen = new Set<string>()
-  const push = (rows: Doc<'stations'>[]) => {
-    for (const s of rows) {
-      if (seen.has(s.permitNumber)) continue
-      seen.add(s.permitNumber)
-      out.push(s)
-    }
-  }
-
-  const munisWithState = parsedMunis.filter((m) => m.state)
-  if (munisWithState.length > 0) {
-    for (const m of munisWithState) {
-      push(
-        await ctx.db
-          .query('stations')
-          .withIndex('by_location', (q) =>
-            q
-              .eq('stateExternalId', m.state as string)
-              .eq('municipalityExternalId', m.muni),
-          )
-          .collect(),
-      )
-    }
-  } else if (stateIds.length > 0) {
-    for (const sid of stateIds) {
-      push(
-        await ctx.db
-          .query('stations')
-          .withIndex('by_state', (q) => q.eq('stateExternalId', sid))
-          .collect(),
-      )
-    }
-  }
-  return out
 }
 
 // Bounding box of every station in a state (or a single municipality), used to
@@ -508,46 +524,12 @@ export const areaBounds = query({
   },
 })
 
-// National distance sort: read the stations nearest to the user's latitude by
-// walking the `by_lat` index outward in both directions, capped at
-// DISTANCE_SCAN_CAP total. True nearest-by-distance stations sit within a small
-// latitude band of the user, so this bounded sample contains them while keeping
-// reads far under the per-query document/byte limits. The previous nested
-// radius `.collect()` loop re-read overlapping latitude bands and blew the
-// 32k-doc / 16MB limit once the catalog filled up.
-async function loadNearestByLatitude(
-  ctx: QueryCtx,
-  userLat: number,
-  cap: number,
-): Promise<Doc<'stations'>[]> {
-  const half = Math.ceil(cap / 2)
-  const north = await collectUpTo(
-    ctx.db
-      .query('stations')
-      .withIndex('by_lat', (q) => q.gte('latitude', userLat)),
-    half,
-  )
-  const south = await collectUpTo(
-    ctx.db
-      .query('stations')
-      .withIndex('by_lat', (q) => q.lt('latitude', userLat))
-      .order('desc'),
-    half,
-  )
-  return [...north, ...south]
-}
-
-// Stations inside the radius via the 2D [latBucket, longitude] index. Iterate
-// only the latitude buckets the radius box touches (a handful) and, within each,
-// range-scan the longitude box — so we read only the cells around the user, not
-// the whole country-wide latitude band. That country-wide read was the original
-// cause of the system-op timeouts. Filter by exact haversine and keep the
-// closest NEARBY_PRICE_CANDIDATES (the only ones we price-check downstream).
-async function loadStationsWithinRadius(
+async function loadListingsWithinRadius(
   ctx: QueryCtx,
   userLocation: { latitude: number; longitude: number },
   maxDistanceKm: number,
-): Promise<Array<{ station: Doc<'stations'>; distanceKm: number }>> {
+  cap = 4_000,
+): Promise<Array<{ listing: ListingDoc; distanceKm: number }>> {
   const latDelta = maxDistanceKm / 111.32
   const cosLat = Math.cos(toRad(userLocation.latitude))
   const lonDelta = maxDistanceKm / (111.32 * Math.max(Math.abs(cosLat), 0.01))
@@ -555,34 +537,33 @@ async function loadStationsWithinRadius(
   const maxLat = userLocation.latitude + latDelta
   const minLon = userLocation.longitude - lonDelta
   const maxLon = userLocation.longitude + lonDelta
-  const minBucket = latBucketFor(minLat)
-  const maxBucket = latBucketFor(maxLat)
+  const found: Array<{ listing: ListingDoc; distanceKm: number }> = []
 
-  const found: Array<{ station: Doc<'stations'>; distanceKm: number }> = []
-  for (let bucket = minBucket; bucket <= maxBucket; bucket++) {
-    const inBucket = await ctx.db
-      .query('stations')
+  for (
+    let bucket = latBucketFor(minLat);
+    bucket <= latBucketFor(maxLat) && found.length < cap;
+    bucket++
+  ) {
+    const rows = await ctx.db
+      .query('stationListings')
       .withIndex('by_lat_lon', (q) =>
         q.eq('latBucket', bucket).gte('longitude', minLon).lte('longitude', maxLon),
       )
-      .collect()
-    for (const station of inBucket) {
-      const lat = station.latitude
-      const lon = station.longitude
-      if (typeof lat !== 'number' || typeof lon !== 'number') continue
+      .take(cap - found.length)
+    for (const listing of rows) {
+      if (typeof listing.latitude !== 'number' || typeof listing.longitude !== 'number') {
+        continue
+      }
       const distanceKm = haversineKm(
         userLocation.latitude,
         userLocation.longitude,
-        lat,
-        lon,
+        listing.latitude,
+        listing.longitude,
       )
-      if (distanceKm <= maxDistanceKm) found.push({ station, distanceKm })
+      if (distanceKm <= maxDistanceKm) found.push({ listing, distanceKm })
     }
   }
-
-  return found
-    .sort((a, b) => a.distanceKm - b.distanceKm)
-    .slice(0, NEARBY_PRICE_CANDIDATES)
+  return found.sort((a, b) => a.distanceKm - b.distanceKm)
 }
 
 async function listStationsByDistance(
@@ -598,29 +579,59 @@ async function listStationsByDistance(
   const hasIndexedSelection =
     params.parsedMunis.some((m) => m.state) || params.stateIds.length > 0
 
-  const candidates = hasIndexedSelection
-    ? await loadStationsForSelections(ctx, params.stateIds, params.parsedMunis)
-    : await loadNearestByLatitude(
+  const required = parseOffset(params.paginationOpts.cursor) + params.paginationOpts.numItems
+  let candidates: Array<{ listing: ListingDoc; distanceKm: number }>
+  if (hasIndexedSelection) {
+    const listings = await loadListingsForSelections(
+      ctx,
+      params.stateIds,
+      params.parsedMunis,
+    )
+    candidates = listings.flatMap((listing) => {
+      if (
+        typeof listing.latitude !== 'number' ||
+        typeof listing.longitude !== 'number'
+      ) {
+        return []
+      }
+      return [
+        {
+          listing,
+          distanceKm: haversineKm(
+            params.userLocation.latitude,
+            params.userLocation.longitude,
+            listing.latitude,
+            listing.longitude,
+          ),
+        },
+      ]
+    })
+  } else {
+    candidates = []
+    for (const radius of [25, 100, 500]) {
+      candidates = await loadListingsWithinRadius(
         ctx,
-        params.userLocation.latitude,
+        params.userLocation,
+        radius,
         DISTANCE_SCAN_CAP,
       )
+      if (candidates.length >= required) break
+    }
+  }
 
   const sorted = candidates
-    .filter((station) =>
-      stationMatchesSelections(station, params.stateIds, params.parsedMunis),
-    )
-    .map((station) => ({
-      station,
-      distanceKm: haversineKm(
-        params.userLocation.latitude,
-        params.userLocation.longitude,
-        station.latitude ?? 0,
-        station.longitude ?? 0,
+    .filter(({ listing }) =>
+      stationMatchesSelections(
+        stationFromListing(listing),
+        params.stateIds,
+        params.parsedMunis,
       ),
-    }))
+    )
     .sort((a, b) => {
-      return a.distanceKm - b.distanceKm || a.station.name.localeCompare(b.station.name)
+      return (
+        a.distanceKm - b.distanceKm ||
+        a.listing.name.localeCompare(b.listing.name)
+      )
     })
 
   const page = paginateArray(
@@ -628,20 +639,12 @@ async function listStationsByDistance(
     params.paginationOpts.cursor,
     params.paginationOpts.numItems,
   )
-  const distanceByPermit = new Map(
-    page.page.map((item) => [item.station.permitNumber, item.distanceKm]),
-  )
   const rows = filterRowsByFuel(
-    await hydrateStationRows(
-      ctx,
-      page.page.map((item) => item.station),
-      params.fuelTypes,
+    page.page.map(({ listing, distanceKm }) =>
+      rowFromListing(listing, params.fuelTypes, distanceKm),
     ),
     params.fuelTypes,
-  ).map((row) => ({
-    ...row,
-    distanceKm: distanceByPermit.get(row.station.permitNumber) ?? null,
-  }))
+  )
 
   return { ...page, page: rows }
 }
@@ -671,67 +674,6 @@ export const backfillLatBuckets = internalMutation({
   },
 })
 
-// Distinct enriched brands with station counts, for the brand filter UI.
-export const listBrands = query({
-  args: {},
-  handler: async (ctx) => {
-    const counts = new Map<string, number>()
-    for await (const row of ctx.db.query('stationEnrichment').withIndex('by_brand')) {
-      if (row.brand) counts.set(row.brand, (counts.get(row.brand) ?? 0) + 1)
-    }
-    return [...counts.entries()]
-      .map(([brand, count]) => ({ brand, count }))
-      .sort((a, b) => b.count - a.count || a.brand.localeCompare(b.brand))
-  },
-})
-
-// Stations of a given enriched brand, paginated via the by_brand index on
-// stationEnrichment. Hydrates CNE station rows + prices and re-attaches the
-// enrichment so the list shows the recognizable name.
-export const listStationsByBrand = query({
-  args: {
-    brand: v.string(),
-    fuelTypes: v.optional(v.array(fuelType)),
-    paginationOpts: paginationOptsValidator,
-  },
-  handler: async (ctx, args) => {
-    const fuelTypes = args.fuelTypes ?? []
-    const page = await ctx.db
-      .query('stationEnrichment')
-      .withIndex('by_brand', (q) => q.eq('brand', args.brand))
-      .paginate(args.paginationOpts)
-
-    const stations = (
-      await Promise.all(
-        page.page.map((e) =>
-          ctx.db
-            .query('stations')
-            .withIndex('by_permit', (q) =>
-              q.eq('permitNumber', e.stationPermitNumber),
-            )
-            .unique(),
-        ),
-      )
-    ).filter((s): s is Doc<'stations'> => s !== null)
-
-    const rows = filterRowsByFuel(
-      await hydrateStationRows(ctx, stations, fuelTypes),
-      fuelTypes,
-    )
-    const enrichmentMap = await loadEnrichment(
-      ctx,
-      rows.map((r) => r.station.permitNumber),
-    )
-    return {
-      ...page,
-      page: rows.map((r) => ({
-        ...r,
-        enrichment: enrichmentMap.get(r.station.permitNumber) ?? null,
-      })),
-    }
-  },
-})
-
 export const bestNearbyStations = query({
   args: {
     fuelType,
@@ -742,50 +684,25 @@ export const bestNearbyStations = query({
   handler: async (ctx, args) => {
     const limit = Math.min(Math.max(args.limit ?? 10, 1), 20)
     const maxDistanceKm = Math.min(Math.max(args.maxDistanceKm ?? 15, 1), 100)
-    const candidates = await loadStationsWithinRadius(
+    const candidates = await loadListingsWithinRadius(
       ctx,
       args.userLocation,
       maxDistanceKm,
+      NEARBY_PRICE_CANDIDATES,
     )
-
-    const rows: Array<{
-      station: Doc<'stations'>
-      price: number
-      distanceKm: number
-      reportedAt?: string
-    }> = []
-
-    for (let i = 0; i < candidates.length; i += PRICE_LOOKUP_CHUNK) {
-      const batch = candidates.slice(i, i + PRICE_LOOKUP_CHUNK)
-      const prices = await Promise.all(
-        batch.map(({ station }) =>
-          ctx.db
-            .query('fuelPricesCurrent')
-            .withIndex('by_station_fuel', (q) =>
-              q
-                .eq('stationPermitNumber', station.permitNumber)
-                .eq('fuelType', args.fuelType),
-            )
-            .unique(),
-        ),
-      )
-
-      for (let j = 0; j < batch.length; j++) {
-        const { station, distanceKm } = batch[j]
-        const price = prices[j]
-        if (!price) {
-          continue
-        }
-        rows.push({
-          station,
-          price: price.price,
-          reportedAt: price.reportedAt,
-          distanceKm,
-        })
-      }
-    }
-
-    const top = rows
+    const top = candidates
+      .flatMap(({ listing, distanceKm }) => {
+        const price = listing.prices[args.fuelType]
+        return price
+          ? [{
+              station: stationFromListing(listing),
+              price: price.price,
+              reportedAt: price.reportedAt,
+              distanceKm,
+              enrichment: listing.enrichment ?? null,
+            }]
+          : []
+      })
       .sort(
         (a, b) =>
           a.price - b.price ||
@@ -793,15 +710,7 @@ export const bestNearbyStations = query({
           a.station.name.localeCompare(b.station.name),
       )
       .slice(0, limit)
-
-    const enrichmentMap = await loadEnrichment(
-      ctx,
-      top.map((r) => r.station.permitNumber),
-    )
-    return top.map((r) => ({
-      ...r,
-      enrichment: enrichmentMap.get(r.station.permitNumber) ?? null,
-    }))
+    return top
   },
 })
 
@@ -1001,25 +910,6 @@ export const seoSitemapLocations = query({
   },
 })
 
-// Attach external enrichment (brand / display name) to a page of station rows
-// for the explore list, without changing the CNE data behind them.
-async function withEnrichment<T extends { page: StationRow[] }>(
-  ctx: QueryCtx,
-  result: T,
-): Promise<Omit<T, 'page'> & { page: Array<StationRow & { enrichment: StationEnrichment | null }> }> {
-  const enr = await loadEnrichment(
-    ctx,
-    result.page.map((r) => r.station.permitNumber),
-  )
-  return {
-    ...result,
-    page: result.page.map((r) => ({
-      ...r,
-      enrichment: enr.get(r.station.permitNumber) ?? null,
-    })),
-  }
-}
-
 export const listStations = query({
   args: {
     fuelTypes: v.optional(v.array(fuelType)),
@@ -1061,40 +951,34 @@ export const listStations = query({
     const singleState = singleStateFromState ?? singleMuni?.state ?? null
 
     if (!useSearch && args.sortMode === 'distance' && args.userLocation) {
-      return await withEnrichment(
-        ctx,
-        await listStationsByDistance(ctx, {
-          fuelTypes,
-          stateIds,
-          parsedMunis,
-          userLocation: args.userLocation,
-          paginationOpts: args.paginationOpts,
-        }),
-      )
+      return await listStationsByDistance(ctx, {
+        fuelTypes,
+        stateIds,
+        parsedMunis,
+        userLocation: args.userLocation,
+        paginationOpts: args.paginationOpts,
+      })
     }
 
     if (!useSearch && args.sortMode === 'price') {
-      return await withEnrichment(
-        ctx,
-        await listStationsByPrice(ctx, {
-          fuelTypes,
-          stateIds,
-          parsedMunis,
-          singleState,
-          singleMuni,
-          paginationOpts: args.paginationOpts,
-        }),
-      )
+      return await listStationsByPrice(ctx, {
+        fuelTypes,
+        stateIds,
+        parsedMunis,
+        singleState,
+        singleMuni,
+        paginationOpts: args.paginationOpts,
+      })
     }
 
     let paginated: {
-      page: Doc<'stations'>[]
+      page: ListingDoc[]
       isDone: boolean
       continueCursor: string
     }
     if (useSearch) {
       let q = ctx.db
-        .query('stations')
+        .query('stationListings')
         .withSearchIndex('search_station', (sq) => {
           const search = sq.search('name', term)
           if (singleState && singleMuni) {
@@ -1122,8 +1006,10 @@ export const listStations = query({
       // Read only the selected municipalities/states via index instead of
       // scanning the whole catalog, then narrow with the shared matcher.
       const filtered = (
-        await loadStationsForSelections(ctx, stateIds, parsedMunis)
-      ).filter((s) => stationMatchesSelections(s, stateIds, parsedMunis))
+        await loadListingsForSelections(ctx, stateIds, parsedMunis)
+      ).filter((s) =>
+        stationMatchesSelections(stationFromListing(s), stateIds, parsedMunis),
+      )
       const start = parseOffset(args.paginationOpts.cursor)
       const end = start + args.paginationOpts.numItems
       const page = filtered.slice(start, end)
@@ -1135,7 +1021,7 @@ export const listStations = query({
       }
     } else if (singleState) {
       const result = await ctx.db
-        .query('stations')
+        .query('stationListings')
         .withIndex('by_state', (q) => q.eq('stateExternalId', singleState))
         .paginate(args.paginationOpts)
       paginated = {
@@ -1146,7 +1032,7 @@ export const listStations = query({
     } else if (stateIds.length > 1) {
       // Read the selected states via the by_state index rather than the whole
       // catalog.
-      const filtered = await loadStationsForSelections(ctx, stateIds, [])
+      const filtered = await loadListingsForSelections(ctx, stateIds, [])
       const start = parseOffset(args.paginationOpts.cursor)
       const end = start + args.paginationOpts.numItems
       const page = filtered.slice(start, end)
@@ -1158,7 +1044,7 @@ export const listStations = query({
       }
     } else {
       const result = await ctx.db
-        .query('stations')
+        .query('stationListings')
         .withIndex('by_name', (q) => q)
         .paginate(args.paginationOpts)
       paginated = {
@@ -1168,7 +1054,9 @@ export const listStations = query({
       }
     }
 
-    let rows = await hydrateStationRows(ctx, paginated.page, fuelTypes)
+    let rows = paginated.page.map((listing) =>
+      rowFromListing(listing, fuelTypes),
+    )
 
     // Exclude a station from a fuel filter only when it reports prices but none
     // match the selected fuels. Stations with no reported price yet stay visible
@@ -1202,10 +1090,10 @@ export const listStations = query({
       })
     }
 
-    return await withEnrichment(ctx, {
+    return {
       ...paginated,
       page: rows,
-    })
+    }
   },
 })
 
@@ -1253,24 +1141,30 @@ export const listStationsInBounds = query({
     // lazily and lets us break early without any pagination call. The previous
     // `.collect()` version pulled every station in the lat range and timed out
     // the self-hosted op budget once the catalog filled up.
-    const selected: Doc<'stations'>[] = []
+    const selected: ListingDoc[] = []
     let truncated = false
     const selectionScoped =
       stateIds.length > 0 || parsedMunis.length > 0
-        ? await loadStationsForSelections(ctx, stateIds, parsedMunis)
+        ? await loadListingsForSelections(ctx, stateIds, parsedMunis)
         : null
 
-    const considerStation = (station: Doc<'stations'>) => {
-      const lat = station.latitude
-      const lon = station.longitude
+    const considerStation = (listing: ListingDoc) => {
+      const lat = listing.latitude
+      const lon = listing.longitude
       if (
         typeof lat === 'number' &&
         typeof lon === 'number' &&
-        stationMatchesSelections(station, stateIds, parsedMunis) &&
+        stationMatchesSelections(
+          stationFromListing(listing),
+          stateIds,
+          parsedMunis,
+        ) &&
+        lat >= swLat &&
+        lat <= neLat &&
         lon >= swLon &&
         lon <= neLon
       ) {
-        selected.push(station)
+        selected.push(listing)
         if (selected.length >= limit) {
           truncated = true
           return false
@@ -1280,74 +1174,30 @@ export const listStationsInBounds = query({
     }
 
     if (selectionScoped) {
-      for (const station of selectionScoped) {
-        if (!considerStation(station)) break
+      for (const listing of selectionScoped) {
+        if (!considerStation(listing)) break
       }
     } else {
-      let scanned = 0
-      for await (const station of ctx.db
-        .query('stations')
-        .withIndex('by_lat', (q) =>
-          q.gte('latitude', swLat).lte('latitude', neLat),
-        )) {
-        scanned++
-        if (!considerStation(station)) break
-        if (scanned >= MAX_STATION_SCAN) {
+      const minBucket = latBucketFor(swLat)
+      const maxBucket = latBucketFor(neLat)
+      for (let bucket = minBucket; bucket <= maxBucket; bucket++) {
+        const rows = await ctx.db
+          .query('stationListings')
+          .withIndex('by_lat_lon', (q) =>
+            q.eq('latBucket', bucket).gte('longitude', swLon).lte('longitude', neLon),
+          )
+          .take(Math.min(MAX_STATION_SCAN, limit - selected.length))
+        for (const listing of rows) {
+          if (!considerStation(listing)) break
+        }
+        if (selected.length >= limit) {
           truncated = true
           break
         }
       }
     }
-
-    // N+1 price lookups, throttled to PRICE_LOOKUP_CHUNK in flight at a time.
-    // Convex queries have a per-call parallel-read ceiling (and self-hosted
-    // is more aggressive about it than cloud), so 800 simultaneous indexed
-    // reads will be killed with 'too many system operations'. Doing 16
-    // parallel reads per turn keeps the in-flight count well under the cap
-    // while still finishing a 800-station view in ~50 sequential turns.
-    const pricesByStation = new Map<string, Record<string, { price: number }>>()
-    for (let i = 0; i < selected.length; i += PRICE_LOOKUP_CHUNK) {
-      const batch = selected.slice(i, i + PRICE_LOOKUP_CHUNK)
-      const priceArrays = await Promise.all(
-        batch.map((s) =>
-          ctx.db
-            .query('fuelPricesCurrent')
-            .withIndex('by_station_fuel', (q) =>
-              q.eq('stationPermitNumber', s.permitNumber),
-            )
-            .collect(),
-        ),
-      )
-      for (const arr of priceArrays) {
-        for (const p of arr) {
-          const slot = pricesByStation.get(p.stationPermitNumber) ?? {}
-          slot[p.fuelType] = { price: p.price }
-          pricesByStation.set(p.stationPermitNumber, slot)
-        }
-      }
-    }
-
-    const pickHighlightedPrice = (priceMap: Record<string, { price: number }>) => {
-      for (const ft of fuelTypes) {
-        const price = priceMap[ft]?.price
-        if (price != null) return price
-      }
-      return (
-        priceMap.regular?.price ??
-        priceMap.premium?.price ??
-        priceMap.diesel?.price ??
-        priceMap.duba?.price ??
-        priceMap.unknown?.price ??
-        null
-      )
-    }
-
     const projected = selected
-      .map((station) => {
-        const priceMap = pricesByStation.get(station.permitNumber) ?? {}
-        const highlightedPrice = pickHighlightedPrice(priceMap)
-        return { station, prices: priceMap, highlightedPrice }
-      })
+      .map((listing) => rowFromListing(listing, fuelTypes))
       .filter((r) => {
         if (fuelTypes.length === 0) return true
         const hasAnyPrice = Object.keys(r.prices).length > 0
@@ -1411,25 +1261,11 @@ export const getStationsByPermits = query({
     const permits = args.permitNumbers.slice(0, 200)
     const rows = await Promise.all(
       permits.map(async (permit) => {
-        const station = await ctx.db
-          .query('stations')
+        const listing = await ctx.db
+          .query('stationListings')
           .withIndex('by_permit', (q) => q.eq('permitNumber', permit))
           .unique()
-        if (!station) return null
-        const prices = await ctx.db
-          .query('fuelPricesCurrent')
-          .withIndex('by_station_fuel', (q) => q.eq('stationPermitNumber', permit))
-          .collect()
-        const priceMap: Record<string, { price: number }> = {}
-        for (const p of prices) priceMap[p.fuelType] = { price: p.price }
-        const highlightedPrice =
-          priceMap.regular?.price ??
-          priceMap.premium?.price ??
-          priceMap.diesel?.price ??
-          priceMap.duba?.price ??
-          priceMap.unknown?.price ??
-          null
-        return { station, prices: priceMap, highlightedPrice }
+        return listing ? rowFromListing(listing, []) : null
       }),
     )
     return rows.filter((r): r is NonNullable<typeof r> => r !== null)
@@ -1592,8 +1428,8 @@ export const writeFilterOptionsCache = internalMutation({
 // in memory (action memory, not a DB transaction) and writes the merged blob
 // in one small mutation at the end.
 export const rebuildFilterOptionsCache = internalAction({
-  args: {},
-  handler: async (ctx) => {
+  args: { scheduleMetrics: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
     const stateIds = await ctx.runQuery(
       internal.stations.listStateExternalIds,
       {},
@@ -1620,6 +1456,12 @@ export const rebuildFilterOptionsCache = internalAction({
       sitemapData: JSON.stringify(buildSitemapLocationsPayload(payload)),
     })
 
+    if (args.scheduleMetrics) {
+      await ctx.scheduler.runAfter(0, internal.metrics.rebuildMetricsCache, {
+        scheduleGeocoding: true,
+      })
+    }
+
     return {
       states: states.length,
       municipalities: municipalities.length,
@@ -1634,26 +1476,11 @@ export const exportStationsPage = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
     const result = await ctx.db
-      .query('stations')
+      .query('stationListings')
       .withIndex('by_name', (q) => q)
       .paginate(args.paginationOpts)
 
-    const priceArrays = await Promise.all(
-      result.page.map((s) =>
-        ctx.db
-          .query('fuelPricesCurrent')
-          .withIndex('by_station_fuel', (q) =>
-            q.eq('stationPermitNumber', s.permitNumber),
-          )
-          .collect(),
-      ),
-    )
-
-    const stations = result.page.map((s, i) => {
-      const priceMap: Record<string, { price: number; reportedAt: string | null }> = {}
-      for (const p of priceArrays[i]) {
-        priceMap[p.fuelType] = { price: p.price, reportedAt: p.reportedAt ?? null }
-      }
+    const stations = result.page.map((s) => {
       return {
         permitNumber: s.permitNumber,
         name: s.name,
@@ -1664,10 +1491,10 @@ export const exportStationsPage = query({
         municipalityName: s.municipalityName,
         latitude: s.latitude ?? null,
         longitude: s.longitude ?? null,
-        source: s.source,
+        source: 'CNE' as const,
         firstSeenAt: s.firstSeenAt,
-        lastSeenAt: s.lastSeenAt,
-        prices: priceMap,
+        lastSeenAt: s.updatedAt,
+        prices: s.prices,
       }
     })
 

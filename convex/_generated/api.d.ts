@@ -26,6 +26,7 @@ import type * as favorites from "../favorites.js";
 import type * as geocells from "../geocells.js";
 import type * as http from "../http.js";
 import type * as ingestion from "../ingestion.js";
+import type * as listings from "../listings.js";
 import type * as locationBounds from "../locationBounds.js";
 import type * as metrics from "../metrics.js";
 import type * as normalization from "../normalization.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   geocells: typeof geocells;
   http: typeof http;
   ingestion: typeof ingestion;
+  listings: typeof listings;
   locationBounds: typeof locationBounds;
   metrics: typeof metrics;
   normalization: typeof normalization;
