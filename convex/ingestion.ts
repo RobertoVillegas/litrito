@@ -26,11 +26,9 @@ const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 const NOMINATIM_MIN_INTERVAL_MS = 1100
 const GEOCODE_BATCH_SIZE = 300
 
-// Process the national refresh through one self-chaining worker. Keeping only
-// one page in flight prevents overdue scheduled functions from stampeding the
-// backend after a restart and bounds both isolate memory and write contention.
-const MUNICIPALITY_REFRESH_PAGE_SIZE = 25
-const MUNICIPALITY_REFRESH_STAGGER_MS = 1_000
+// Process exactly one municipality per worker invocation. Keeping 25 fetch and
+// mutation results alive in one action still caused memory carry-over restarts.
+const MUNICIPALITY_REFRESH_PAGE_SIZE = 1
 const MUNICIPALITY_PAGE_PAUSE_MS = 2_000
 const ACTIVE_DAILY_QUEUE_TIMEOUT_MS = 6 * 60 * 60 * 1000
 
@@ -171,7 +169,7 @@ function normalizePriceRows(
     const stateExternalId = stateId(row.EntidadFederativaId)
     const municipalityExternalId = municipalityId(row.MunicipioId)
     const fuel = normalizeFuelType(product, subproduct)
-    const duplicateKey = `${permitNumber}:${fuel}:${price}`
+    const duplicateKey = `${permitNumber}:${fuel}`
 
     if (
       stateExternalId !== expected.stateExternalId ||
@@ -340,15 +338,44 @@ export const applyMunicipalityPrices = internalMutation({
       )
       .unique()
 
+    // Load the municipality working set once. The former implementation ran
+    // two indexed queries for every price row (300-400 queryStreamNext calls in
+    // larger municipalities), starving public queries and hitting the backend
+    // system timeout. These bulk index reads keep the working set bounded.
+    const existingStations = await ctx.db
+      .query('stations')
+      .withIndex('by_state', (q) => q.eq('stateExternalId', args.stateExternalId))
+      .collect()
+    const existingPrices = await ctx.db
+      .query('fuelPricesCurrent')
+      .withIndex('by_location_fuel_price', (q) =>
+        q
+          .eq('stateExternalId', args.stateExternalId)
+          .eq('municipalityExternalId', args.municipalityExternalId),
+      )
+      .collect()
+
+    const stationByPermit = new Map(
+      existingStations.map((station) => [station.permitNumber, station]),
+    )
+    const pricesByStationFuel = new Map<string, typeof existingPrices>()
+    for (const price of existingPrices) {
+      const key = `${price.stationPermitNumber}:${price.fuelType}`
+      const prices = pricesByStationFuel.get(key)
+      if (prices) prices.push(price)
+      else pricesByStationFuel.set(key, [price])
+    }
+
     let processed = 0
     let changed = 0
     const ingestedAt = new Date().toISOString()
+    const stationRecords = new Map(
+      args.records.map((record) => [record.permitNumber, record]),
+    )
 
-    for (const record of args.records) {
-      const existingStation = await ctx.db
-        .query('stations')
-        .withIndex('by_permit', (q) => q.eq('permitNumber', record.permitNumber))
-        .unique()
+    // A station appears once per fuel in the CNE response; write it only once.
+    for (const record of stationRecords.values()) {
+      const existingStation = stationByPermit.get(record.permitNumber)
 
       const stationValue = {
         permitNumber: record.permitNumber,
@@ -370,16 +397,11 @@ export const applyMunicipalityPrices = internalMutation({
           firstSeenAt: ingestedAt,
         })
       }
+    }
 
-      const currentPrices = await ctx.db
-        .query('fuelPricesCurrent')
-        .withIndex('by_station_fuel', (q) =>
-          q
-            .eq('stationPermitNumber', record.permitNumber)
-            .eq('fuelType', record.fuelType),
-        )
-        .collect()
-
+    for (const record of args.records) {
+      const currentPrices =
+        pricesByStationFuel.get(`${record.permitNumber}:${record.fuelType}`) ?? []
       const [primary, ...duplicates] = currentPrices
       // Clean up any accidental duplicate current rows for this station+fuel.
       for (const dup of duplicates) {
@@ -715,7 +737,6 @@ export const runMunicipalityRefreshWorker = internalAction({
         failed += 1
       }
       processed += 1
-      if (processed < page.page.length) await sleep(MUNICIPALITY_REFRESH_STAGGER_MS)
     }
 
     await ctx.runMutation(internal.ingestion.updateDailyQueueProgress, {

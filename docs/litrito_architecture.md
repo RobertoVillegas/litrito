@@ -60,7 +60,7 @@ Use these request rules for the internal CNE client:
 1. Refresh CNE catalogs.
 2. Capture `prices` XML as a validation/audit snapshot.
 3. Capture `places` XML and patch coordinates onto known stations by permit.
-4. Queue one municipality refresh per CNE municipality.
+4. Start one durable self-chaining worker that refreshes one CNE municipality per invocation.
 5. Normalize fuels to `regular`, `premium`, `diesel`, `duba`, or `unknown`.
 6. Replace current prices for the station/fuel pair and append history rows.
 
@@ -82,8 +82,8 @@ JSON by municipality is primary and XML is secondary. Remaining data hardening:
   a `partial_success` summary when some municipalities fail but valid data was
   ingested.
 - Add explicit request retries with backoff per municipality.
-- Replace the current staggered Convex scheduling with a bounded worker queue if
-  we need true concurrency control around five active requests.
+- Add explicit queue health metrics and an operator-visible retry control for
+  failed municipalities.
 
 ## UI flow
 

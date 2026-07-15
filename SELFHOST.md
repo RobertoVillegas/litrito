@@ -71,9 +71,10 @@ bunx convex run stations:rebuildFilterOptionsCache    # filter counts snapshot
 ```
 
 The daily crons keep prices/coordinates fresh after this. `bootstrapNationalRefresh` is the
-single entry point that pulls the catalog, snapshots both XML feeds, and fans out
-price refreshes in batches of 800 to stay under Convex's per-action system-op
-limit.
+single entry point that pulls the catalog, snapshots the XML feeds, and advances a
+durable self-chaining worker one municipality at a time. Each municipality loads
+its indexed station and current-price working sets in bulk, keeping isolate memory
+and database operations bounded while the public queries remain responsive.
 
 ## 7. Build + run the web app
 
