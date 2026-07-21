@@ -36,6 +36,17 @@ import { formatCurrency, formatAxisMXN, formatSignedMXN } from '#/lib/format'
 import { COLORS } from '#/lib/colors'
 
 export const Route = createFileRoute('/metricas')({
+  loader: async ({ context }) => {
+    try {
+      const data = await context.queryClient.ensureQueryData(
+        context.convexQueryClient.queryOptions(api.metrics.getMetrics, {}),
+      )
+      return data
+    } catch {
+      // Convex hiccup during SSR → degrade gracefully, client will refetch
+      return null
+    }
+  },
   head: () => {
     const title = 'Métricas de precios de gasolina en México - Litrito'
     const description =
@@ -104,10 +115,13 @@ type MetricsBundle = {
 type MetricsView = 'curated' | 'raw'
 
 function Metrics() {
+  const loaderData = Route.useLoaderData() as MetricsBundle | null | undefined
   const bundle = useQuery(api.metrics.getMetrics, {}) as MetricsBundle | undefined
+  // Prefer SSR data if available; fall back to client query
+  const effectiveBundle = loaderData ?? bundle
   const [view, setView] = useState<MetricsView>('curated')
   const [stateFuel, setStateFuel] = useState<FuelType>('regular')
-  const data = useMemo(() => (bundle ? bundle[view] : undefined), [bundle, view])
+  const data = useMemo(() => (effectiveBundle ? effectiveBundle[view] : undefined), [effectiveBundle, view])
 
   const changeView = (next: MetricsView) => {
     setView(next)
@@ -153,7 +167,7 @@ function Metrics() {
                 )}
               </span>
               <span className="hidden sm:inline">·</span>
-              <ViewToggle bundle={bundle} view={view} onChange={changeView} />
+              <ViewToggle bundle={effectiveBundle} view={view} onChange={changeView} />
             </div>
           )}
         </div>

@@ -11,6 +11,7 @@ import { useToast } from '#/components/ui/toast'
 import { DeleteAccount } from '../components/DeleteAccount'
 import { MapSkeleton } from '../components/Skeleton'
 import { StationTable, type StationRow } from '../components/StationTable'
+import { getConfiguredSiteOrigin } from '../lib/site-url'
 import { boundsOfLatLngs } from '../components/mapGeo'
 import type { MapFocus } from '../components/mapGeo'
 import type { FuelType } from '../components/StationFilters'
@@ -20,9 +21,20 @@ const StationMap = lazy(() =>
 )
 
 export const Route = createFileRoute('/perfil')({
-  head: () => ({
-    meta: [{ title: 'Mi perfil - Litrito' }, { name: 'robots', content: 'noindex, nofollow' }],
-  }),
+  head: () => {
+    const title = 'Mi perfil - Litrito'
+    const description = 'Gestiona tu cuenta, consulta tus gasolineras favoritas, revisa precios actualizados y administra tus preferencias en Litrito.'
+    const origin = getConfiguredSiteOrigin()
+    const url = origin ? `${origin}/perfil` : undefined
+    return {
+      meta: [
+        { title },
+        { name: 'description', content: description },
+        { name: 'robots', content: 'noindex, nofollow' },
+      ],
+      ...(url ? { links: [{ rel: 'canonical', href: url }] } : {}),
+    }
+  },
   component: Profile,
 })
 
