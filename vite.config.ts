@@ -56,6 +56,13 @@ const config = defineConfig({
         '/litrito-logo.webp': { headers: { 'cache-control': 'public, max-age=2592000' } },
         '/litrito-logo-128.webp': { headers: { 'cache-control': 'public, max-age=2592000' } },
         '/manifest.json': { headers: { 'cache-control': 'public, max-age=86400' } },
+        // SSR cache for SEO-heavy pages that are expensive to render (Convex SQLite
+        // can't handle 50+ concurrent SSR requests from crawlers/auditors). 5-min
+        // stale-while-revalidate means the first request warms the cache and every
+        // subsequent hit (including link re-checks during audits) is instant.
+        '/estado/**': { swr: 300 },
+        '/explorar': { swr: 120 },
+        '/metricas': { swr: 300 },
       },
       rollupConfig: { external: [/^@sentry\//, RESVG] },
     }),
