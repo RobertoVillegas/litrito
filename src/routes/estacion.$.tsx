@@ -61,13 +61,23 @@ export const Route = createFileRoute('/estacion/$')({
       ? [station.address, location].filter(Boolean).join('\n')
       : 'Precios de gasolina actualizados a diario.'
     const priceSummary = formatStationPriceSummary(currentPrices)
+    // Include street address in title to disambiguate stations with the same
+    // name (e.g. multiple "Pemex" stations). Only the first segment (street +
+    // number) keeps it concise while still unique per station.
+    const street = station?.address ? station.address.split(',')[0].trim() : ''
     const title = station
-      ? `${station.name} - Litrito`
+      ? street
+        ? `${station.name}, ${street} - Litrito`
+        : `${station.name} - Litrito`
       : `Estación ${params._splat ?? ''} - Litrito`
+    // Description must be unique per station and ≥ 70 chars. The address
+    // guarantees uniqueness; price summary + location make it descriptive.
+    const locationText = location ? `en ${location}` : ''
     const description = station
-      ? [priceSummary || 'Precios de gasolina', location ? `en ${location}` : '']
-          .filter(Boolean)
-          .join(' ')
+      ? [priceSummary || 'Precios de gasolina actualizados diario',
+         locationText,
+         `(${station.permitNumber})`]
+          .filter(Boolean).join(' ')
       : 'Consulta precios de gasolina por estación en Litrito.'
 
     const origin = getConfiguredSiteOrigin()
