@@ -216,7 +216,7 @@ function fuelCondition(fuels: FuelType[]): SQL | undefined {
   const choices = fuels.map((fuel) =>
     sql`${stationListings.prices} ? ${fuel}`,
   )
-  return or(sql`jsonb_object_length(${stationListings.prices}) = 0`, ...choices)
+  return or(sql`${stationListings.prices} = '{}'::jsonb`, ...choices)
 }
 
 const priceColumn = {

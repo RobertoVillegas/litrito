@@ -158,6 +158,18 @@ describeDatabase('PostgreSQL public reads', () => {
     ])
   })
 
+  it('filters listings by their available fuel JSON on PostgreSQL 18', async () => {
+    const result = await readStationList({
+      fuelTypes: ['regular', 'premium'],
+      sortMode: 'price',
+      paginationOpts: { cursor: null, numItems: 20 },
+    })
+    expect(result.page.map((row) => row.station.permitNumber)).toEqual([
+      'PL/2/EXP/ES/2015',
+      'PL/1/EXP/ES/2015',
+    ])
+  })
+
   it('ranks nearby stations by price then distance', async () => {
     const result = await readBestNearby({
       fuelType: 'regular',
