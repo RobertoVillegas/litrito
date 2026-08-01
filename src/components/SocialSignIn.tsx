@@ -1,6 +1,4 @@
-import { useQuery } from 'convex/react'
 import { useState } from 'react'
-import { api } from '../../convex/_generated/api'
 import { authClient } from '#/lib/auth-client'
 import { track } from '#/lib/analytics'
 import { Button } from '#/components/ui/button'
@@ -9,7 +7,7 @@ type Provider = 'google' | 'facebook'
 type Enabled = { google: boolean; facebook: boolean }
 
 // Renders nothing until the backend confirms which providers are configured, so
-// a button never shows for a provider missing from the Convex env. `initial` is
+// a button never shows for a provider missing from the server env. `initial` is
 // the SSR-prefetched value from the route loader; using it as the fallback
 // avoids a flash where the buttons pop in after the live query resolves.
 export function SocialSignIn({
@@ -19,8 +17,7 @@ export function SocialSignIn({
   verb: 'Continuar' | 'Registrarte'
   initial?: Enabled
 }) {
-  const live = useQuery(api.auth.socialProvidersEnabled, {})
-  const enabled = live ?? initial
+  const enabled = initial
   // Tracks which provider kicked off a redirect so only that button shows a
   // loading state.
   const [pending, setPending] = useState<Provider | null>(null)

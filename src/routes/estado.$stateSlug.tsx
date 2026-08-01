@@ -1,5 +1,5 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
-import { api } from '../../convex/_generated/api'
+import { publicQueryOptions } from '#/features/public-data/react/query-options'
 import { Button } from '#/components/ui/button'
 import { LocationSeoPage } from '../components/LocationSeoPage'
 import { RouteErrorFallback } from '../components/RouteError'
@@ -9,7 +9,7 @@ import { buildBreadcrumbJsonLd, buildLocationJsonLd, buildSeoMeta } from '../lib
 export const Route = createFileRoute('/estado/$stateSlug')({
   loader: async ({ context, params }) => {
     const data = await context.queryClient.ensureQueryData(
-      context.convexQueryClient.queryOptions(api.stations.seoLocationOverview, {
+      publicQueryOptions.seoLocation({
         stateSlug: params.stateSlug,
       }),
     )

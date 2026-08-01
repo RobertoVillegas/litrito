@@ -2,14 +2,10 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import postgres from 'postgres'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
-
-const SITE_URL =
-  process.env.CONVEX_SITE_URL ??
-  process.env.VITE_CONVEX_SITE_URL ??
-  'https://cheerful-terrier-356.convex.site'
 
 const FORMAT = (process.argv[2] ?? 'json').toLowerCase()
 const OUT_DIR = resolve(ROOT, 'data')
@@ -66,13 +62,24 @@ function toCsv(payload) {
 }
 
 async function main() {
-  const url = `${SITE_URL.replace(/\/$/, '')}/stations/export`
-  console.log(`Fetching ${url} ...`)
-  const res = await fetch(url)
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} from ${url}`)
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required')
+  const sql = postgres(process.env.DATABASE_URL, { max: 1 })
+  const stations = await sql`
+    select l.permit_number as "permitNumber", l.name, l.address,
+      l.state_external_id as "stateExternalId", l.state_name as "stateName",
+      l.municipality_external_id as "municipalityExternalId",
+      l.municipality_name as "municipalityName", l.latitude, l.longitude,
+      s.source, s.first_seen_at as "firstSeenAt", s.last_seen_at as "lastSeenAt",
+      l.prices
+    from station_listings l join stations s on s.id = l.station_id
+    order by l.permit_number
+  `
+  await sql.end()
+  const payload = {
+    stations: stations.map((row) => ({ ...row })),
+    total: stations.length,
+    withCoordinates: stations.filter((row) => row.latitude != null && row.longitude != null).length,
   }
-  const payload = await res.json()
 
   await mkdir(OUT_DIR, { recursive: true })
 

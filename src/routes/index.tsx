@@ -1,8 +1,8 @@
 import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
-import { useQuery } from 'convex/react'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { ArrowRight, Fuel, LocateFixed, MapPin, Navigation } from 'lucide-react'
-import { api } from '../../convex/_generated/api'
+import { publicQueryOptions } from '#/features/public-data/react/query-options'
 import { RouteErrorFallback } from '../components/RouteError'
 import { SiteFooter } from '../components/SiteFooter'
 import { Button } from '#/components/ui/button'
@@ -58,7 +58,7 @@ type FilterOptionsResult = {
 export const Route = createFileRoute('/')({
   loader: async ({ context }) => {
     const filterOptions = await context.queryClient.ensureQueryData(
-      context.convexQueryClient.queryOptions(api.stations.listFilterOptions, {}),
+      publicQueryOptions.filterOptions(),
     )
     return { filterOptions }
   },
@@ -99,10 +99,8 @@ function Home() {
   const [fuelType, setFuelType] = useState<FuelType>('regular')
   const [radiusKm, setRadiusKm] = useState<(typeof RADIUS_OPTIONS)[number]>(15)
 
-  const rows = useQuery(
-    api.stations.bestNearbyStations,
-    userLoc.location
-      ? {
+  const nearbyArgs = userLoc.location
+    ? {
           fuelType,
           userLocation: {
             latitude: userLoc.location.latitude,
@@ -111,26 +109,30 @@ function Home() {
           limit: 10,
           maxDistanceKm: radiusKm,
         }
-      : 'skip',
-  ) as NearbyBestRow[] | undefined
-  const filterOptions = useQuery(
-    api.stations.listFilterOptions,
-    {},
-  ) as FilterOptionsResult | undefined
+    : null
+  const { data: rows } = useQuery({
+    ...publicQueryOptions.bestNearby(
+      nearbyArgs ?? {
+        fuelType,
+        userLocation: { latitude: 0, longitude: 0 },
+        limit: 10,
+        maxDistanceKm: radiusKm,
+      },
+    ),
+    enabled: nearbyArgs !== null,
+    placeholderData: (previous) => previous,
+  }) as { data: NearbyBestRow[] | undefined }
+  const { data: filterOptions } = useQuery(
+    publicQueryOptions.filterOptions(),
+  ) as { data: FilterOptionsResult | undefined }
   const seoFilterOptions =
     filterOptions ?? (loaderData.filterOptions as FilterOptionsResult | undefined)
 
   // Keep the last loaded results so the map doesn't unmount (disappear) while a
-  // new query is in flight — Convex returns undefined during refetch when args
+  // new query is in flight — React Query can return undefined during refetch when args
   // (fuel/radius/location) change. The map shows the previous data until the
   // fresh data arrives, like the explore view.
-  const [stickyRows, setStickyRows] = useState<NearbyBestRow[] | undefined>(
-    undefined,
-  )
-  useEffect(() => {
-    if (rows !== undefined) setStickyRows(rows)
-  }, [rows])
-  const displayRows = rows ?? stickyRows
+  const displayRows = rows
 
   const rankedRows = useMemo(
     () =>

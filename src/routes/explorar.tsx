@@ -1,10 +1,11 @@
 import { ClientOnly, createFileRoute } from '@tanstack/react-router'
-import { usePaginatedQuery, useQuery as useConvexQuery } from 'convex/react'
+import { useQuery } from '@tanstack/react-query'
 import { BadgeCent, DatabaseZap, Fuel, Loader2, RefreshCw, Star } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
-import { api } from '../../convex/_generated/api'
+import { publicQueryOptions } from '#/features/public-data/react/query-options'
+import { usePaginatedStationList } from '#/features/public-data/react/hooks'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { useFavorites } from '#/lib/useFavorites'
 import { RouteErrorFallback } from '../components/RouteError'
@@ -79,18 +80,18 @@ export const Route = createFileRoute('/explorar')({
     try {
       const [filterOptions, latestRun] = await Promise.all([
         context.queryClient.ensureQueryData(
-          context.convexQueryClient.queryOptions(api.stations.listFilterOptions, {}),
+          publicQueryOptions.filterOptions(),
         ),
         context.queryClient.ensureQueryData(
-          context.convexQueryClient.queryOptions(api.prices.latestRun, {}),
+          publicQueryOptions.latestRun(),
         ),
       ])
       return { filterOptions, latestRun }
     } catch {
-      // A transient Convex hiccup during SSR must not surface as a 5xx —
+      // A transient database hiccup during SSR must not surface as a 5xx —
       // Googlebot penalizes crawl rate on repeated server errors. Degrade to a
       // 200 shell; the station list, filters and metrics all load via reactive
-      // Convex queries on the client regardless of this preload.
+      // React Query loads on the client regardless of this preload.
       return { filterOptions: undefined, latestRun: undefined }
     }
   },
@@ -117,7 +118,7 @@ export const Route = createFileRoute('/explorar')({
   errorComponent: ExploreErrorBoundary,
 })
 
-// Without this, a thrown Convex query error bubbles to the root with no
+// Without this, a thrown data query error bubbles to the root with no
 // boundary, blanking the page and (because the query re-throws on every
 // re-render) looping. We log the screen + active filters and show a recoverable
 // fallback instead of a crash.
@@ -340,10 +341,9 @@ function Explore() {
         : undefined,
   }
 
-  const paginated = usePaginatedQuery(
-    api.stations.listStations,
+  const paginated = usePaginatedStationList(
     listStationsArgs,
-    { initialNumItems: PAGE_SIZE },
+    PAGE_SIZE,
   ) as {
     results: StationFromQuery[] | undefined
     status: 'LoadingFirstPage' | 'CanLoadMore' | 'LoadingMore' | 'Exhausted'
@@ -371,40 +371,32 @@ function Explore() {
           limit: 800,
         }
       : ('skip' as const)
-  const boundsResult = useConvexQuery(
-    api.stations.listStationsInBounds,
-    boundsArgs,
-  ) as BoundsStationsResult | undefined
-  const [lastBoundsResult, setLastBoundsResult] =
-    useState<BoundsStationsResult | null>(null)
-
-  useEffect(() => {
-    if (boundsResult) setLastBoundsResult(boundsResult)
-  }, [boundsResult])
-  const effectiveBoundsResult = boundsResult ?? lastBoundsResult
+  const { data: boundsResult } = useQuery({
+    ...publicQueryOptions.stationsInBounds(
+      boundsArgs === 'skip'
+        ? { swLat: 0, swLon: 0, neLat: 0, neLon: 0, limit: 1 }
+        : boundsArgs,
+    ),
+    enabled: boundsArgs !== 'skip',
+    placeholderData: (previous) => previous,
+  }) as { data: BoundsStationsResult | undefined }
+  const effectiveBoundsResult = boundsResult
 
   // All favorite stations (with coords + prices), regardless of viewport.
   // Powers both the favorites-only map and table so nothing is missed just
   // because it falls outside the loaded pages or the current bounds.
   // `favoriteSet` is a fresh Set each render; derive a content key so the query
   // args stay referentially stable. Without this, the map's frequent re-renders
-  // hand Convex a new args object every time and the subscription never settles.
+  // create a new args object every time and force unnecessary requests.
   const favoriteKey = useMemo(() => [...favoriteSet].sort().join('|'), [favoriteSet])
   const favoritePermits = useMemo(
     () => (favoriteKey ? favoriteKey.split('|') : []),
     [favoriteKey],
   )
-  const favoriteArgs = useMemo(
-    () =>
-      favoritePermits.length
-        ? { permitNumbers: favoritePermits }
-        : ('skip' as const),
-    [favoritePermits],
-  )
-  const favoriteStations = useConvexQuery(
-    api.stations.getStationsByPermits,
-    favoriteArgs,
-  ) as StationFromQuery[] | undefined
+  const { data: favoriteStations } = useQuery({
+    ...publicQueryOptions.stationsByPermits({ permitNumbers: favoritePermits }),
+    enabled: favoritePermits.length > 0,
+  }) as { data: StationFromQuery[] | undefined }
 
   const latestRun = loaderData.latestRun
 
@@ -495,17 +487,18 @@ function Explore() {
   const selectedMuniId = filters.municipalityIds[0]
   // Bounding box of the picked state/municipality, computed server-side from
   // station coords (independent of the paginated list). Drives the map framing.
-  const areaBounds = useConvexQuery(
-    api.stations.areaBounds,
-    selectedStateId
-      ? {
+  const areaBoundsArgs = selectedStateId
+    ? {
           stateExternalId: selectedStateId,
           ...(selectedMuniId
             ? { municipalityExternalId: selectedMuniId }
             : {}),
         }
-      : ('skip' as const),
-  ) as MapBounds | null | undefined
+    : null
+  const { data: areaBounds } = useQuery({
+    ...publicQueryOptions.areaBounds(areaBoundsArgs ?? {}),
+    enabled: areaBoundsArgs !== null,
+  }) as { data: MapBounds | null | undefined }
   const mapFocusIsLoading = Boolean(selectedStateId) && areaBounds === undefined
 
   // Map framing priority: a favorites view, then an explicit state/municipality
@@ -566,11 +559,7 @@ function Explore() {
 
   // Keep the previous best price visible while new data loads so the metric
   // doesn't flash to a placeholder.
-  const [lastBestPrice, setLastBestPrice] = useState<number | null>(null)
-  useEffect(() => {
-    if (bestPrice != null) setLastBestPrice(bestPrice)
-  }, [bestPrice])
-  const staleBestPrice = bestPrice ?? lastBestPrice
+  const staleBestPrice = bestPrice
 
   const updatedAt = latestRun?.finishedAt ?? latestRun?.startedAt
 

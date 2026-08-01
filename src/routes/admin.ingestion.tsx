@@ -1,9 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAction, useMutation, useQuery } from 'convex/react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, Check, RefreshCw, Search, ShieldCheck, X } from 'lucide-react'
-import { api } from '../../convex/_generated/api'
+import {
+  getBrandAuditOverview,
+  getIngestionOverview,
+  retryMunicipalityPrices,
+  reviewStationBrand,
+  scanStationBrands,
+} from '#/features/admin/transport/server-functions'
 import { Button } from '#/components/ui/button'
 import { RouteErrorFallback } from '../components/RouteError'
 import { Skeleton } from '../components/Skeleton'
@@ -104,14 +110,15 @@ type BrandAuditOverview = {
 }
 
 function AdminIngestion() {
-  const overview = useQuery(api.admin.ingestionOverview, {}) as Overview | undefined
-  const brandAudit = useQuery(api.admin.stationBrandAuditOverview, {
-    stateExternalId: '32',
-    municipalityExternalId: '056',
-  }) as BrandAuditOverview | undefined
-  const retryMunicipality = useAction(api.admin.retryMunicipalityPrices)
-  const scanBrands = useAction(api.admin.scanStationBrands)
-  const reviewBrand = useMutation(api.admin.reviewStationBrand)
+  const queryClient = useQueryClient()
+  const overview = useQuery({
+    queryKey: ['convexQuery', 'admin:ingestionOverview', {}],
+    queryFn: () => getIngestionOverview(),
+  }).data as Overview | undefined
+  const brandAudit = useQuery({
+    queryKey: ['convexQuery', 'admin:stationBrandAuditOverview', { stateExternalId: '32', municipalityExternalId: '056' }],
+    queryFn: () => getBrandAuditOverview({ data: { stateExternalId: '32', municipalityExternalId: '056' } }),
+  }).data as BrandAuditOverview | undefined
   const [retrying, setRetrying] = useState<string | null>(null)
   const [scanningBrands, setScanningBrands] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -121,10 +128,11 @@ function AdminIngestion() {
     setNotice(null)
     setRetrying(String(run._id))
     try {
-      const result = await retryMunicipality({
+      const result = await retryMunicipalityPrices({ data: {
         stateExternalId: run.stateExternalId,
         municipalityExternalId: run.municipalityExternalId,
-      })
+      } })
+      await queryClient.invalidateQueries({ queryKey: ['convexQuery', 'admin:ingestionOverview', {}] })
       setNotice(`Reintento completo: ${result.recordsWritten} cambios escritos.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'No se pudo reintentar.')
@@ -137,10 +145,10 @@ function AdminIngestion() {
     setNotice(null)
     setScanningBrands(true)
     try {
-      const result = await scanBrands({
+      const result = await scanStationBrands({ data: {
         stateExternalId: '32',
         municipalityExternalId: '056',
-      })
+      } })
       setNotice(
         `Auditoría de marcas: ${result.scanned} estaciones, ${result.candidates} candidatos OSM.`,
       )
@@ -166,12 +174,13 @@ function AdminIngestion() {
         ? window.prompt('Nota de rechazo', row.notes ?? 'Falso positivo') ?? undefined
         : undefined
 
-    await reviewBrand({
+    await reviewStationBrand({ data: {
       stationPermitNumber: row.stationPermitNumber,
       decision,
       acceptedBrand: acceptedBrand?.trim(),
       notes: notes?.trim(),
-    })
+    } })
+    await queryClient.invalidateQueries({ queryKey: ['convexQuery', 'admin:stationBrandAuditOverview'] })
   }
 
   return (

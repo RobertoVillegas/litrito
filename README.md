@@ -1,98 +1,48 @@
 # Litrito
 
-Litrito is a TanStack Start app for comparing gasoline prices in Mexico by
-station, municipality, and state. It uses Convex for data, Better Auth for
-accounts, Tailwind CSS for styling, and Nitro/Bun for the production server.
+Aplicación pública de precios de gasolina en México construida con TanStack
+Start, React 19, Bun y PostgreSQL 18.
 
-## Requirements
-
-- Bun 1.x
-- A Convex deployment or local Convex dev server
-- The environment variables from `.env.example`
-
-## Development
+## Desarrollo
 
 ```bash
+cp .env.example .env.local
+docker compose up -d postgres
 bun install
+bun run db:migrate
 bun run dev
 ```
 
-The web app runs on `http://localhost:3000`.
-
-Run Convex separately when working on backend functions:
+Comandos principales:
 
 ```bash
-bunx --bun convex dev
-```
-
-## Quality Checks
-
-```bash
-bun run type-check
 bun run test
+bun run type-check
 bun run build
+bun run db:generate
+bun run ingest:enqueue
 ```
 
-Use the combined check before pushing broad changes:
+La aplicación usa módulos hexagonales por dominio bajo `src/features`: los
+casos de uso dependen de puertos y PostgreSQL vive en infraestructura.
+La ingestion diaria corre en un contenedor Bun separado y reclama municipios
+con `FOR UPDATE SKIP LOCKED`.
+
+## Migración de datos heredados
+
+El procedimiento reproducible está en
+[`docs/migracion-postgres.md`](docs/migracion-postgres.md). En resumen:
 
 ```bash
-bun run check
+# Se ejecuta mientras el backend heredado todavía está disponible.
+set -a; source .env.local; set +a
+bunx convex export --path /private/tmp/litrito-convex.zip
+
+bun run db:migrate
+bun run db:import-convex --snapshot=/private/tmp/litrito-convex.zip
+bun run db:import-auth --snapshot=/private/tmp/litrito-convex.zip
 ```
 
-`build` runs `prebuild`, which regenerates:
-
-- `public/og-image.png`
-- `public/sitemap.xml`
-
-The sitemap script queries Convex when available and falls back safely when it
-cannot reach the deployment.
-
-## Production
-
-```bash
-bun run build
-bun run start
-```
-
-The production server is emitted to `.output/server/index.mjs`.
-
-Required app environment variables:
-
-```txt
-VITE_CONVEX_URL=https://<deployment>.convex.cloud
-VITE_CONVEX_SITE_URL=https://<deployment>.convex.site
-VITE_APP_DOMAIN=https://<your-domain>
-BETTER_AUTH_SECRET=<generated-secret>
-SITE_URL=https://<your-domain>
-```
-
-Set the auth values in Convex as well:
-
-```bash
-bunx --bun convex env set BETTER_AUTH_SECRET <generated-secret>
-bunx --bun convex env set SITE_URL https://<your-domain>
-```
-
-Deploy Convex functions and crons with:
-
-```bash
-bunx --bun convex deploy
-```
-
-For self-hosting details, see `SELFHOST.md`.
-
-## Project Layout
-
-- `src/routes`: TanStack Router pages and API routes.
-- `src/components`: shared UI and product components.
-- `src/components/ui`: reusable low-level primitives.
-- `src/lib`: client/server helpers and browser state.
-- `src/integrations`: framework integration glue.
-- `convex`: schema, queries, mutations, actions, crons, and email.
-- `scripts`: build-time data and asset generation.
-
-## Dependency Policy
-
-This project uses Bun and commits `bun.lock`. Avoid floating `latest` ranges in
-`package.json`; pin framework and runtime packages intentionally, then update
-them through a normal install plus `bun run check`.
+Los importadores validan conteos; el snapshot y cualquier reporte con datos se
+mantienen fuera de Git. Los JPEG heredados no se migran porque la UI ya no usa
+fotos de estaciones; `station_photos` conserva únicamente sus metadatos.

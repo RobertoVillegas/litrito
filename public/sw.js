@@ -1,3 +1,4 @@
+/* global self, caches, fetch, URL */
 const CACHE_NAME = 'litrito-static-v1'
 const STATIC_ASSETS = [
   '/manifest.json',

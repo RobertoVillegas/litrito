@@ -1,6 +1,6 @@
 import { ClientOnly, createFileRoute, Link } from '@tanstack/react-router'
 import { Popover } from '@base-ui/react/popover'
-import { useQuery } from 'convex/react'
+import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
@@ -23,7 +23,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { TooltipContentProps } from 'recharts'
-import { api } from '../../convex/_generated/api'
+import { publicQueryOptions } from '#/features/public-data/react/query-options'
 import { FUEL_META } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
@@ -39,11 +39,12 @@ export const Route = createFileRoute('/metricas')({
   loader: async ({ context }) => {
     try {
       const data = await context.queryClient.ensureQueryData(
-        context.convexQueryClient.queryOptions(api.metrics.getMetrics, {}),
+        publicQueryOptions.metrics(),
       )
       return data
     } catch {
-      // Convex hiccup during SSR → degrade gracefully, client will refetch
+      // A transient database hiccup during SSR degrades gracefully; the
+      // client-side query can retry after hydration.
       return null
     }
   },
@@ -116,9 +117,10 @@ type MetricsView = 'curated' | 'raw'
 
 function Metrics() {
   const loaderData = Route.useLoaderData() as MetricsBundle | null | undefined
-  const bundle = useQuery(api.metrics.getMetrics, {}) as MetricsBundle | undefined
-  // Prefer SSR data if available; fall back to client query
-  const effectiveBundle = loaderData ?? bundle
+  const { data: queriedBundle } = useQuery(publicQueryOptions.metrics()) as {
+    data: MetricsBundle | undefined
+  }
+  const effectiveBundle = loaderData ?? queriedBundle
   const [view, setView] = useState<MetricsView>('curated')
   const [stateFuel, setStateFuel] = useState<FuelType>('regular')
   const data = useMemo(() => (effectiveBundle ? effectiveBundle[view] : undefined), [effectiveBundle, view])

@@ -4,14 +4,6 @@
 FROM oven/bun:1 AS builder
 WORKDIR /app
 
-# Vite inlines VITE_* vars at build time, so the browser-facing Convex URLs must
-# be known here. Point them at the PUBLIC address of the self-hosted backend
-# (the URL the browser reaches, not the internal docker hostname).
-ARG VITE_CONVEX_URL
-ARG VITE_CONVEX_SITE_URL
-ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
-ENV VITE_CONVEX_SITE_URL=$VITE_CONVEX_SITE_URL
-
 # Umami analytics, inlined at build time (also passed at runtime via compose).
 ARG VITE_UMAMI_WEBSITE_ID
 ARG VITE_UMAMI_SRC
@@ -33,3 +25,33 @@ ENV PORT=3000
 COPY --from=builder /app/.output ./.output
 EXPOSE 3000
 CMD ["bun", ".output/server/index.mjs"]
+
+# Standalone ingestion worker. It intentionally does not contain or start the
+# Nitro web bundle, so its 512 MiB cgroup cannot take the public site down.
+FROM oven/bun:1-slim AS ingestion
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
+COPY tsconfig.json ./tsconfig.json
+COPY scripts/ingest ./scripts/ingest
+COPY src/db ./src/db
+COPY src/features/ingestion ./src/features/ingestion
+COPY src/lib/slug.ts ./src/lib/slug.ts
+CMD ["bun", "scripts/ingest/main.ts"]
+
+# Manual cutover/migration toolbox. This image is only started through the
+# `tools` compose profile and never participates in a normal redeploy.
+FROM oven/bun:1-slim AS migration
+WORKDIR /app
+ENV NODE_ENV=production
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends unzip \
+  && rm -rf /var/lib/apt/lists/*
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY tsconfig.json drizzle.config.ts ./
+COPY drizzle ./drizzle
+COPY scripts/migrate-postgres.ts scripts/migrate-auth.ts scripts/set-admin.ts ./scripts/
+COPY src/db ./src/db
+CMD ["bun", "run", "db:migrate"]

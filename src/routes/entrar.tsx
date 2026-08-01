@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { api } from '../../convex/_generated/api'
 import { SignIn } from '../components/SignIn'
+import { getSocialProviders } from '../lib/auth-server'
 
 export const Route = createFileRoute('/entrar')({
   head: () => ({
@@ -8,12 +8,7 @@ export const Route = createFileRoute('/entrar')({
   }),
   // Prefetch which social providers are enabled so the buttons render in the
   // SSR HTML instead of flashing in after the client query resolves.
-  loader: async ({ context }) => {
-    const social = await context.queryClient.ensureQueryData(
-      context.convexQueryClient.queryOptions(api.auth.socialProvidersEnabled, {}),
-    )
-    return { social }
-  },
+  loader: async () => ({ social: await getSocialProviders() }),
   component: SignInRoute,
 })
 

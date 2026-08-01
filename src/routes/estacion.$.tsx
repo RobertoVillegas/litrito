@@ -1,5 +1,5 @@
 import { ClientOnly, createFileRoute, Link, notFound } from '@tanstack/react-router'
-import { useQuery } from 'convex/react'
+import { useQuery } from '@tanstack/react-query'
 import { lazy, Suspense, useState } from 'react'
 import { ArrowLeft, Check, Info, MapPin, Navigation, Share2, Star } from 'lucide-react'
 import {
@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { TooltipContentProps } from 'recharts'
-import { api } from '../../convex/_generated/api'
+import { publicQueryOptions } from '#/features/public-data/react/query-options'
 import { cn } from '#/lib/utils'
 import { useFavorites } from '#/lib/useFavorites'
 import { getConfiguredSiteOrigin } from '../lib/site-url'
@@ -21,9 +21,7 @@ import { Button } from '#/components/ui/button'
 import { FUEL_META, FUEL_ORDER } from '#/lib/fuel'
 import type { FuelType } from '#/lib/fuel'
 import { RouteErrorFallback } from '../components/RouteError'
-import { StationPhoto } from '../components/StationPhoto'
 import {
-  SHOW_STATION_PHOTOS,
   resolveStationBrand,
   resolveStationName,
 } from '#/lib/stationDisplay'
@@ -40,7 +38,7 @@ export const Route = createFileRoute('/estacion/$')({
   loader: async ({ context, params }) => {
     const permitNumber = params._splat ?? ''
     const data = await context.queryClient.ensureQueryData(
-      context.convexQueryClient.queryOptions(api.stations.getStationDetail, {
+      publicQueryOptions.stationDetail({
         permitNumber,
       }),
     )
@@ -188,10 +186,9 @@ function StationDetail() {
   const { isFavorite, toggleFavorite, ready: favoritesReady } = useFavorites()
   const [favMsg, setFavMsg] = useState('')
   const [shareMsg, setShareMsg] = useState('')
-  const queriedData = useQuery(api.stations.getStationDetail, { permitNumber }) as
-    | StationDetailData
-    | null
-    | undefined
+  const { data: queriedData } = useQuery(
+    publicQueryOptions.stationDetail({ permitNumber }),
+  ) as { data: StationDetailData | null | undefined }
   const data = queriedData === undefined ? initialData : queriedData
 
   if (data === undefined) {
@@ -272,13 +269,6 @@ function StationDetail() {
           <p className="mt-3 text-xs font-semibold tracking-wide text-white/65">
             Actualizado {formatDate(station.lastSeenAt, true)}
           </p>
-          {SHOW_STATION_PHOTOS && (
-            <StationPhoto
-              permitNumber={permitNumber}
-              stationName={displayTitle}
-              brand={displayBrand}
-            />
-          )}
           <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
             {directionsHref && (
               <Button

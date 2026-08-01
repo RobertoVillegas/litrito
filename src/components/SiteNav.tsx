@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import Avatar from 'boring-avatars'
-import { useQuery } from 'convex/react'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, LogOut, MapPin, Menu, User, X } from 'lucide-react'
-import { api } from '../../convex/_generated/api'
+import { getAdminMe } from '#/features/admin/transport/server-functions'
 import { authClient } from '#/lib/auth-client'
 import { useUserLocation } from '#/lib/useUserLocation'
 import { Button } from '#/components/ui/button'
@@ -142,7 +142,11 @@ function LocationPill() {
 function AccountMenu() {
   const session = authClient.useSession()
   const sessionUser = session?.data?.user ?? null
-  const admin = useQuery(api.admin.me, sessionUser ? {} : 'skip')
+  const admin = useQuery({
+    queryKey: ['convexQuery', 'admin:me', {}],
+    queryFn: () => getAdminMe(),
+    enabled: Boolean(sessionUser),
+  }).data
   const [open, setOpen] = useState(false)
 
   return (

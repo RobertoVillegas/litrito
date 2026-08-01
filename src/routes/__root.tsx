@@ -6,7 +6,6 @@ import {
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
-import ConvexProvider from '../integrations/convex/provider'
 import { PromoMarquee } from '../components/PromoMarquee'
 import { ServiceWorkerRegistration } from '../components/ServiceWorkerRegistration'
 import { SiteNav } from '../components/SiteNav'
@@ -18,10 +17,8 @@ import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import appCss from '../styles.css?url'
 
 import type { QueryClient } from '@tanstack/react-query'
-import type { ConvexQueryClient } from '@convex-dev/react-query'
 
 interface MyRouterContext {
-  convexQueryClient: ConvexQueryClient
   queryClient: QueryClient
 }
 
@@ -33,7 +30,7 @@ interface MyRouterContext {
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   loader: () => {
     // Read from both sources so it works regardless of how the deploy supplies
-    // it: import.meta.env (inlined at Vite build, like VITE_CONVEX_URL) and the
+    // it: import.meta.env (inlined at Vite build) and the
     // server's runtime process.env (docker-compose / Dokploy .env).
     const runtimeEnv = typeof process !== 'undefined' ? process.env : undefined
     const umamiWebsiteId =
@@ -152,15 +149,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <ConvexProvider>
-          <ToastProvider>
+        <ToastProvider>
             <UserLocationProvider>
               <ServiceWorkerRegistration />
               <PromoMarquee />
               <SiteNav />
               {children}
             </UserLocationProvider>
-          </ToastProvider>
+        </ToastProvider>
           <TanStackDevtools
             config={{
               position: 'bottom-right',
@@ -173,7 +169,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               TanStackQueryDevtools,
             ]}
           />
-        </ConvexProvider>
         <Scripts />
       </body>
     </html>

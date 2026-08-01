@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Resvg } from '@resvg/resvg-js'
 import satori from 'satori'
+import type { ReactNode } from 'react'
 
 const OG_SIZE = { width: 1200, height: 630 }
 const FONT_FAMILY = 'Inter'
@@ -300,7 +301,7 @@ async function renderOgImage({
     },
   }
 
-  const svg = await satori(markup as any, {
+  const svg = await satori(markup as unknown as ReactNode, {
     ...OG_SIZE,
     fonts: [
       {

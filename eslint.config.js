@@ -7,7 +7,6 @@ export default tseslint.config(
     ignores: [
       '.output/**',
       '.tanstack/**',
-      'convex/_generated/**',
       'src/routeTree.gen.ts',
       'node_modules/**',
       'eslint.config.js',

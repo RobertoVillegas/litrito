@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '../../convex/_generated/api'
+import { getSitemapLocations } from '#/features/public-data/transport/server-functions'
 
 let cachedLocationPaths: string[] | null = null
 
@@ -28,10 +27,6 @@ export const Route = createFileRoute('/sitemap.xml')({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const runtimeEnv = typeof process !== 'undefined' ? process.env : undefined
-        const convexUrl =
-          runtimeEnv?.VITE_CONVEX_URL ||
-          (import.meta.env.VITE_CONVEX_URL as string | undefined)
         const origin = siteOrigin(request)
         const urls = [
           '/',
@@ -42,10 +37,8 @@ export const Route = createFileRoute('/sitemap.xml')({
           '/eliminar-datos',
         ]
 
-        if (convexUrl) {
-          try {
-            const client = new ConvexHttpClient(convexUrl)
-            const locations = await client.query(api.stations.seoSitemapLocations, {})
+        try {
+            const locations = await getSitemapLocations()
             const stateSlugById = new Map(
               locations.states.map((state) => [state.externalId, state.slug]),
             )
@@ -60,11 +53,10 @@ export const Route = createFileRoute('/sitemap.xml')({
               }
             }
             cachedLocationPaths = locationPaths
-          } catch (error) {
-            console.error('sitemap_location_fetch_failed', {
-              message: error instanceof Error ? error.message : String(error),
-            })
-          }
+        } catch (error) {
+          console.error('sitemap_location_fetch_failed', {
+            message: error instanceof Error ? error.message : String(error),
+          })
         }
         if (cachedLocationPaths) urls.push(...cachedLocationPaths)
 

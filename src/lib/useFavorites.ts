@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
-import { useConvexAuth, useMutation, useQuery } from 'convex/react'
-import { api } from '../../convex/_generated/api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { authClient } from '#/lib/auth-client'
+import {
+  listFavorites,
+  setFavorite,
+} from '#/features/community/transport/server-functions'
 
 const LOCAL_FAVORITES_KEY = 'litrito:favorites:v1'
 
@@ -90,23 +93,23 @@ function updateList(favorites: string[], permitNumber: string, favorited: boolea
 export type ToggleResult = { favorited: boolean; message: string }
 
 /**
- * Favorites kept in localStorage and, when signed in, mirrored to Convex.
+ * Favorites kept in localStorage and, when signed in, mirrored to PostgreSQL.
  * Shared by the home table and the station detail page so they stay in sync.
  */
 export function useFavorites() {
   const session = authClient.useSession()
   const sessionUser = session?.data?.user ?? null
-  // Gate the remote query on Convex's own auth state, not just the Better Auth
-  // session. During sign-out the session can linger for a tick after Convex has
-  // already dropped the token, which would otherwise fire favorites.list without
-  // auth and throw. isAuthenticated flips in lockstep with the token.
-  const { isAuthenticated } = useConvexAuth()
+  const isAuthenticated = Boolean(sessionUser)
+  const queryClient = useQueryClient()
   const localFavorites = useLocalFavorites()
   const hydrated = useIsHydrated()
   const syncedUserIdRef = useRef<string | null>(null)
-  const remoteQuery = useQuery(api.favorites.list, isAuthenticated ? {} : 'skip')
-  const remoteFavorites = useMemo(() => remoteQuery ?? [], [remoteQuery])
-  const setFavorite = useMutation(api.favorites.set)
+  const remoteQuery = useQuery({
+    queryKey: ['convexQuery', 'favorites:list', {}],
+    queryFn: () => listFavorites(),
+    enabled: isAuthenticated,
+  })
+  const remoteFavorites = useMemo(() => remoteQuery.data ?? [], [remoteQuery.data])
 
   const favoriteSet = useMemo(
     () => new Set([...remoteFavorites, ...localFavorites]),
@@ -116,13 +119,12 @@ export function useFavorites() {
   // Favorite state is knowable once the browser store is loaded and, for signed-in
   // users, the remote list has resolved. Consumers gate UI on this to avoid a
   // wrong-state flash.
-  const ready = hydrated && (isAuthenticated ? remoteQuery !== undefined : true)
+  const ready = hydrated && (isAuthenticated ? remoteQuery.data !== undefined : true)
 
   // On sign-in, push any browser-only favorites up to the account once.
   useEffect(() => {
     const userId = sessionUser?.id ?? null
-    // Wait for the Convex token too, or the setFavorite mutations below would
-    // run unauthenticated and fail.
+    // Wait for the Better Auth session before syncing browser-only favorites.
     if (!userId || !isAuthenticated) {
       if (!userId) syncedUserIdRef.current = null
       return
@@ -135,13 +137,13 @@ export function useFavorites() {
       return
     }
     Promise.all(
-      unsynced.map((p) => setFavorite({ stationPermitNumber: p, favorited: true })),
+      unsynced.map((p) => setFavorite({ data: { stationPermitNumber: p, favorited: true } })),
     )
       .then(() => {
         syncedUserIdRef.current = userId
       })
       .catch(() => undefined)
-  }, [remoteFavorites, localFavorites, sessionUser?.id, isAuthenticated, setFavorite])
+  }, [remoteFavorites, localFavorites, sessionUser?.id, isAuthenticated])
 
   async function toggleFavorite(permitNumber: string): Promise<ToggleResult> {
     const favorited = !favoriteSet.has(permitNumber)
@@ -155,7 +157,8 @@ export function useFavorites() {
       }
     }
     try {
-      await setFavorite({ stationPermitNumber: permitNumber, favorited })
+      await setFavorite({ data: { stationPermitNumber: permitNumber, favorited } })
+      await queryClient.invalidateQueries({ queryKey: ['convexQuery', 'favorites:list', {}] })
     } catch {
       return {
         favorited,

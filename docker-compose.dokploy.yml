@@ -1,64 +1,97 @@
-# Dokploy deployment of the self-hosted Litrito stack.
+# Dokploy deployment of Litrito on PostgreSQL.
 #
 # Dokploy injects `dokploy-network` and the Traefik labels/domains from its UI,
 # so this file only declares the services, their ports, env and the data volume.
 # In Dokploy → Domains, route each domain to the right service + container port:
 #
 #   litrito.athas.mx               -> web        : 3000
-#   litrito-convex.athas.mx        -> backend     : 3210   (API + websocket)
-#   litrito-convex-http.athas.mx   -> backend     : 3211   (HTTP actions: auth + /stations/export)
-#   litrito-convex-admin.athas.mx  -> dashboard   : 6791
-#
-# The backend container serves two ports, so add two domains both pointing at
-# the `backend` service (one to 3210, one to 3211). Set the env vars from
-# .env.selfhost in the Dokploy service settings.
+# Set PostgreSQL, Better Auth and MinIO variables in Dokploy.
 
 services:
-  backend:
-    # Pinned by digest (= :latest as of 2026-06-07) for reproducible pulls and to
-    # avoid flaky :latest resolution. Update both images together when upgrading.
-    image: ghcr.io/get-convex/convex-backend@sha256:edd7959f3464ed661f6663f646db205d5d61bda606c969b074dfb3c69ed71463
+  postgres:
+    image: postgres:18
     restart: unless-stopped
-    stop_grace_period: 10s
-    stop_signal: SIGINT
-    mem_limit: 4g
-    mem_reservation: 1g
+    mem_limit: 512m
+    mem_reservation: 256m
+    shm_size: 128m
     expose:
-      - "3210" # API + client websocket
-      - "3211" # HTTP actions: auth + /stations/export
+      - "5432"
     volumes:
-      - convex_data:/convex/data
+      - postgres_data:/var/lib/postgresql
     environment:
-      # Must be the PUBLIC https URLs — Convex uses them for CORS and as the
-      # origin the browser/CLI connect to.
-      - CONVEX_CLOUD_ORIGIN=https://${CONVEX_DOMAIN}
-      - CONVEX_SITE_ORIGIN=https://${CONVEX_HTTP_DOMAIN}
-      - INSTANCE_NAME=${INSTANCE_NAME:-litrito}
-      - INSTANCE_SECRET=${INSTANCE_SECRET}
-      - DISABLE_BEACON=true
-      - RUST_LOG=${RUST_LOG:-info}
-      - DOCUMENT_RETENTION_DELAY=${DOCUMENT_RETENTION_DELAY:-172800}
-      # --- Optional Postgres engine instead of bundled SQLite ---
-      # - POSTGRES_URL=${POSTGRES_URL}
-      # - DO_NOT_REQUIRE_SSL=${DO_NOT_REQUIRE_SSL}
+      - POSTGRES_DB=${POSTGRES_DB:-litrito}
+      - POSTGRES_USER=${POSTGRES_USER:-litrito}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=50
     healthcheck:
-      test: curl -f http://localhost:3210/version
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
-      start_period: 60s
+      timeout: 5s
       retries: 12
 
-  dashboard:
-    image: ghcr.io/get-convex/convex-dashboard@sha256:bbc4d2c43d19fd6f2791dd6c5153a76e127f3eea489c1639e5acf66999c216bf
-    stop_grace_period: 10s
-    stop_signal: SIGINT
-    mem_limit: 384m
-    mem_reservation: 96m
-    expose:
-      - "6791"
+  postgres-backup:
+    image: postgres:18
+    restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 32m
+    volumes:
+      - postgres_backups:/backups
     environment:
-      - NEXT_PUBLIC_DEPLOYMENT_URL=https://${CONVEX_DOMAIN}
+      - PGHOST=postgres
+      - PGDATABASE=${POSTGRES_DB:-litrito}
+      - PGUSER=${POSTGRES_USER:-litrito}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+    entrypoint: ["/bin/sh", "/scripts/backup.sh"]
+    configs:
+      - source: postgres_backup_script
+        target: /scripts/backup.sh
+        mode: 0555
     depends_on:
-      backend:
+      postgres:
+        condition: service_healthy
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ingestion
+    restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 128m
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litrito}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-litrito}
+      - POSTGRES_POOL_SIZE=2
+      - POSTGRES_APPLICATION_NAME=litrito-ingestion
+      - INGESTION_BATCH_SIZE=50
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migration:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litrito}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-litrito}
+      - POSTGRES_POOL_SIZE=1
+      - POSTGRES_APPLICATION_NAME=litrito-migration
+    volumes:
+      - ${MIGRATION_DATA_DIR:-/opt/litrito-migration}:/migration:ro
+    depends_on:
+      postgres:
         condition: service_healthy
 
   web:
@@ -66,9 +99,6 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # Browser-facing Convex URLs, baked into the bundle at build time.
-        VITE_CONVEX_URL: https://${CONVEX_DOMAIN}
-        VITE_CONVEX_SITE_URL: https://${CONVEX_HTTP_DOMAIN}
         # Umami analytics, baked in at build time.
         VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID}
         VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
@@ -76,20 +106,30 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - APP_DOMAIN=${APP_DOMAIN}
-      # Needed at RUNTIME too (not just build args): auth-server.ts reads these
-      # from process.env during SSR, and Nitro doesn't inline process.env.VITE_*
-      # into the server bundle.
-      - VITE_CONVEX_URL=https://${CONVEX_DOMAIN}
-      - VITE_CONVEX_SITE_URL=https://${CONVEX_HTTP_DOMAIN}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litrito}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-litrito}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - FACEBOOK_CLIENT_ID=${FACEBOOK_CLIENT_ID:-}
+      - FACEBOOK_CLIENT_SECRET=${FACEBOOK_CLIENT_SECRET:-}
+      - OVERPASS_URL=${OVERPASS_URL:-https://overpass.kumi.systems/api/interpreter}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_SECURE=${SMTP_SECURE:-}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Litrito}
       # Umami read at runtime by the root loader (SSR) as a fallback to the build arg.
       - VITE_UMAMI_WEBSITE_ID=${VITE_UMAMI_WEBSITE_ID}
       - VITE_UMAMI_SRC=${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
     mem_limit: 768m
-    mem_reservation: 192m
+    mem_reservation: 256m
     expose:
       - "3000"
     depends_on:
-      backend:
+      postgres:
         condition: service_healthy
     # NOTE: gzip/brotli compression of the dynamic SSR HTML and the security
     # response headers are NOT configured here. Dokploy regenerates each
@@ -100,4 +140,17 @@ services:
     # are already pre-compressed by Nitro via compressPublicAssets.)
 
 volumes:
-  convex_data:
+  postgres_data:
+  postgres_backups:
+
+configs:
+  postgres_backup_script:
+    content: |
+      #!/bin/sh
+      set -eu
+      while true; do
+        timestamp="$$(date -u +%Y%m%dT%H%M%SZ)"
+        pg_dump --format=custom --file="/backups/litrito-$${timestamp}.dump"
+        find /backups -type f -name 'litrito-*.dump' -mtime +7 -delete
+        sleep 86400
+      done

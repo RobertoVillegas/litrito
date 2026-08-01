@@ -13,12 +13,6 @@ const mocks = vi.hoisted(() => ({
     | undefined,
 }))
 
-// SocialSignIn reads which providers are enabled from a Convex query; stub it
-// so the forms render without a ConvexProvider.
-vi.mock('convex/react', () => ({
-  useQuery: () => mocks.socialEnabled,
-}))
-
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (config: unknown) => config,
   Link: ({
@@ -84,7 +78,7 @@ describe('auth forms', () => {
       error: { message: 'Invalid email or password' },
     })
 
-    render(<SignIn />)
+    render(<SignIn socialInitial={mocks.socialEnabled} />)
 
     fireEvent.change(screen.getByPlaceholderText('Email'), {
       target: { value: 'new@example.com' },
@@ -119,7 +113,7 @@ describe('auth forms', () => {
 
   it('hides social buttons when no provider is enabled', () => {
     mocks.socialEnabled = { google: false, facebook: false }
-    render(<SignIn />)
+    render(<SignIn socialInitial={mocks.socialEnabled} />)
     expect(screen.queryByRole('button', { name: /Google/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Facebook/ })).toBeNull()
   })
@@ -128,7 +122,7 @@ describe('auth forms', () => {
     mocks.socialEnabled = { google: true, facebook: false }
     mocks.signInSocial.mockResolvedValue({ data: null, error: null })
 
-    render(<SignIn />)
+    render(<SignIn socialInitial={mocks.socialEnabled} />)
 
     expect(screen.queryByRole('button', { name: /Facebook/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Google/ }))
@@ -143,7 +137,7 @@ describe('auth forms', () => {
     mocks.socialEnabled = { google: false, facebook: true }
     mocks.signInSocial.mockResolvedValue({ data: null, error: null })
 
-    render(<SignIn />)
+    render(<SignIn socialInitial={mocks.socialEnabled} />)
 
     fireEvent.click(screen.getByRole('button', { name: /Facebook/ }))
 

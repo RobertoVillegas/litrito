@@ -1,6 +1,4 @@
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '../convex/_generated/api.js'
-import { readFile } from 'node:fs/promises'
+import postgres from 'postgres'
 
 const SOURCE =
   'https://github.com/MacWilliXD/INEGI-geojson/tree/main/geojson_descargas'
@@ -9,37 +7,6 @@ const RAW_BASE =
 const STATE_IDS = Array.from({ length: 32 }, (_, i) =>
   String(i + 1).padStart(2, '0'),
 )
-
-function readEnvFile(text) {
-  const out = {}
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const eq = trimmed.indexOf('=')
-    if (eq < 0) continue
-    const key = trimmed.slice(0, eq).trim()
-    let value = trimmed.slice(eq + 1).trim()
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1)
-    }
-    out[key] = value
-  }
-  return out
-}
-
-async function convexUrl() {
-  if (process.env.VITE_CONVEX_URL) return process.env.VITE_CONVEX_URL
-  try {
-    const env = readEnvFile(await readFile('.env.local', 'utf8'))
-    if (env.VITE_CONVEX_URL) return env.VITE_CONVEX_URL
-  } catch {
-    // Fall through to the production self-hosted deployment.
-  }
-  return 'https://litrito-convex.litrito.com'
-}
 
 function expandBounds(bounds, lon, lat) {
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return bounds
@@ -141,7 +108,8 @@ async function fetchJson(url) {
 }
 
 async function main() {
-  const client = new ConvexHttpClient(await convexUrl())
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required')
+  const sql = postgres(process.env.DATABASE_URL, { max: 1 })
   const rows = []
 
   for (const stateExternalId of STATE_IDS) {
@@ -175,18 +143,29 @@ async function main() {
     console.log(`prepared ${stateExternalId}: ${stateFeatureCount} municipalities`)
   }
 
-  let written = 0
-  const chunkSize = 100
-  for (let i = 0; i < rows.length; i += chunkSize) {
-    const chunk = rows.slice(i, i + chunkSize)
-    const result = await client.mutation(api.locationBounds.upsertMany, {
-      bounds: chunk,
-    })
-    written += result.written
-    console.log(`wrote ${written}/${rows.length}`)
+  try {
+    let written = 0
+    for (const row of rows) {
+      const key = row.municipalityExternalId
+        ? `${row.stateExternalId}:${row.municipalityExternalId}`
+        : row.stateExternalId
+      await sql`
+        insert into location_bounds (id, key, state_external_id,
+          municipality_external_id, sw_lat, sw_lon, ne_lat, ne_lon, source, updated_at)
+        values (${crypto.randomUUID()}, ${key}, ${row.stateExternalId},
+          ${row.municipalityExternalId ?? null}, ${row.swLat}, ${row.swLon},
+          ${row.neLat}, ${row.neLon}, ${row.source}, now())
+        on conflict (key) do update set sw_lat=excluded.sw_lat, sw_lon=excluded.sw_lon,
+          ne_lat=excluded.ne_lat, ne_lon=excluded.ne_lon, source=excluded.source,
+          updated_at=now()
+      `
+      written += 1
+      if (written % 100 === 0) console.log(`wrote ${written}/${rows.length}`)
+    }
+    console.log(`done: ${written} bounds`)
+  } finally {
+    await sql.end()
   }
-
-  console.log(`done: ${written} bounds`)
 }
 
 main().catch((error) => {

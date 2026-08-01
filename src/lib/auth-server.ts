@@ -1,23 +1,15 @@
-import { convexBetterAuthReactStart } from '@convex-dev/better-auth/react-start'
+import { createServerFn } from '@tanstack/react-start'
+import { createAuth, socialProvidersEnabled } from './auth'
 
-const convexUrl = process.env.VITE_CONVEX_URL
-const convexSiteUrl = process.env.VITE_CONVEX_SITE_URL
+let authInstance: ReturnType<typeof createAuth> | undefined
 
-if (!convexUrl) {
-  throw new Error('VITE_CONVEX_URL is required for auth')
+export function getAuth() {
+  authInstance ??= createAuth()
+  return authInstance
 }
 
-if (!convexSiteUrl) {
-  throw new Error('VITE_CONVEX_SITE_URL is required for auth')
-}
+export const handler = (request: Request) => getAuth().handler(request)
 
-export const {
-  handler,
-  getToken,
-  fetchAuthQuery,
-  fetchAuthMutation,
-  fetchAuthAction,
-} = convexBetterAuthReactStart({
-  convexUrl,
-  convexSiteUrl,
-})
+export const getSocialProviders = createServerFn({ method: 'GET' }).handler(
+  () => socialProvidersEnabled(),
+)

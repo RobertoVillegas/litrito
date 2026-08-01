@@ -1,9 +1,8 @@
 import { Dialog } from '@base-ui/react/dialog'
 import { useNavigate } from '@tanstack/react-router'
-import { useMutation } from 'convex/react'
 import { useState } from 'react'
 import { MoreHorizontal, Trash2, X } from 'lucide-react'
-import { api } from '../../convex/_generated/api'
+import { requestAccountDeletion } from '#/features/community/transport/server-functions'
 import { authClient } from '#/lib/auth-client'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
@@ -16,7 +15,6 @@ import { useToast } from '#/components/ui/toast'
 export function DeleteAccount({ email }: { email: string }) {
   const navigate = useNavigate()
   const toast = useToast()
-  const requestDeletion = useMutation(api.accountDeletion.request)
   const [open, setOpen] = useState(false)
   const [confirm, setConfirm] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -27,7 +25,7 @@ export function DeleteAccount({ email }: { email: string }) {
     if (!matches || submitting) return
     setSubmitting(true)
     try {
-      await requestDeletion({})
+      await requestAccountDeletion()
       setOpen(false)
       // Leave the profile first so it never renders signed-out, then drop the
       // session. The success toast persists across the navigation.

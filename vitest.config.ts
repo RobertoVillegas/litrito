@@ -8,11 +8,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      include: ['src/**/*.{ts,tsx}', 'convex/**/*.ts'],
+      include: ['src/**/*.{ts,tsx}'],
       exclude: [
         'src/routeTree.gen.ts',
         'src/routes/api/**',
-        'convex/_generated/**',
       ],
     },
   },

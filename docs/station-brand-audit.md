@@ -20,7 +20,7 @@ it has been reviewed.
 
 ## Implemented module
 
-The first implementation adds `stationBrandAudits` in `convex/schema.ts`.
+The implementation stores `station_brand_audits` in `src/db/schema.ts`.
 
 Important fields:
 
@@ -36,7 +36,7 @@ Important fields:
 - `confidence`: `high`, `review`, or `none`.
 - `reviewedBy`, `reviewedAt`, `notes`: audit trail.
 
-Admin functions live in `convex/admin.ts`:
+Admin server functions live in `src/features/admin/transport/server-functions.ts`:
 
 - `scanStationBrands`: scans one state/municipality against OSM Overpass.
 - `stationBrandAuditOverview`: reads audit rows for admin.

@@ -1,9 +1,13 @@
 import { ClientOnly, createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useMutation, useQuery } from 'convex/react'
+import { useQuery as useReactQuery, useQueryClient } from '@tanstack/react-query'
 import { lazy, Suspense, useEffect, useMemo } from 'react'
 import Avatar from 'boring-avatars'
 import { CalendarClock, LogOut, MapPin, Star } from 'lucide-react'
-import { api } from '../../convex/_generated/api'
+import {
+  cancelAccountDeletion,
+  myAccountDeletion,
+} from '#/features/community/transport/server-functions'
+import { publicQueryOptions } from '#/features/public-data/react/query-options'
 import { authClient } from '#/lib/auth-client'
 import { useFavorites } from '#/lib/useFavorites'
 import { Button } from '#/components/ui/button'
@@ -59,6 +63,7 @@ function Profile() {
   const navigate = useNavigate()
   const session = authClient.useSession()
   const user = session?.data?.user ?? null
+  const queryClient = useQueryClient()
 
   // /perfil requires a session. Once the session resolves with no user (direct
   // visit or right after sign-out), send them to sign in.
@@ -70,12 +75,19 @@ function Profile() {
 
   const { favoriteSet, toggleFavorite } = useFavorites()
   const toast = useToast()
-  const deletion = useQuery(api.accountDeletion.myDeletion, {})
-  const cancelDeletion = useMutation(api.accountDeletion.cancel)
+  const deletionQuery = useReactQuery({
+    queryKey: ['convexQuery', 'accountDeletion:myDeletion', {}],
+    queryFn: () => myAccountDeletion(),
+    enabled: Boolean(user),
+  })
+  const deletion = deletionQuery.data
 
   async function handleCancelDeletion() {
     try {
-      await cancelDeletion({})
+      await cancelAccountDeletion()
+      await queryClient.invalidateQueries({
+        queryKey: ['convexQuery', 'accountDeletion:myDeletion', {}],
+      })
       toast.add({
         title: 'Eliminación cancelada',
         description: 'Tu cuenta y tus datos se conservan.',
@@ -87,10 +99,10 @@ function Profile() {
   }
 
   const permitNumbers = useMemo(() => [...favoriteSet], [favoriteSet])
-  const favoriteRows = useQuery(
-    api.stations.getStationsByPermits,
-    permitNumbers.length ? { permitNumbers } : 'skip',
-  ) as FavoriteRow[] | undefined
+  const { data: favoriteRows } = useReactQuery({
+    ...publicQueryOptions.stationsByPermits({ permitNumbers }),
+    enabled: permitNumbers.length > 0,
+  }) as { data: FavoriteRow[] | undefined }
 
   const rows = useMemo<StationRow[]>(
     () =>
@@ -239,7 +251,7 @@ function Profile() {
   )
 }
 
-function formatDeletionDate(scheduledAt: number): string {
+function formatDeletionDate(scheduledAt: number | string): string {
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'long' }).format(
     new Date(scheduledAt),
   )
