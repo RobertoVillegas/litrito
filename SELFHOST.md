@@ -1,7 +1,7 @@
 # Self-host con Dokploy
 
-El stack productivo contiene `web`, `postgres`, `ingestion` y
-`postgres-backup`. No requiere un servicio de objetos: las fotos heredadas y
+El stack productivo contiene `web`, `postgres` e `ingestion`. No requiere un
+servicio de objetos: las fotos heredadas y
 los XML crudos se descartan después de transformar sus datos útiles.
 
 1. Copia `.env.selfhost.example` y configura contraseñas, Better Auth, OAuth y
@@ -21,8 +21,9 @@ los XML crudos se descartan después de transformar sus datos útiles.
 5. Despliega desde `docker-compose.dokploy.yml`.
 
 El worker ejecuta la cola a las 00:15, 00:30, 01:00 y 02:00 UTC y recupera
-tareas interrumpidas cada 15 minutos. PostgreSQL genera un `pg_dump` custom
-diario y conserva siete días en `postgres_backups`.
+tareas interrumpidas cada 15 minutos. Los respaldos quedan a cargo del backup
+diario del VPS y, cuando se desee, de la función de respaldo del volumen
+`postgres_data`.
 
 No borres el volumen heredado hasta comparar las rutas públicas y conservar un
 snapshot/export verificable fuera del repositorio.

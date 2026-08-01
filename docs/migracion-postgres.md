@@ -47,7 +47,8 @@ que un pico de ingestion no debe poder tumbar el sitio público.
    dokploy UI para quitar el 404; subir temporalmente `mem_limit` del web de
    `768m` a `1.5g` y devolverlo a `768m` al retirar Convex
    en `docker-compose.dokploy.yml` para que no vuelva a caer.
-1. **Infra**: servicio Postgres en dokploy (volumen + `pg_dump` diario),
+1. **Infra**: servicio Postgres en dokploy con volumen persistente respaldado
+   por el backup diario del VPS,
    drizzle-kit configurado.
 2. **Schema + import**: schema drizzle de las 18 tablas; export desde convex
    (dashboard o script por API) → `COPY`; validar conteos tabla por tabla.
