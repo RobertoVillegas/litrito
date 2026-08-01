@@ -1,11 +1,11 @@
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { getAuth } from '#/lib/auth-server'
 import { getDatabase } from '#/db/client'
 import { CneHttpSource } from '#/features/ingestion/infrastructure/cne-http-source'
 import { PostgresIngestionRepository } from '#/features/ingestion/infrastructure/postgres-ingestion-repository'
 
-async function currentAdmin(required = true) {
+const currentAdmin = createServerOnlyFn(async (required = true) => {
   const session = await getAuth().api.getSession({ headers: getRequestHeaders() })
   if (!session?.user) {
     if (required) throw new Error('Debes iniciar sesión para ver administración.')
@@ -21,7 +21,7 @@ async function currentAdmin(required = true) {
     return null
   }
   return session.user
-}
+})
 
 const runProjection = `
   id as "_id", kind, status, started_at as "startedAt",

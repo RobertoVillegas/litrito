@@ -1,13 +1,13 @@
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { communityModule } from '../community.module'
 import { getAuth } from '#/lib/auth-server'
 
-async function requireUser() {
+const requireUser = createServerOnlyFn(async () => {
   const session = await getAuth().api.getSession({ headers: getRequestHeaders() })
   if (!session?.user) throw new Error('No autorizado')
   return session.user
-}
+})
 
 export const listFavorites = createServerFn({ method: 'GET' }).handler(async () => {
   const user = await requireUser()
