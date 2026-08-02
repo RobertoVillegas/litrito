@@ -26,7 +26,7 @@ type Station = {
 
 type StationRow = {
   station: Station
-  prices: Partial<Record<FuelType, { price: number }>>
+  prices: Partial<Record<FuelType, { price: number; isPlausible?: boolean }>>
   highlightedPrice: number | null
   rank?: number
 }
@@ -374,7 +374,9 @@ function StationMapInner({
   const allPrices = useMemo(
     () =>
       points
-        .map((p) => p.prices[primaryFuel]?.price)
+        .map((p) => p.prices[primaryFuel])
+        .filter((p) => p?.isPlausible !== false)
+        .map((p) => p?.price)
         .filter((p): p is number => typeof p === 'number'),
     [points, primaryFuel],
   )
@@ -439,8 +441,10 @@ function StationMapInner({
             maxClusterRadius={50}
           >
             {points.map((row) => {
-              const fuelPrice = row.prices[primaryFuel]?.price
-              const hasFuelPrice = typeof fuelPrice === 'number'
+              const selectedPrice = row.prices[primaryFuel]
+              const fuelPrice = selectedPrice?.price
+              const hasFuelPrice =
+                typeof fuelPrice === 'number' && selectedPrice?.isPlausible !== false
               const displayPrice = hasFuelPrice ? fuelPrice : row.highlightedPrice
               const station = row.station
               const directionsHref = `https://www.google.com/maps/dir/?api=1&destination=${row.latLng[0]},${row.latLng[1]}`
@@ -479,6 +483,7 @@ function StationMapInner({
                               </span>
                               <span className="litrito-popup__amount">
                                 <AnimatedPrice value={row.prices[ft]!.price} />
+                                {row.prices[ft]!.isPlausible === false ? ' ⚠' : ''}
                               </span>
                             </div>
                           ))}

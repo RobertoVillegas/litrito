@@ -27,7 +27,7 @@ type Station = {
 
 export type StationRow = {
   station: Station
-  prices: Partial<Record<FuelType, { price: number }>>
+  prices: Partial<Record<FuelType, { price: number; isPlausible?: boolean }>>
   highlightedPrice: number | null
   distanceKm?: number | null
 }
@@ -115,13 +115,18 @@ function StationCard({
       <div className="mt-2.5 flex items-end justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
           {fuelTypes.map((ft) => {
-            const price = row.prices[ft]?.price
+            const value = row.prices[ft]
+            const price = value?.price
+            const isOutlier = value?.isPlausible === false
             return (
               <span
                 key={ft}
+                title={isOutlier ? 'Dato atípico reportado por CNE' : undefined}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold',
-                  price != null
+                  isOutlier
+                    ? 'border-amber-300 bg-amber-50 text-amber-900'
+                    : price != null
                     ? 'border-line bg-canvas-soft text-ink'
                     : 'border-slate-100 bg-white text-mute',
                 )}
@@ -343,12 +348,19 @@ export function StationTable({
           </SortHeader>
         ),
         cell: ({ row }) => {
-          const price = row.original.prices[ft]?.price
+          const value = row.original.prices[ft]
+          const price = value?.price
+          const isOutlier = value?.isPlausible === false
           return (
             <div
+              title={isOutlier ? 'Dato atípico reportado por CNE' : undefined}
               className={cn(
                 'text-right text-sm font-bold',
-                price != null ? 'text-slate-950' : 'text-slate-300',
+                isOutlier
+                  ? 'text-amber-700 underline decoration-dotted underline-offset-4'
+                  : price != null
+                    ? 'text-slate-950'
+                    : 'text-slate-300',
               )}
             >
               {price != null ? formatCurrency(price) : '–'}

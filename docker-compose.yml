@@ -7,7 +7,7 @@
 
 services:
   postgres:
-    image: postgres:18
+    image: postgis/postgis:18-3.6
     restart: unless-stopped
     mem_limit: 512m
     mem_reservation: 256m
@@ -38,6 +38,22 @@ services:
       timeout: 5s
       retries: 12
 
+  migrate:
+    profiles: ["web"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration
+    restart: "no"
+    mem_limit: 256m
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-litrito}:${POSTGRES_PASSWORD:-litrito}@postgres:5432/${POSTGRES_DB:-litrito}
+      - POSTGRES_POOL_SIZE=1
+      - POSTGRES_APPLICATION_NAME=litrito-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   ingestion:
     profiles: ["web"]
     build:
@@ -53,8 +69,8 @@ services:
       - POSTGRES_APPLICATION_NAME=litrito-ingestion
       - INGESTION_BATCH_SIZE=50
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   migration:
     profiles: ["tools"]
@@ -107,8 +123,14 @@ services:
     mem_limit: 768m
     mem_reservation: 256m
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
 
 volumes:
   postgres_data:

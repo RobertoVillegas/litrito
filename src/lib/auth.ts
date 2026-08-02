@@ -48,6 +48,11 @@ export function createAuth() {
         '/reset-password': { window: 60, max: 5 },
       },
     },
+    // Traefik owns the public edge and overwrites this single-value header.
+    // The web container is only exposed on the private Dokploy network.
+    advanced: {
+      ipAddress: { ipAddressHeaders: ['x-real-ip'] },
+    },
     trustedOrigins: [process.env.BETTER_AUTH_URL ?? process.env.SITE_URL ?? 'http://localhost:3000'],
     plugins: [tanstackStartCookies()],
   })

@@ -60,7 +60,7 @@ const config = defineConfig({
         // so 12h stale-while-revalidate means the first request warms the
         // cache and every subsequent hit (including link re-checks during
         // audits with 50+ concurrent workers) is instant. SWR ensures the
-        // stale cache is served while Convex regenerates in the background.
+        // stale cache is served while PostgreSQL-backed SSR regenerates it.
         '/estado/**': { swr: 43200 },
         '/explorar': { swr: 120 },
         '/metricas': { swr: 43200 },

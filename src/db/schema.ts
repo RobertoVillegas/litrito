@@ -164,7 +164,12 @@ export const snapshotKindEnum = pgEnum('snapshot_kind', [
   'cne_places_xml',
 ])
 
-export type ListingPrice = { price: number; reportedAt?: string }
+export type ListingPrice = {
+  price: number
+  reportedAt?: string
+  /** Derived at read time; never required in the persisted CNE payload. */
+  isPlausible?: boolean
+}
 export type ListingPrices = Partial<
   Record<'regular' | 'premium' | 'diesel' | 'duba' | 'unknown', ListingPrice>
 >
@@ -660,6 +665,12 @@ export const stationListings = pgTable(
       'gin',
       sql`immutable_unaccent(${table.name} || ' ' || ${table.permitNumber} || ' ' || ${table.address}) gin_trgm_ops`,
     ),
+    index('station_listings_geography_gist_idx')
+      .using(
+        'gist',
+        sql`(ST_SetSRID(ST_MakePoint(${table.longitude}, ${table.latitude}), 4326)::geography)`,
+      )
+      .where(sql`${table.latitude} IS NOT NULL AND ${table.longitude} IS NOT NULL`),
   ],
 )
 

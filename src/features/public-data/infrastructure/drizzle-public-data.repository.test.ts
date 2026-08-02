@@ -86,6 +86,24 @@ describeDatabase('PostgreSQL public reads', () => {
         updatedAt: now,
       },
       {
+        id: 'listing-3',
+        stationId: 'station-3',
+        permitNumber: 'PL/3/EXP/ES/2015',
+        name: 'Dato Atípico CNE',
+        address: 'Avenida Error 3',
+        stateExternalId: '09',
+        municipalityExternalId: '001',
+        stateName: 'Ciudad de México',
+        municipalityName: 'Centro',
+        latitude: 19.433,
+        longitude: -99.133,
+        latBucket: 194,
+        firstSeenAt: now,
+        regularPrice: 2,
+        prices: { regular: { price: 2, reportedAt: now.toISOString() } },
+        updatedAt: now,
+      },
+      {
         id: 'listing-2',
         stationId: 'station-2',
         permitNumber: 'PL/2/EXP/ES/2015',
@@ -167,7 +185,10 @@ describeDatabase('PostgreSQL public reads', () => {
     expect(result.page.map((row) => row.station.permitNumber)).toEqual([
       'PL/2/EXP/ES/2015',
       'PL/1/EXP/ES/2015',
+      'PL/3/EXP/ES/2015',
     ])
+    expect(result.page[2]?.prices.regular?.isPlausible).toBe(false)
+    expect(result.page[2]?.highlightedPrice).toBeNull()
   })
 
   it('ranks nearby stations by price then distance', async () => {
@@ -181,6 +202,41 @@ describeDatabase('PostgreSQL public reads', () => {
       'PL/2/EXP/ES/2015',
       'PL/1/EXP/ES/2015',
     ])
+  })
+
+  it('paginates prices without duplicates and leaves outliers last', async () => {
+    const permits: string[] = []
+    let cursor: string | null = null
+    for (let pageNumber = 0; pageNumber < 3; pageNumber += 1) {
+      const result = await readStationList({
+        fuelTypes: ['regular'],
+        sortMode: 'price',
+        paginationOpts: { cursor, numItems: 1 },
+      })
+      permits.push(...result.page.map((row) => row.station.permitNumber))
+      cursor = result.continueCursor
+    }
+    expect(permits).toEqual([
+      'PL/2/EXP/ES/2015',
+      'PL/1/EXP/ES/2015',
+      'PL/3/EXP/ES/2015',
+    ])
+  })
+
+  it('uses a stable PostGIS keyset for distance pagination', async () => {
+    const input = {
+      sortMode: 'distance' as const,
+      userLocation: { latitude: 19.4326, longitude: -99.1332 },
+      paginationOpts: { cursor: null as string | null, numItems: 1 },
+    }
+    const first = await readStationList(input)
+    const second = await readStationList({
+      ...input,
+      paginationOpts: { ...input.paginationOpts, cursor: first.continueCursor },
+    })
+    expect(first.page[0]?.station.permitNumber).toBe('PL/1/EXP/ES/2015')
+    expect(second.page[0]?.station.permitNumber).toBe('PL/3/EXP/ES/2015')
+    expect(new Set([...first.page, ...second.page].map((row) => row.station.permitNumber)).size).toBe(2)
   })
 
   it('returns current/history detail and the indexed latest run', async () => {

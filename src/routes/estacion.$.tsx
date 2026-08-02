@@ -170,7 +170,10 @@ type StationDetailData = {
     longitude?: number
     lastSeenAt: string
   }
-  currentPrices: Record<string, { price: number; reportedAt?: string }>
+  currentPrices: Record<
+    string,
+    { price: number; reportedAt?: string; isPlausible?: boolean }
+  >
   history: HistoryEntry[]
   enrichment?: {
     brand: string | null
@@ -368,7 +371,11 @@ function StationDetail() {
             {fuels.map((f) => (
               <div
                 key={f}
-                className="rounded-[6px] border border-line p-4"
+                className={`rounded-[6px] border p-4 ${
+                  currentPrices[f].isPlausible === false
+                    ? 'border-amber-300 bg-amber-50'
+                    : 'border-line'
+                }`}
                 style={{ borderTopColor: FUEL_META[f].color, borderTopWidth: 3 }}
               >
                 <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-body">
@@ -386,6 +393,11 @@ function StationDetail() {
                     ? `Reportado ${formatDate(currentPrices[f].reportedAt)}`
                     : 'Por litro'}
                 </div>
+                {currentPrices[f].isPlausible === false && (
+                  <div className="mt-2 text-[11px] font-bold text-amber-800">
+                    Dato atípico reportado por CNE
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -37,12 +37,20 @@ import type {
   BoundsInput,
   ListStationsInput,
 } from '../application/dtos/public-data.dto'
+import {
+  decodeStationCursor,
+  encodeStationCursor,
+} from '../application/pagination-cursor'
 import type { PublicDataRepository } from '../application/ports/public-data.repository'
+import {
+  annotatePriceQuality,
+  isPricePlausible,
+  MAX_PLAUSIBLE_PRICE,
+  MIN_PLAUSIBLE_PRICE,
+} from '../domain/price-quality'
 
 const EMPTY_FILTER_OPTIONS: FilterOptions = { states: [], municipalities: [] }
 const MEXICO_BOUNDS = { swLat: 14.5, swLon: -118.5, neLat: 32.7, neLon: -86.5 }
-const MIN_PLAUSIBLE_PRICE = 15
-const MAX_PLAUSIBLE_PRICE = 50
 
 type SitemapLocations = {
   states: { externalId: string; slug: string }[]
@@ -76,12 +84,6 @@ function cleanExternalId(value: string | null | undefined) {
     }
   }
   return trimmed
-}
-
-function parseOffset(cursor: string | null | undefined) {
-  if (!cursor) return 0
-  const value = Number.parseInt(cursor.replace(/^\D+/, ''), 10)
-  return Number.isFinite(value) && value >= 0 ? value : 0
 }
 
 function toPublicStation(row: Station): PublicStation {
@@ -132,16 +134,13 @@ function stationFromListing(row: Listing): PublicStation {
 function highlightedPrice(prices: ListingPrices, fuels: FuelType[]) {
   for (const fuel of fuels) {
     const price = prices[fuel]?.price
-    if (price != null) return price
+    if (price != null && isPricePlausible(price)) return price
   }
-  return (
-    prices.regular?.price ??
-    prices.premium?.price ??
-    prices.diesel?.price ??
-    prices.duba?.price ??
-    prices.unknown?.price ??
-    null
-  )
+  for (const fuel of ['regular', 'premium', 'diesel', 'duba', 'unknown'] as FuelType[]) {
+    const price = prices[fuel]?.price
+    if (price != null && isPricePlausible(price)) return price
+  }
+  return null
 }
 
 function rowFromListing(
@@ -151,24 +150,11 @@ function rowFromListing(
 ): StationRow {
   return {
     station: stationFromListing(listing),
-    prices: listing.prices,
+    prices: annotatePriceQuality(listing.prices),
     highlightedPrice: highlightedPrice(listing.prices, fuels),
     ...(distanceKm === undefined ? {} : { distanceKm }),
     enrichment: listing.enrichment ?? null,
   }
-}
-
-const toRad = (degrees: number) => (degrees * Math.PI) / 180
-function haversineKm(a: UserLocation, b: { latitude: number; longitude: number }) {
-  const radius = 6371
-  const dLat = toRad(b.latitude - a.latitude)
-  const dLon = toRad(b.longitude - a.longitude)
-  const value =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.latitude)) *
-      Math.cos(toRad(b.latitude)) *
-      Math.sin(dLon / 2) ** 2
-  return 2 * radius * Math.asin(Math.sqrt(value))
 }
 
 function selectionCondition(
@@ -225,6 +211,16 @@ const priceColumn = {
   diesel: stationListings.dieselPrice,
   duba: stationListings.dubaPrice,
   unknown: stationListings.unknownPrice,
+}
+
+const listingGeography = sql`ST_SetSRID(ST_MakePoint(${stationListings.longitude}, ${stationListings.latitude}), 4326)::geography`
+
+function userGeography(location: UserLocation) {
+  return sql`ST_SetSRID(ST_MakePoint(${location.longitude}, ${location.latitude}), 4326)::geography`
+}
+
+function distanceKmExpression(location: UserLocation) {
+  return sql<number>`ST_Distance(${listingGeography}, ${userGeography(location)}) / 1000.0`
 }
 
 export async function readFilterOptions(): Promise<FilterOptions> {
@@ -325,7 +321,11 @@ export async function readStationDetail(permitNumber: string) {
     currentPrices: Object.fromEntries(
       prices.map((price) => [
         price.fuelType,
-        { price: price.price, reportedAt: iso(price.reportedAt) },
+        {
+          price: price.price,
+          reportedAt: iso(price.reportedAt),
+          isPlausible: isPricePlausible(price.price),
+        },
       ]),
     ),
     history: history.map((row) => ({
@@ -360,33 +360,28 @@ export async function readBestNearby(input: {
 }) {
   const limit = Math.min(Math.max(input.limit ?? 10, 1), 20)
   const radius = Math.min(Math.max(input.maxDistanceKm ?? 15, 1), 100)
-  const latDelta = radius / 111.32
-  const lonDelta =
-    radius /
-    (111.32 * Math.max(Math.abs(Math.cos(toRad(input.userLocation.latitude))), 0.01))
   const { db } = getDatabase()
+  const distanceKm = distanceKmExpression(input.userLocation)
+  const selectedPrice = priceColumn[input.fuelType]
   const rows = await db
-    .select()
+    .select({ listing: stationListings, distanceKm })
     .from(stationListings)
     .where(
       and(
-        gte(stationListings.latitude, input.userLocation.latitude - latDelta),
-        lte(stationListings.latitude, input.userLocation.latitude + latDelta),
-        gte(stationListings.longitude, input.userLocation.longitude - lonDelta),
-        lte(stationListings.longitude, input.userLocation.longitude + lonDelta),
-        isNotNull(priceColumn[input.fuelType]),
+        isNotNull(stationListings.latitude),
+        isNotNull(stationListings.longitude),
+        gte(selectedPrice, MIN_PLAUSIBLE_PRICE),
+        lte(selectedPrice, MAX_PLAUSIBLE_PRICE),
+        sql`ST_DWithin(${listingGeography}, ${userGeography(input.userLocation)}, ${radius * 1_000})`,
       ),
     )
-    .limit(1_000)
+    .orderBy(asc(selectedPrice), asc(distanceKm), asc(stationListings.permitNumber))
+    .limit(limit)
   return rows
-    .flatMap((listing) => {
+    .flatMap(({ listing, distanceKm }) => {
       if (listing.latitude == null || listing.longitude == null) return []
-      const distanceKm = haversineKm(input.userLocation, {
-        latitude: listing.latitude,
-        longitude: listing.longitude,
-      })
       const price = listing.prices[input.fuelType]
-      if (!price || distanceKm > radius) return []
+      if (!price) return []
       return [
         {
           station: stationFromListing(listing),
@@ -397,18 +392,11 @@ export async function readBestNearby(input: {
         },
       ]
     })
-    .sort(
-      (a, b) =>
-        a.price - b.price ||
-        a.distanceKm - b.distanceKm ||
-        a.station.name.localeCompare(b.station.name),
-    )
-    .slice(0, limit)
 }
 
 export async function readStationList(input: ListStationsInput) {
   const fuels = input.fuelTypes ?? []
-  const offset = parseOffset(input.paginationOpts.cursor)
+  const cursor = decodeStationCursor(input.paginationOpts.cursor)
   const limit = Math.min(Math.max(input.paginationOpts.numItems, 1), 100)
   const selection = selectionCondition(
     input.stateExternalIds ?? [],
@@ -422,42 +410,46 @@ export async function readStationList(input: ListStationsInput) {
   const fuel = fuelCondition(fuels)
   const { db } = getDatabase()
 
-  const distanceRows =
-    input.sortMode === 'distance' && input.userLocation
-      ? await db
-          .select()
-          .from(stationListings)
-          .where(and(selection, search, fuel))
-          .limit(4_000)
-      : null
-  if (distanceRows && input.userLocation) {
-    const ordered = distanceRows
-      .map((listing) => ({
-        listing,
-        distanceKm:
-          listing.latitude == null || listing.longitude == null
-            ? null
-            : haversineKm(input.userLocation as UserLocation, {
-                latitude: listing.latitude,
-                longitude: listing.longitude,
-              }),
-      }))
-      .sort(
-        (a, b) =>
-          (a.distanceKm ?? Number.POSITIVE_INFINITY) -
-          (b.distanceKm ?? Number.POSITIVE_INFINITY),
-      )
-    const page = ordered.slice(offset, offset + limit)
+  if (input.sortMode === 'distance' && input.userLocation) {
+    const distanceKm = distanceKmExpression(input.userLocation)
+    const coordinateRank = sql<number>`case when ${stationListings.latitude} is null or ${stationListings.longitude} is null then 1 else 0 end`
+    const sortableDistance = sql<number>`coalesce(${distanceKm}, 1000000000000.0)`
+    const keyset =
+      cursor?.kind === 'distance'
+        ? sql`(${coordinateRank}, ${sortableDistance}, ${stationListings.permitNumber}) > (${cursor.coordinateRank}, ${cursor.distanceKm}, ${cursor.permitNumber})`
+        : undefined
+    const offset = cursor?.kind === 'offset' ? cursor.offset : 0
+    const rows = await db
+      .select({ listing: stationListings, distanceKm, coordinateRank, sortableDistance })
+      .from(stationListings)
+      .where(and(selection, search, fuel, keyset))
+      .orderBy(asc(coordinateRank), asc(sortableDistance), asc(stationListings.permitNumber))
+      .offset(offset)
+      .limit(limit + 1)
+    const page = rows.slice(0, limit)
+    const last = page.at(-1)
+    const isDone = rows.length <= limit
     return {
       page: page.map(({ listing, distanceKm }) =>
         rowFromListing(listing, fuels, distanceKm),
       ),
-      isDone: offset + limit >= ordered.length,
-      continueCursor: offset + limit >= ordered.length ? '' : `o:${offset + limit}`,
+      isDone,
+      continueCursor:
+        isDone || !last
+          ? ''
+          : encodeStationCursor({
+              kind: 'distance',
+              coordinateRank: last.coordinateRank,
+              distanceKm: last.sortableDistance,
+              permitNumber: last.listing.permitNumber,
+            }),
     }
   }
 
   const primaryFuel = fuels[0] ?? 'regular'
+  const selectedPrice = priceColumn[primaryFuel]
+  const qualityRank = sql<number>`case when ${selectedPrice} between ${MIN_PLAUSIBLE_PRICE} and ${MAX_PLAUSIBLE_PRICE} then 0 else 1 end`
+  const sortablePrice = sql<number>`coalesce(${selectedPrice}, 1000000000000.0)`
   const order =
     search
       ? [
@@ -466,20 +458,53 @@ export async function readStationList(input: ListStationsInput) {
           ),
         ]
       : input.sortMode === 'price'
-        ? [asc(priceColumn[primaryFuel]), asc(stationListings.name)]
-        : [asc(stationListings.name)]
+        ? [
+            asc(qualityRank),
+            asc(sortablePrice),
+            asc(stationListings.name),
+            asc(stationListings.permitNumber),
+          ]
+        : [asc(stationListings.name), asc(stationListings.permitNumber)]
+  const keyset = search
+    ? undefined
+    : input.sortMode === 'price' && cursor?.kind === 'price'
+      ? sql`(${qualityRank}, ${sortablePrice}, ${stationListings.name}, ${stationListings.permitNumber}) > (${cursor.qualityRank}, ${cursor.price}, ${cursor.name}, ${cursor.permitNumber})`
+      : input.sortMode === 'name' && cursor?.kind === 'name'
+        ? sql`(${stationListings.name}, ${stationListings.permitNumber}) > (${cursor.name}, ${cursor.permitNumber})`
+        : undefined
+  const offset = cursor?.kind === 'offset' ? cursor.offset : 0
   const rows = await db
     .select()
     .from(stationListings)
-    .where(and(selection, search, fuel))
+    .where(and(selection, search, fuel, keyset))
     .orderBy(...order)
     .offset(offset)
     .limit(limit + 1)
   const isDone = rows.length <= limit
+  const page = rows.slice(0, limit)
+  const last = page.at(-1)
+  const lastPrice = last?.[`${primaryFuel}Price`]
   return {
-    page: rows.slice(0, limit).map((listing) => rowFromListing(listing, fuels)),
+    page: page.map((listing) => rowFromListing(listing, fuels)),
     isDone,
-    continueCursor: isDone ? '' : `o:${offset + limit}`,
+    continueCursor:
+      isDone || !last
+        ? ''
+        : search
+          ? encodeStationCursor({ kind: 'offset', offset: offset + limit })
+          : input.sortMode === 'price'
+            ? encodeStationCursor({
+                kind: 'price',
+                qualityRank: lastPrice != null && isPricePlausible(lastPrice) ? 0 : 1,
+                price: lastPrice ?? 1_000_000_000_000,
+                name: last.name,
+                permitNumber: last.permitNumber,
+              })
+            : encodeStationCursor({
+                kind: 'name',
+                name: last.name,
+                permitNumber: last.permitNumber,
+              }),
   }
 }
 

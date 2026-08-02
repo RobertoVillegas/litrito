@@ -16,55 +16,56 @@ import type {
   ListStationsInput,
 } from '../application/dtos/public-data.dto'
 
-const convexKey = <T extends Record<string, unknown>>(name: string, args: T) =>
+// Keep the historical key shape so a rollout does not invalidate every cache at once.
+const legacyQueryKey = <T extends Record<string, unknown>>(name: string, args: T) =>
   ['convexQuery', name, args] as const
 
 export const publicQueryOptions = {
   filterOptions: () =>
     queryOptions({
-      queryKey: convexKey('stations:listFilterOptions', {}),
+      queryKey: legacyQueryKey('stations:listFilterOptions', {}),
       queryFn: () => getFilterOptions(),
       staleTime: 15 * 60 * 1_000,
     }),
   metrics: () =>
     queryOptions({
-      queryKey: convexKey('metrics:getMetrics', {}),
+      queryKey: legacyQueryKey('metrics:getMetrics', {}),
       queryFn: () => getMetrics(),
       staleTime: 15 * 60 * 1_000,
     }),
   latestRun: () =>
     queryOptions({
-      queryKey: convexKey('prices:latestRun', {}),
+      queryKey: legacyQueryKey('prices:latestRun', {}),
       queryFn: () => getLatestPriceRun(),
       staleTime: 5 * 60 * 1_000,
     }),
   stationDetail: (args: { permitNumber: string }) =>
     queryOptions({
-      queryKey: convexKey('stations:getStationDetail', args),
+      queryKey: legacyQueryKey('stations:getStationDetail', args),
       queryFn: () => getStationDetail({ data: args }),
       staleTime: 5 * 60 * 1_000,
     }),
   stationsByPermits: (args: { permitNumbers: string[] }) =>
     queryOptions({
-      queryKey: convexKey('stations:getStationsByPermits', args),
+      queryKey: legacyQueryKey('stations:getStationsByPermits', args),
       queryFn: () => getStationsByPermits({ data: args }),
       staleTime: 5 * 60 * 1_000,
     }),
   bestNearby: (args: Parameters<typeof getBestNearbyStations>[0]['data']) =>
     queryOptions({
-      queryKey: convexKey('stations:bestNearbyStations', args),
+      queryKey: legacyQueryKey('stations:bestNearbyStations', args),
       queryFn: () => getBestNearbyStations({ data: args }),
       staleTime: 60 * 1_000,
     }),
   stationList: (args: ListStationsInput) =>
     queryOptions({
-      queryKey: convexKey('stations:listStations', args),
+      queryKey: legacyQueryKey('stations:listStations', args),
       queryFn: () => getStationList({ data: args }),
       staleTime: 60 * 1_000,
     }),
   stationsInBounds: (args: BoundsInput) =>
     queryOptions({
-      queryKey: convexKey('stations:listStationsInBounds', args),
+      queryKey: legacyQueryKey('stations:listStationsInBounds', args),
       queryFn: () => getStationsInBounds({ data: args }),
       staleTime: 60 * 1_000,
     }),
@@ -73,13 +74,13 @@ export const publicQueryOptions = {
     municipalityExternalId?: string
   }) =>
     queryOptions({
-      queryKey: convexKey('stations:areaBounds', args),
+      queryKey: legacyQueryKey('stations:areaBounds', args),
       queryFn: () => getAreaBounds({ data: args }),
       staleTime: 60 * 60 * 1_000,
     }),
   seoLocation: (args: { stateSlug: string; municipalitySlug?: string }) =>
     queryOptions({
-      queryKey: convexKey('stations:seoLocationOverview', args),
+      queryKey: legacyQueryKey('stations:seoLocationOverview', args),
       queryFn: () => getSeoLocationOverview({ data: args }),
       staleTime: 15 * 60 * 1_000,
     }),

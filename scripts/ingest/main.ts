@@ -8,19 +8,49 @@ let running = false
 let lastSchedule = ''
 let lastResumeBucket = -1
 let lastMaintenanceDay = ''
+let lastEnqueueDay = ''
+let lastEnqueueAttemptBucket = -1
+
+function log(
+  level: 'info' | 'warn' | 'error',
+  event: string,
+  fields: Record<string, unknown> = {},
+) {
+  console[level](JSON.stringify({
+    timestamp: new Date().toISOString(),
+    service: 'litrito-ingestion',
+    event,
+    ...fields,
+  }))
+}
 
 async function cycle(enqueue: boolean) {
-  if (running) return
+  if (running) return false
   running = true
+  const startedAt = performance.now()
   try {
     if (enqueue) {
       const queued = await ingestion.enqueue()
-      console.info(queued ? `[ingestion] ${queued.queued} municipios encolados` : '[ingestion] carga UTC de hoy ya existe')
+      log('info', 'daily_queue', {
+        status: queued ? 'created' : 'already_exists',
+        queued: queued?.queued ?? 0,
+      })
     }
     const result = await ingestion.drain()
-    console.info(`[ingestion] worker terminó: ${result.claimed} reclamados, ${result.failed} fallidos`)
+    log('info', 'cycle_completed', {
+      enqueue,
+      claimed: result.claimed,
+      failed: result.failed,
+      durationMs: Math.round(performance.now() - startedAt),
+    })
+    return true
   } catch (error) {
-    console.error('[ingestion] ciclo falló', error)
+    log('error', 'cycle_failed', {
+      enqueue,
+      durationMs: Math.round(performance.now() - startedAt),
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
   } finally {
     running = false
   }
@@ -30,30 +60,40 @@ async function tick() {
   const now = new Date()
   const utcDay = now.toISOString().slice(0, 10)
   if (utcDay !== lastMaintenanceDay) {
-    lastMaintenanceDay = utcDay
     const maintenance = await ingestion.runMaintenance()
+    lastMaintenanceDay = utcDay
     if (maintenance.accountsPurged || maintenance.runsPurged) {
-      console.info(`[ingestion] mantenimiento: ${maintenance.accountsPurged} cuentas y ${maintenance.runsPurged} runs purgados`)
+      log('info', 'maintenance_completed', maintenance)
     }
   }
   const resumeBucket = Math.floor(now.getTime() / (15 * 60_000))
   if (resumeBucket !== lastResumeBucket) {
-    lastResumeBucket = resumeBucket
     const resumed = await ingestion.resumeStale()
-    if (resumed > 0) console.warn(`[ingestion] ${resumed} tareas stale recuperadas`)
+    lastResumeBucket = resumeBucket
+    if (resumed > 0) log('warn', 'stale_tasks_resumed', { resumed })
     await cycle(false)
   }
 
   const time = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`
   const scheduleKey = `${now.toISOString().slice(0, 10)}T${time}`
-  if (SCHEDULES.has(time) && scheduleKey !== lastSchedule) {
-    lastSchedule = scheduleKey
-    await cycle(true)
+  const afterFirstSchedule = time >= '00:15'
+  const scheduled = SCHEDULES.has(time) && scheduleKey !== lastSchedule
+  const catchUp =
+    afterFirstSchedule &&
+    lastEnqueueDay !== utcDay &&
+    lastEnqueueAttemptBucket !== resumeBucket
+  if (scheduled || catchUp) {
+    lastEnqueueAttemptBucket = resumeBucket
+    const succeeded = await cycle(true)
+    if (succeeded) {
+      lastEnqueueDay = utcDay
+      if (scheduled) lastSchedule = scheduleKey
+    }
   }
 }
 
 async function shutdown(signal: string) {
-  console.info(`[ingestion] ${signal}; cerrando conexiones`)
+  log('info', 'shutdown', { signal })
   await closeDatabase()
   process.exit(0)
 }
@@ -69,7 +109,13 @@ if (process.argv.includes('--enqueue')) {
   await cycle(false)
   await closeDatabase()
 } else {
-  console.info(`[ingestion] activo; batch=${batchSize}; horarios UTC=${[...SCHEDULES].join(',')}`)
-  await tick()
-  setInterval(() => void tick(), 60_000)
+  log('info', 'worker_started', { batchSize, schedulesUtc: [...SCHEDULES] })
+  const safeTick = () =>
+    tick().catch((error: unknown) =>
+      log('error', 'tick_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  await safeTick()
+  setInterval(safeTick, 60_000)
 }

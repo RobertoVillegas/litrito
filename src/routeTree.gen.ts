@@ -26,6 +26,7 @@ import { Route as AcercaRouteImport } from './routes/acerca'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EstadoStateSlugRouteImport } from './routes/estado.$stateSlug'
 import { Route as EstacionSplatRouteImport } from './routes/estacion.$'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as AdminIngestionRouteImport } from './routes/admin.ingestion'
 import { Route as EstadoStateSlugMunicipalitySlugRouteImport } from './routes/estado.$stateSlug_.$municipalitySlug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -115,6 +116,11 @@ const EstacionSplatRoute = EstacionSplatRouteImport.update({
   path: '/estacion/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIngestionRoute = AdminIngestionRouteImport.update({
   id: '/admin/ingestion',
   path: '/admin/ingestion',
@@ -149,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terminos': typeof TerminosRoute
   '/admin/ingestion': typeof AdminIngestionRoute
+  '/api/health': typeof ApiHealthRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/estado/$stateSlug': typeof EstadoStateSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -171,6 +178,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terminos': typeof TerminosRoute
   '/admin/ingestion': typeof AdminIngestionRoute
+  '/api/health': typeof ApiHealthRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/estado/$stateSlug': typeof EstadoStateSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -194,6 +202,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terminos': typeof TerminosRoute
   '/admin/ingestion': typeof AdminIngestionRoute
+  '/api/health': typeof ApiHealthRoute
   '/estacion/$': typeof EstacionSplatRoute
   '/estado/$stateSlug': typeof EstadoStateSlugRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -218,6 +227,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terminos'
     | '/admin/ingestion'
+    | '/api/health'
     | '/estacion/$'
     | '/estado/$stateSlug'
     | '/api/auth/$'
@@ -240,6 +250,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terminos'
     | '/admin/ingestion'
+    | '/api/health'
     | '/estacion/$'
     | '/estado/$stateSlug'
     | '/api/auth/$'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/terminos'
     | '/admin/ingestion'
+    | '/api/health'
     | '/estacion/$'
     | '/estado/$stateSlug'
     | '/api/auth/$'
@@ -285,6 +297,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TerminosRoute: typeof TerminosRoute
   AdminIngestionRoute: typeof AdminIngestionRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   EstacionSplatRoute: typeof EstacionSplatRoute
   EstadoStateSlugRoute: typeof EstadoStateSlugRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -412,6 +425,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EstacionSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/ingestion': {
       id: '/admin/ingestion'
       path: '/admin/ingestion'
@@ -453,6 +473,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TerminosRoute: TerminosRoute,
   AdminIngestionRoute: AdminIngestionRoute,
+  ApiHealthRoute: ApiHealthRoute,
   EstacionSplatRoute: EstacionSplatRoute,
   EstadoStateSlugRoute: EstadoStateSlugRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
