@@ -148,6 +148,7 @@ function formatDate(value: string | undefined, withTime = false): string {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
+    timeZone: 'America/Mexico_City',
     ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
   }).format(date)
 }

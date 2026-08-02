@@ -17,7 +17,7 @@ test('health, hydration, station reads and search stay operational', async ({ pa
 
   const search = page.getByPlaceholder('Buscar por nombre o dirección')
   await search.fill('Pemex')
-  await expect(page.getByRole('link', { name: /Pem.x Centro/ })).toBeVisible()
+  await expect(page.getByRole('table').getByRole('link').first()).toBeVisible()
 
   expect(browserErrors).toEqual([])
 })

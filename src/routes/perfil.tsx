@@ -252,7 +252,8 @@ function Profile() {
 }
 
 function formatDeletionDate(scheduledAt: number | string): string {
-  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'long' }).format(
-    new Date(scheduledAt),
-  )
+  return new Intl.DateTimeFormat('es-MX', {
+    dateStyle: 'long',
+    timeZone: 'America/Mexico_City',
+  }).format(new Date(scheduledAt))
 }
