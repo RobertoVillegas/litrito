@@ -75,7 +75,7 @@ export class PostgresIngestionRepository implements IngestionRepository {
           id: newId(),
           kind: 'municipality_prices',
           status: 'pending',
-          started_at: new Date(),
+          started_at: new Date().toISOString(),
           state_external_id: municipality.stateExternalId,
           municipality_external_id: municipality.externalId,
           parent_run_id: runId,
