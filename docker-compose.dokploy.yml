@@ -72,22 +72,6 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  migration:
-    profiles: ["tools"]
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: migration
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-litrito}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-litrito}
-      - POSTGRES_POOL_SIZE=1
-      - POSTGRES_APPLICATION_NAME=litrito-migration
-    volumes:
-      - ${MIGRATION_DATA_DIR:-/opt/litrito-migration}:/migration:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   web:
     build:
       context: .

@@ -6,19 +6,10 @@ los XML crudos se descartan después de transformar sus datos útiles.
 
 1. Copia `.env.selfhost.example` y configura contraseñas, Better Auth, OAuth y
    SMTP en Dokploy.
-2. Sube el snapshot a `/opt/litrito-migration/litrito-convex-export-20260801.zip`.
-3. Desde el checkout de compose ejecuta el toolbox manual:
-
-   ```bash
-   docker compose -f docker-compose.dokploy.yml --profile tools run --rm --build migration bun run db:migrate
-   docker compose -f docker-compose.dokploy.yml --profile tools run --rm migration bun run db:import-convex --snapshot=/migration/litrito-convex-export-20260801.zip --truncate
-   docker compose -f docker-compose.dokploy.yml --profile tools run --rm migration bun run db:import-auth --snapshot=/migration/litrito-convex-export-20260801.zip
-   ```
-
-   Confirma los conteos antes de continuar. El perfil `tools` nunca arranca en
-   un redeploy normal.
-4. En Dokploy publica únicamente `web:3000` bajo el dominio de Litrito.
-5. Despliega desde `docker-compose.dokploy.yml`.
+2. Al desplegar, el servicio `migrate` aplica los esquemas de Drizzle y el
+   servicio `ingestion` llena la base con datos vigentes de la CNE.
+3. En Dokploy publica únicamente `web:3000` bajo el dominio de Litrito.
+4. Despliega desde `docker-compose.dokploy.yml`.
 
 El worker ejecuta la cola a las 00:15, 00:30, 01:00 y 02:00 UTC y recupera
 tareas interrumpidas cada 15 minutos. Los respaldos quedan a cargo del backup
@@ -40,7 +31,7 @@ un `BETTER_AUTH_SECRET` nuevo de al menos 32 bytes aleatorios. Las sesiones se
 invalidan deliberadamente. `OVERPASS_URL` es opcional y sólo se usa al lanzar
 una auditoría de marcas desde admin. No se requieren variables MinIO/S3.
 
-Después de importar auth, otorga el primer rol de administrador con:
+Después del primer deploy, otorga el primer rol de administrador con:
 
 ```bash
 DATABASE_URL=postgresql://... bun run admin:set --email=tu-correo@dominio

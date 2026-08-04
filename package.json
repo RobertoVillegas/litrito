@@ -26,8 +26,6 @@
     "db:check": "drizzle-kit check",
     "db:studio": "drizzle-kit studio",
     "bench:geo": "bun scripts/bench/postgis.ts",
-    "db:import-convex": "bun scripts/migrate-postgres.ts",
-    "db:import-auth": "bun scripts/migrate-auth.ts",
     "ingest": "bun scripts/ingest/main.ts",
     "ingest:once": "bun scripts/ingest/main.ts --once",
     "ingest:enqueue": "bun scripts/ingest/main.ts --enqueue",
