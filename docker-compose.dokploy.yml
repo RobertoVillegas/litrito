@@ -4,7 +4,7 @@
 # so this file only declares the services, their ports, env and the data volume.
 # In Dokploy → Domains, route each domain to the right service + container port:
 #
-#   litrito.athas.mx               -> web        : 3000
+#   litrito.com                    -> web        : 3000
 # Set PostgreSQL and Better Auth variables in Dokploy.
 
 services:
@@ -81,6 +81,9 @@ services:
         # Umami analytics, baked in at build time.
         VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID}
         VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
+    # Without this the container stays dead after a cgroup OOM kill and only a
+    # manual `docker start` brings the public site back.
+    restart: unless-stopped
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -103,7 +106,11 @@ services:
       # Umami read at runtime by the root loader (SSR) as a fallback to the build arg.
       - VITE_UMAMI_WEBSITE_ID=${VITE_UMAMI_WEBSITE_ID}
       - VITE_UMAMI_SRC=${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
-    mem_limit: 768m
+    # The SSR process starts around 120 MiB and had been reaching 768m within a
+    # day, where the cgroup OOM killed it. Traffic volume does not explain that
+    # growth, so a leak is still under investigation; this headroom plus the
+    # restart policy above only keep the site up in the meantime.
+    mem_limit: 1g
     mem_reservation: 256m
     expose:
       - "3000"

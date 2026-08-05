@@ -81,6 +81,7 @@ services:
       args:
         VITE_UMAMI_WEBSITE_ID: ${VITE_UMAMI_WEBSITE_ID:-}
         VITE_UMAMI_SRC: ${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -104,7 +105,7 @@ services:
       - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Litrito}
       - VITE_UMAMI_WEBSITE_ID=${VITE_UMAMI_WEBSITE_ID:-}
       - VITE_UMAMI_SRC=${VITE_UMAMI_SRC:-https://umami.athas.mx/script.js}
-    mem_limit: 768m
+    mem_limit: 1g
     mem_reservation: 256m
     depends_on:
       migrate:
