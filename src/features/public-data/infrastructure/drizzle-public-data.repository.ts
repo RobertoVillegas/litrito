@@ -111,7 +111,27 @@ function toPublicStation(row: Station): PublicStation {
   }
 }
 
-function stationFromListing(row: Listing): PublicStation {
+// Only the fields this actually reads, so callers that project a narrower row
+// (see BOUNDS_COLUMNS) can reuse it without widening their query.
+type StationFields = Pick<
+  Listing,
+  | 'stationId'
+  | 'convexCreationTime'
+  | 'permitNumber'
+  | 'name'
+  | 'address'
+  | 'stateExternalId'
+  | 'municipalityExternalId'
+  | 'stateName'
+  | 'municipalityName'
+  | 'latitude'
+  | 'longitude'
+  | 'latBucket'
+  | 'firstSeenAt'
+  | 'updatedAt'
+>
+
+function stationFromListing(row: StationFields): PublicStation {
   return {
     _id: row.stationId,
     _creationTime: row.convexCreationTime,
@@ -508,6 +528,28 @@ export async function readStationList(input: ListStationsInput) {
   }
 }
 
+// The viewport query feeds the map only (explorar's table is driven by the
+// paginated list), and the map reads neither `enrichment` nor the denormalized
+// per-fuel price columns. Projecting them away keeps the payload proportional
+// to what is actually rendered, which matters at the 800-row ceiling.
+const BOUNDS_COLUMNS = {
+  stationId: stationListings.stationId,
+  convexCreationTime: stationListings.convexCreationTime,
+  permitNumber: stationListings.permitNumber,
+  name: stationListings.name,
+  address: stationListings.address,
+  stateExternalId: stationListings.stateExternalId,
+  municipalityExternalId: stationListings.municipalityExternalId,
+  stateName: stationListings.stateName,
+  municipalityName: stationListings.municipalityName,
+  latitude: stationListings.latitude,
+  longitude: stationListings.longitude,
+  latBucket: stationListings.latBucket,
+  firstSeenAt: stationListings.firstSeenAt,
+  updatedAt: stationListings.updatedAt,
+  prices: stationListings.prices,
+}
+
 export async function readStationsInBounds(input: BoundsInput) {
   const limit = Math.min(Math.max(input.limit ?? 800, 1), 800)
   const swLat = Math.max(input.swLat, MEXICO_BOUNDS.swLat)
@@ -519,7 +561,7 @@ export async function readStationsInBounds(input: BoundsInput) {
   const fuels = input.fuelTypes ?? []
   const { db } = getDatabase()
   const rows = await db
-    .select()
+    .select(BOUNDS_COLUMNS)
     .from(stationListings)
     .where(
       and(
@@ -536,7 +578,12 @@ export async function readStationsInBounds(input: BoundsInput) {
     )
     .limit(limit + 1)
   return {
-    stations: rows.slice(0, limit).map((listing) => rowFromListing(listing, fuels)),
+    stations: rows.slice(0, limit).map((listing) => ({
+      station: stationFromListing(listing),
+      prices: annotatePriceQuality(listing.prices),
+      highlightedPrice: highlightedPrice(listing.prices, fuels),
+      enrichment: null,
+    })),
     truncated: rows.length > limit,
   }
 }
