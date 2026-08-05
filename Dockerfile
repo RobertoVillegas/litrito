@@ -40,18 +40,16 @@ COPY src/features/ingestion ./src/features/ingestion
 COPY src/lib/slug.ts ./src/lib/slug.ts
 CMD ["bun", "scripts/ingest/main.ts"]
 
-# Manual cutover/migration toolbox. This image is only started through the
-# `tools` compose profile and never participates in a normal redeploy.
+# Schema migrations. The `migrate` compose service runs this to completion on
+# every redeploy, before `web` and `ingestion` are allowed to start. It also
+# carries set-admin.ts so admin grants can be run against the live database.
 FROM oven/bun:1-slim AS migration
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends unzip \
-  && rm -rf /var/lib/apt/lists/*
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY tsconfig.json drizzle.config.ts ./
 COPY drizzle ./drizzle
-COPY scripts/migrate-postgres.ts scripts/migrate-auth.ts scripts/set-admin.ts ./scripts/
+COPY scripts/set-admin.ts ./scripts/
 COPY src/db ./src/db
 CMD ["bun", "run", "db:migrate"]
