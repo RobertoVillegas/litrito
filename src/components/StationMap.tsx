@@ -123,9 +123,17 @@ function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
   // follows a `popupopen` (cleared after a short window if no pan happens).
   const suppressRef = useRef(false)
   const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The auto-pan that fits a popup is small. Remember where the map was when
+  // the popup opened so a real zoom/pan in that same 600 ms window is still
+  // honoured — otherwise the bounds silently stop updating for anyone who opens
+  // a popup and immediately zooms.
+  const suppressCenterRef = useRef<L.LatLng | null>(null)
+  const suppressZoomRef = useRef<number | null>(null)
   const map = useMapEvents({
     popupopen() {
       suppressRef.current = true
+      suppressCenterRef.current = map.getCenter()
+      suppressZoomRef.current = map.getZoom()
       if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
       suppressTimerRef.current = setTimeout(() => {
         suppressRef.current = false
@@ -133,9 +141,17 @@ function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
     },
     moveend(e) {
       if (suppressRef.current) {
+        const zoomUnchanged = suppressZoomRef.current === e.target.getZoom()
+        const panIsAutoFit =
+          suppressCenterRef.current != null &&
+          e.target.getCenter().distanceTo(suppressCenterRef.current) < 2_000
+        if (zoomUnchanged && panIsAutoFit) {
+          suppressRef.current = false
+          if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
+          return
+        }
         suppressRef.current = false
         if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
-        return
       }
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
@@ -516,7 +532,7 @@ function StationMapInner({
       </div>
       {truncated && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-xs font-bold text-amber-800 shadow">
-          Mostrando 800 · acércate para ver más
+          Mostrando {points.length} · acércate para ver más
         </div>
       )}
       {loading && (

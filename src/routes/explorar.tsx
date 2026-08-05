@@ -729,6 +729,11 @@ function Explore() {
                   primaryFuel={filters.primaryFuel}
                   fuelTypes={filters.fuelTypes}
                   userLocation={userLoc.location}
+                  // Without this the map stays on the nationwide mount view, so
+                  // the viewport query asks for the whole country and comes back
+                  // truncated at 800 even for someone standing in a town with a
+                  // dozen stations. An explicit `mapFocus` still wins.
+                  autoCenterOnUserLocation={!showFavoritesOnly}
                   truncated={!showFavoritesOnly && effectiveBoundsResult?.truncated}
                   focus={mapFocus}
                   initialBounds={mapBounds}
