@@ -61,9 +61,28 @@ const config = defineConfig({
         // cache and every subsequent hit (including link re-checks during
         // audits with 50+ concurrent workers) is instant. SWR ensures the
         // stale cache is served while PostgreSQL-backed SSR regenerates it.
+        //
+        // These keyspaces are bounded: /estado/** is the ~1.5k paths the
+        // sitemap lists, /metricas is one. `storage.cache` below keeps the
+        // entries off the heap.
+        //
+        // `/explorar` is deliberately NOT cached. The cache key includes the
+        // query string, and that page's filters make the keyspace unbounded —
+        // any visitor appending `?anything=N` mints a fresh entry, so it was an
+        // unauthenticated way to fill the container's memory. It also gained
+        // little: the TTL was 120s on a page people drive with filters.
         '/estado/**': { swr: 43200 },
-        '/explorar': { swr: 120 },
         '/metricas': { swr: 43200 },
+      },
+      // Nitro's route cache defaults to in-memory storage, which put every
+      // rendered page in the same 1 GiB cgroup as the server. Measured against
+      // production, one cached /estado page cost ~334 KB of heap (a ~150 KB HTML
+      // document held as a UTF-16 string), so a crawler walking the sitemap's
+      // ~1.5k URLs was enough to reach the limit and get the container
+      // OOM-killed. On disk the same entries cost their byte size and the heap
+      // stays flat.
+      storage: {
+        cache: { driver: 'fs', base: './.cache/nitro' },
       },
       rollupConfig: { external: [/^@sentry\//, RESVG] },
     }),
