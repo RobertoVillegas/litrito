@@ -479,10 +479,14 @@ function Explore() {
     listIsLoadingFirstPage &&
     Boolean(paginated.results) &&
     tableRows.length > 0
+  // No bounds yet counts as loading: MoveWatcher defers its first emit so the
+  // initial framing can win the race, and during that window there is nothing to
+  // draw. Gating on `Boolean(mapBounds)` instead made the map claim the area was
+  // empty for those few hundred ms before the first result arrived.
   const mapIsLoading =
     showFavoritesOnly
       ? favoriteStations === undefined && favoritePermits.length > 0
-      : Boolean(mapBounds) && boundsResult === undefined
+      : !mapBounds || boundsResult === undefined
 
   const selectedStateId = filters.stateIds[0]
   const selectedMuniId = filters.municipalityIds[0]
