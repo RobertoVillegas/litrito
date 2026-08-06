@@ -117,6 +117,7 @@ const USER_ICON = L.divIcon({
 
 function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const initialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // When a popup opens near an edge, Leaflet auto-pans to fit it, which fires a
   // `moveend`. Letting that move refetch by bounds re-renders every marker and
   // hides the popup mid-transition. Swallow the single auto-pan `moveend` that
@@ -153,6 +154,11 @@ function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
         suppressRef.current = false
         if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
       }
+      // A real move supersedes the pending mount emit below.
+      if (initialTimerRef.current) {
+        clearTimeout(initialTimerRef.current)
+        initialTimerRef.current = null
+      }
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         const b = e.target.getBounds()
@@ -166,17 +172,27 @@ function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
     },
   })
 
-  // Emit the initial viewport once on mount so the bounds-driven query can run
-  // immediately — otherwise the map waits for a manual pan that never comes.
+  // The bounds-driven query still needs a first viewport, or the map would wait
+  // for a manual pan that never comes. But emitting it synchronously on mount
+  // races the initial framing: the map mounts nationwide (MEXICO_CENTER, zoom 5)
+  // and geolocation resolves a moment later, so a cold load always fired one
+  // whole-country query — wasted work, and the reason the map reported the
+  // 800-row ceiling before settling on your actual area. Wait briefly instead;
+  // `fitBounds`/`flyTo` fire `moveend`, which cancels this. The timer is the
+  // fallback for a map that genuinely has nothing to frame.
   useEffect(() => {
-    const b = map.getBounds()
-    onMoveEnd({
-      swLat: b.getSouth(),
-      swLon: b.getWest(),
-      neLat: b.getNorth(),
-      neLon: b.getEast(),
-    })
+    initialTimerRef.current = setTimeout(() => {
+      initialTimerRef.current = null
+      const b = map.getBounds()
+      onMoveEnd({
+        swLat: b.getSouth(),
+        swLon: b.getWest(),
+        neLat: b.getNorth(),
+        neLon: b.getEast(),
+      })
+    }, 700)
     return () => {
+      if (initialTimerRef.current) clearTimeout(initialTimerRef.current)
       if (debounceRef.current) clearTimeout(debounceRef.current)
       if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
     }
