@@ -6,47 +6,76 @@
 # So middlewares must be defined in Traefik's dynamic-config directory, which is
 # watched by the file provider and survives redeploys.
 #
-# INSTALL (on the Dokploy host, one time):
-#   1. Copy this file to the watched dynamic dir:
-#        scp deploy/traefik/litrito-dynamic.yml \
-#            <host>:/etc/dokploy/traefik/dynamic/litrito-dynamic.yml
-#      (Traefik hot-reloads dynamic files — no restart needed for this file.)
+# WHY IT DECLARES ITS OWN ROUTERS:
+# Defining the middlewares alone is not enough — something has to attach them.
+# Attaching on the `websecure` entryPoint (an earlier version of this file) needs
+# a static-config edit plus a Traefik restart, and applies to EVERY app on the
+# host: `frameDeny` would break anything that relies on being iframed (e.g.
+# Umami shared-report embeds). Declaring litrito's own routers here keeps the
+# middlewares scoped to litrito.com and hot-reloads with no restart, which is
+# the same pattern litrito-www-redirect.yml already uses.
 #
-#   2. Attach the middlewares to the HTTPS entrypoint so EVERY router gets them.
-#      Edit /etc/dokploy/traefik/traefik.yml and add the `http.middlewares` block
-#      under the websecure entryPoint:
+# These routers deliberately outrank Dokploy's label-generated ones: Traefik
+# resolves competing rules by priority, and an unset priority defaults to the
+# rule's length, so the explicit 100 below wins for Host(`litrito.com`). The
+# container name is stable across redeploys (compose project naming), which is
+# what makes the file-provider service durable.
 #
-#        entryPoints:
-#          websecure:
-#            address: ":443"
-#            http:
-#              middlewares:
-#                - litrito-compress@file
-#                - litrito-secheaders@file
-#
-#      Then restart Traefik so the static-config change takes effect:
-#        docker restart dokploy-traefik
+# INSTALL (on the Dokploy host):
+#   scp deploy/traefik/litrito-dynamic.yml \
+#       <host>:/tmp/litrito-dynamic.yml
+#   ssh <host> 'sudo install -m 644 /tmp/litrito-dynamic.yml \
+#       /etc/dokploy/traefik/dynamic/litrito-dynamic.yml'
+#   # Traefik hot-reloads the file provider. No restart, no downtime.
 #
 # VERIFY:
 #   curl -sI https://litrito.com/ -H "Accept-Encoding: br,gzip" \
 #     | grep -i "content-encoding\|strict-transport\|x-frame\|x-content-type"
 #   -> expect: content-encoding: gzip (or br), strict-transport-security, etc.
 #
-# SCOPE NOTE: attaching on the entrypoint applies to ALL apps on this Dokploy
-# instance. Compression and HSTS/nosniff/referrer/COOP are safe everywhere.
-# `frameDeny` (X-Frame-Options: DENY) blocks iframing — drop it from the headers
-# middleware below if any app on this host relies on being embedded (e.g. Umami
-# shared-report embeds). Litrito's OAuth is redirect-based, so COOP is safe.
+# ROLLBACK:
+#   sudo rm /etc/dokploy/traefik/dynamic/litrito-dynamic.yml
+#   Traefik hot-reloads and Dokploy's own routers take over again within seconds.
 
 http:
+  routers:
+    # Outranks Dokploy's label router for the apex so the middlewares below
+    # actually apply. Mirrors the TLS setup Dokploy generates (letsencrypt on
+    # the websecure entryPoint) so the existing certificate keeps renewing.
+    litrito-apex-websecure:
+      rule: Host(`litrito.com`)
+      priority: 100
+      entryPoints:
+        - websecure
+      service: litrito-apex-service
+      middlewares:
+        - litrito-compress
+        - litrito-secheaders
+      tls:
+        certResolver: letsencrypt
+
+    # `redirect-to-https` lives in middlewares.yml, same provider, so it
+    # resolves unqualified here. This mirrors the label Dokploy puts on its own
+    # port-80 router.
+    litrito-apex-web:
+      rule: Host(`litrito.com`)
+      priority: 100
+      entryPoints:
+        - web
+      service: litrito-apex-service
+      middlewares:
+        - redirect-to-https
+
   middlewares:
     # gzip/brotli/zstd for the dynamic SSR HTML document. Static /assets/* are
     # already pre-compressed by Nitro (compressPublicAssets); this covers the
-    # ~148 KB HTML that Nitro doesn't compress (PSI "document request latency").
+    # ~150 KB HTML that Nitro doesn't compress (PSI "document request latency").
     litrito-compress:
       compress: {}
 
     # Security response headers flagged by PageSpeed's Best-Practices audit.
+    # Scoped to litrito.com, so `frameDeny` cannot affect other apps on the
+    # host. Litrito's OAuth is redirect-based, so COOP is safe.
     litrito-secheaders:
       headers:
         stsSeconds: 31536000
@@ -57,3 +86,10 @@ http:
         referrerPolicy: strict-origin-when-cross-origin
         customResponseHeaders:
           Cross-Origin-Opener-Policy: same-origin
+
+  services:
+    litrito-apex-service:
+      loadBalancer:
+        servers:
+          - url: http://litrito-web-gxr9ar-web-1:3000
+        passHostHeader: true
