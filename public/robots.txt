@@ -1,4 +1,23 @@
 # https://www.robotstxt.org/robotstxt.html
+
+# SE Ranking's backlink crawler accounted for 4,940 of the 5,044 slow requests
+# to litrito.com in a 24h sample — 98% of the traffic — walking ~4,900 distinct
+# station and municipality pages over 5.5 hours at its default 3s crawl delay.
+# It is a commercial backlink index, not a search engine: it sends no visitors
+# and has no bearing on how Google ranks us, so the SSR cost buys nothing.
+# Googlebot did 12 requests in that same window and is deliberately untouched.
+#
+# Two records because the operator's docs give the token as SERankingBacklinksBot
+# while third-party directories list SERankingBacklinks; robots.txt matches on a
+# prefix of the product token, so covering both spellings is harmless.
+# Their docs note it can take up to a day to fully stop, since queued pages are
+# still processed.
+User-agent: SERankingBacklinksBot
+Disallow: /
+
+User-agent: SERankingBacklinks
+Disallow: /
+
 User-agent: *
 Disallow:
 
