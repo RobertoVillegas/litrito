@@ -1,6 +1,7 @@
-import { MapContainer, Marker, TileLayer } from 'react-leaflet'
+import { MapContainer, Marker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { LitritoBasemap } from './LitritoBasemap'
 
 const STATION_ICON = L.divIcon({
   className: 'litrito-marker',
@@ -24,10 +25,7 @@ export function StationMiniMap({
         scrollWheelZoom={false}
         style={{ height: '100%', width: '100%' }}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <LitritoBasemap />
         <Marker position={[latitude, longitude]} icon={STATION_ICON} />
       </MapContainer>
     </div>

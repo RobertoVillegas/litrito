@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import MarkerClusterGroup from 'react-leaflet-cluster'
 import * as Sentry from '@sentry/tanstackstart-react'
 import L, {
@@ -13,6 +13,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { FuelType } from './StationFilters'
 import { AnimatedPrice } from './AnimatedNumber'
 import { ComponentErrorBoundary } from './ComponentErrorBoundary'
+import { LitritoBasemap } from './LitritoBasemap'
 
 type Station = {
   permitNumber: string
@@ -452,10 +453,7 @@ function StationMapInner({
           maxBounds={MEXICO_BOUNDS}
           maxBoundsViscosity={0.8}
         >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <LitritoBasemap />
           {bounds && !effectiveFocus && <FitInitialBounds bounds={bounds} />}
           <FocusController focus={effectiveFocus} />
           <MapBreadcrumbs points={points.length} />

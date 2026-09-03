@@ -96,6 +96,7 @@ services:
       - FACEBOOK_CLIENT_ID=${FACEBOOK_CLIENT_ID:-}
       - FACEBOOK_CLIENT_SECRET=${FACEBOOK_CLIENT_SECRET:-}
       - OVERPASS_URL=${OVERPASS_URL:-https://overpass.kumi.systems/api/interpreter}
+      - MAPTILER_API_KEY=${MAPTILER_API_KEY:-}
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}

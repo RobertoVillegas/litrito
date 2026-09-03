@@ -11,6 +11,7 @@ import { ServiceWorkerRegistration } from '../components/ServiceWorkerRegistrati
 import { SiteNav } from '../components/SiteNav'
 import { ToastProvider } from '../components/ui/toast'
 import { UserLocationProvider } from '../lib/useUserLocation'
+import { MapConfigProvider } from '../lib/map-config'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -41,7 +42,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       (import.meta.env.VITE_UMAMI_SRC as string | undefined) ||
       runtimeEnv?.VITE_UMAMI_SRC ||
       'https://umami.athas.mx/script.js'
-    return { umamiWebsiteId, umamiSrc }
+    const mapTilerApiKey =
+      runtimeEnv?.MAPTILER_API_KEY ||
+      (import.meta.env.VITE_MAPTILER_API_KEY as string | undefined) ||
+      ''
+    return { umamiWebsiteId, umamiSrc, mapTilerApiKey }
   },
   head: ({ loaderData }) => ({
     scripts: loaderData?.umamiWebsiteId
@@ -143,6 +148,8 @@ function NotFound() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const { mapTilerApiKey } = Route.useLoaderData()
+
   return (
     <html lang="es-MX">
       <head>
@@ -150,25 +157,27 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <ToastProvider>
+          <MapConfigProvider mapTilerApiKey={mapTilerApiKey}>
             <UserLocationProvider>
               <ServiceWorkerRegistration />
               <PromoMarquee />
               <SiteNav />
               {children}
             </UserLocationProvider>
+          </MapConfigProvider>
         </ToastProvider>
-          <TanStackDevtools
-            config={{
-              position: 'bottom-right',
-            }}
-            plugins={[
-              {
-                name: 'Tanstack Router',
-                render: <TanStackRouterDevtoolsPanel />,
-              },
-              TanStackQueryDevtools,
-            ]}
-          />
+        <TanStackDevtools
+          config={{
+            position: 'bottom-right',
+          }}
+          plugins={[
+            {
+              name: 'Tanstack Router',
+              render: <TanStackRouterDevtoolsPanel />,
+            },
+            TanStackQueryDevtools,
+          ]}
+        />
         <Scripts />
       </body>
     </html>
