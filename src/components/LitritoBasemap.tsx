@@ -23,10 +23,10 @@ export function LitritoBasemap() {
     <TileLayer
       attribution={MAPTILER_ATTRIBUTION}
       crossOrigin
+      detectRetina
       minZoom={1}
-      tileSize={512}
-      url={`https://api.maptiler.com/maps/base-v4/{z}/{x}/{y}.png?key=${encodeURIComponent(mapTilerApiKey)}`}
-      zoomOffset={-1}
+      tileSize={256}
+      url={`https://api.maptiler.com/maps/base-v4/256/{z}/{x}/{y}.png?key=${encodeURIComponent(mapTilerApiKey)}`}
     />
   )
 }
