@@ -363,7 +363,7 @@ function Explore() {
             filters.municipalityIds.length > 0
               ? filters.municipalityIds
               : undefined,
-          // Expand to a ~11 m grid. Tiny renderer float differences otherwise
+          // Expand to a ~11 m grid. Tiny Leaflet float differences otherwise
           // create distinct reactive subscriptions for the same viewport.
           swLat: Math.floor(mapBounds.swLat * 10_000) / 10_000,
           swLon: Math.floor(mapBounds.swLon * 10_000) / 10_000,

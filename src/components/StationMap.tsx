@@ -1,24 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { useEffect, useMemo, useRef } from 'react'
+import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import MarkerClusterGroup from 'react-leaflet-cluster'
 import * as Sentry from '@sentry/tanstackstart-react'
-import {
-  Map as MapLibreMap,
-  Marker,
-  NavigationControl,
-  Popup,
-  type GeoJSONSource,
-  type LngLatBoundsLike,
-  type MapGeoJSONFeature,
-  type MapMouseEvent,
-} from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import L, {
+  type LatLngBoundsExpression,
+  type LatLngExpression,
+  type LatLngTuple,
+} from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { FuelType } from './StationFilters'
 import { AnimatedPrice } from './AnimatedNumber'
 import { ComponentErrorBoundary } from './ComponentErrorBoundary'
-import type { MapBounds, MapFocus } from './mapGeo'
-
-export { boundsOfLatLngs } from './mapGeo'
-export type { MapBounds, MapFocus } from './mapGeo'
 
 type Station = {
   permitNumber: string
@@ -37,24 +31,10 @@ type StationRow = {
   rank?: number
 }
 
-type MappedStationRow = StationRow & {
-  latitude: number
-  longitude: number
-}
+import type { MapBounds, MapFocus } from './mapGeo'
 
-type StationFeatureCollection = {
-  type: 'FeatureCollection'
-  features: Array<{
-    type: 'Feature'
-    geometry: { type: 'Point'; coordinates: [number, number] }
-    properties: {
-      color: string
-      dimmed: boolean
-      label: string
-      permitNumber: string
-    }
-  }>
-}
+export { boundsOfLatLngs } from './mapGeo'
+export type { MapBounds, MapFocus } from './mapGeo'
 
 type UserLocation = {
   latitude: number
@@ -83,17 +63,11 @@ const FUEL_LABEL: Record<FuelType, string> = {
   duba: 'Diésel bajo azufre',
 }
 
-const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
-const MEXICO_CENTER: [number, number] = [-102.5528, 23.6345]
-const MEXICO_BOUNDS: LngLatBoundsLike = [
-  [-118.5, 14.5],
-  [-86.5, 32.7],
+const MEXICO_CENTER: LatLngTuple = [23.6345, -102.5528]
+const MEXICO_BOUNDS: LatLngBoundsExpression = [
+  [14.5, -118.5],
+  [32.7, -86.5],
 ]
-const SOURCE_ID = 'stations'
-const CLUSTER_LAYER_ID = 'station-clusters'
-const CLUSTER_COUNT_LAYER_ID = 'station-cluster-count'
-const STATION_LAYER_ID = 'station-points'
-const STATION_LABEL_LAYER_ID = 'station-labels'
 
 function priceColor(price: number, allPrices: number[]): string {
   if (allPrices.length === 0) return '#0f766e'
@@ -106,135 +80,159 @@ function priceColor(price: number, allPrices: number[]): string {
   return '#b91c1c'
 }
 
-function markerDetails(
-  row: MappedStationRow,
-  primaryFuel: FuelType,
-  allPrices: number[],
-  markerMode: 'price' | 'rank',
-) {
-  const selectedPrice = row.prices[primaryFuel]
-  const fuelPrice = selectedPrice?.price
-  const hasFuelPrice = typeof fuelPrice === 'number' && selectedPrice?.isPlausible !== false
-  const displayPrice = hasFuelPrice ? fuelPrice : row.highlightedPrice
+function buildIcon({
+  allPrices,
+  dim,
+  price,
+  rank,
+}: {
+  allPrices: number[]
+  dim: boolean
+  price: number | null
+  rank?: number
+}): L.DivIcon {
+  const color = price != null ? priceColor(price, allPrices) : '#94a3b8'
   const label =
-    markerMode === 'rank' && typeof row.rank === 'number'
-      ? String(row.rank)
-      : displayPrice != null
-        ? `$${displayPrice.toFixed(2).replace(/\.00$/, '')}`
+    typeof rank === 'number'
+      ? String(rank)
+      : price != null
+        ? `$${price.toFixed(2).replace(/\.00$/, '')}`
         : '–'
-
-  return {
-    color: displayPrice != null ? priceColor(displayPrice, allPrices) : '#94a3b8',
-    dimmed: !hasFuelPrice,
-    label,
-  }
+  const dimClass = dim ? ' litrito-marker__pin--dim' : ''
+  return L.divIcon({
+    className: 'litrito-marker',
+    html: `<div style="background:${color}" class="litrito-marker__pin${dimClass}"><span>${label}</span></div>`,
+    iconSize: [60, 30],
+    iconAnchor: [30, 15],
+    popupAnchor: [0, -15],
+  })
 }
 
-function toGeoJson(
-  points: MappedStationRow[],
-  primaryFuel: FuelType,
-  allPrices: number[],
-  markerMode: 'price' | 'rank',
-): StationFeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: points.map((row) => {
-      const details = markerDetails(row, primaryFuel, allPrices, markerMode)
-      return {
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [row.longitude, row.latitude] },
-        properties: {
-          color: details.color,
-          dimmed: details.dimmed,
-          label: details.label,
-          permitNumber: row.station.permitNumber,
-        },
+const USER_ICON = L.divIcon({
+  className: 'litrito-user-marker',
+  html: '<div class="litrito-user-marker__pulse"></div><div class="litrito-user-marker__dot"></div>',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+})
+
+function MoveWatcher({ onMoveEnd }: { onMoveEnd: (b: MapBounds) => void }) {
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const initialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // When a popup opens near an edge, Leaflet auto-pans to fit it, which fires a
+  // `moveend`. Letting that move refetch by bounds re-renders every marker and
+  // hides the popup mid-transition. Swallow the single auto-pan `moveend` that
+  // follows a `popupopen` (cleared after a short window if no pan happens).
+  const suppressRef = useRef(false)
+  const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The auto-pan that fits a popup is small. Remember where the map was when
+  // the popup opened so a real zoom/pan in that same 600 ms window is still
+  // honoured — otherwise the bounds silently stop updating for anyone who opens
+  // a popup and immediately zooms.
+  const suppressCenterRef = useRef<L.LatLng | null>(null)
+  const suppressZoomRef = useRef<number | null>(null)
+  const map = useMapEvents({
+    popupopen() {
+      suppressRef.current = true
+      suppressCenterRef.current = map.getCenter()
+      suppressZoomRef.current = map.getZoom()
+      if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
+      suppressTimerRef.current = setTimeout(() => {
+        suppressRef.current = false
+      }, 600)
+    },
+    moveend(e) {
+      if (suppressRef.current) {
+        const zoomUnchanged = suppressZoomRef.current === e.target.getZoom()
+        const panIsAutoFit =
+          suppressCenterRef.current != null &&
+          e.target.getCenter().distanceTo(suppressCenterRef.current) < 2_000
+        if (zoomUnchanged && panIsAutoFit) {
+          suppressRef.current = false
+          if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
+          return
+        }
+        suppressRef.current = false
+        if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
       }
-    }),
-  }
+      // A real move supersedes the pending mount emit below.
+      if (initialTimerRef.current) {
+        clearTimeout(initialTimerRef.current)
+        initialTimerRef.current = null
+      }
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        const b = e.target.getBounds()
+        onMoveEnd({
+          swLat: b.getSouth(),
+          swLon: b.getWest(),
+          neLat: b.getNorth(),
+          neLon: b.getEast(),
+        })
+      }, 250)
+    },
+  })
+
+  // The bounds-driven query still needs a first viewport, or the map would wait
+  // for a manual pan that never comes. But emitting it synchronously on mount
+  // races the initial framing: the map mounts nationwide (MEXICO_CENTER, zoom 5)
+  // and geolocation resolves a moment later, so a cold load always fired one
+  // whole-country query — wasted work, and the reason the map reported the
+  // 800-row ceiling before settling on your actual area. Wait briefly instead;
+  // `fitBounds`/`flyTo` fire `moveend`, which cancels this. The timer is the
+  // fallback for a map that genuinely has nothing to frame.
+  useEffect(() => {
+    initialTimerRef.current = setTimeout(() => {
+      initialTimerRef.current = null
+      const b = map.getBounds()
+      onMoveEnd({
+        swLat: b.getSouth(),
+        swLon: b.getWest(),
+        neLat: b.getNorth(),
+        neLon: b.getEast(),
+      })
+    }, 700)
+    return () => {
+      if (initialTimerRef.current) clearTimeout(initialTimerRef.current)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      if (suppressTimerRef.current) clearTimeout(suppressTimerRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return null
 }
 
-function createUserMarker(): HTMLDivElement {
-  const marker = document.createElement('div')
-  marker.className = 'litrito-user-marker'
-  marker.setAttribute('aria-label', 'Tu ubicación')
-  marker.setAttribute('role', 'img')
-  marker.innerHTML =
-    '<div class="litrito-user-marker__pulse"></div><div class="litrito-user-marker__dot"></div>'
-  return marker
+// Drops a Sentry breadcrumb on every zoom/pan with the exact map view. Sentry
+// keeps the last ~100, so when something throws (e.g. a markercluster zoom bug
+// we can't reproduce locally) the issue shows the precise zoom/center/bounds
+// trail that led there.
+function MapBreadcrumbs({ points }: { points: number }) {
+  const map = useMapEvents({
+    zoomend() {
+      dropMapBreadcrumb(map, points, 'zoom')
+    },
+    moveend() {
+      dropMapBreadcrumb(map, points, 'move')
+    },
+  })
+  return null
 }
 
-function StationPopup({ row, fuelTypes }: { row: MappedStationRow; fuelTypes: FuelType[] }) {
-  const station = row.station
-  const detailHref = `/estacion/${encodeURIComponent(station.permitNumber)}`
-  const directionsHref = `https://www.google.com/maps/dir/?api=1&destination=${row.latitude},${row.longitude}`
-  const visibleFuels = fuelTypes.filter((fuelType) => row.prices[fuelType]?.price != null)
-
-  return (
-    <div className="litrito-popup">
-      <a className="litrito-popup__title" href={detailHref}>
-        {station.name}
-      </a>
-      <div className="litrito-popup__addr">{station.address}</div>
-      {(station.municipalityName || station.stateName) && (
-        <div className="litrito-popup__loc">
-          {[station.municipalityName, station.stateName].filter(Boolean).join(', ')}
-        </div>
-      )}
-      {visibleFuels.length > 0 ? (
-        <div className="litrito-popup__prices">
-          {visibleFuels.map((fuelType) => (
-            <div key={fuelType} className="litrito-popup__price">
-              <span className="litrito-popup__fuel">{FUEL_LABEL[fuelType]}</span>
-              <span className="litrito-popup__amount">
-                <AnimatedPrice value={row.prices[fuelType]!.price} />
-                {row.prices[fuelType]!.isPlausible === false ? ' ⚠' : ''}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="litrito-popup__price litrito-popup__price--missing">
-          <span className="litrito-popup__amount">Sin precios</span>
-        </div>
-      )}
-      <div className="litrito-popup__actions">
-        <a className="litrito-popup__cta litrito-popup__cta--ghost" href={detailHref}>
-          Ver detalle
-        </a>
-        <a
-          className="litrito-popup__cta"
-          href={directionsHref}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Cómo llegar
-        </a>
-      </div>
-    </div>
-  )
-}
-
-function dropMapBreadcrumb(map: MapLibreMap, points: number, kind: 'zoom' | 'move') {
+function dropMapBreadcrumb(map: L.Map, points: number, kind: 'zoom' | 'move') {
   try {
-    const center = map.getCenter()
-    const bounds = map.getBounds()
-    const round = (number: number) => Math.round(number * 1e4) / 1e4
+    const c = map.getCenter()
+    const b = map.getBounds()
+    const round = (n: number) => Math.round(n * 1e4) / 1e4
     Sentry.addBreadcrumb({
       category: 'map',
       level: 'info',
       message: `map ${kind}`,
       data: {
         zoom: map.getZoom(),
-        lat: round(center.lat),
-        lng: round(center.lng),
+        lat: round(c.lat),
+        lng: round(c.lng),
         points,
-        bounds: [
-          round(bounds.getSouth()),
-          round(bounds.getWest()),
-          round(bounds.getNorth()),
-          round(bounds.getEast()),
-        ],
+        bounds: [round(b.getSouth()), round(b.getWest()), round(b.getNorth()), round(b.getEast())],
       },
     })
   } catch {
@@ -242,9 +240,138 @@ function dropMapBreadcrumb(map: MapLibreMap, points: number, kind: 'zoom' | 'mov
   }
 }
 
-function featurePermitNumber(feature: MapGeoJSONFeature | undefined): string | null {
-  const permitNumber = feature?.properties?.permitNumber
-  return typeof permitNumber === 'string' ? permitNumber : null
+function FitInitialBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
+  const map = useMap()
+  const fittedRef = useRef(false)
+  useEffect(() => {
+    if (bounds && !fittedRef.current) {
+      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 })
+      fittedRef.current = true
+    }
+  }, [bounds, map])
+  return null
+}
+
+// Applies a focus target once per distinct `key`. Selecting a state, toggling
+// favorites, or obtaining your precise location each produce a new key, so the
+// map re-frames exactly once for that intent and then leaves the user in
+// control of panning/zooming.
+//
+// For bounds targets the re-frame is conditional ("fit-if-needed"): if the
+// target box is already within the current viewport, the map stays put. This
+// avoids the jarring zoom-out when, say, your favorite is already on screen.
+function FocusController({ focus }: { focus: MapFocus | null }) {
+  const map = useMap()
+  const lastKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!focus || lastKeyRef.current === focus.key) return
+    // The very first focus always frames its target (e.g. the default Mexico
+    // view contains everything, so a "contains" check would wrongly skip it).
+    const isInitialFocus = lastKeyRef.current === null
+    lastKeyRef.current = focus.key
+    if (focus.type === 'point') {
+      map.flyTo([focus.lat, focus.lon], Math.max(map.getZoom(), 14), {
+        duration: 0.7,
+      })
+    } else {
+      const target = L.latLngBounds(
+        [focus.bounds.swLat, focus.bounds.swLon],
+        [focus.bounds.neLat, focus.bounds.neLon],
+      )
+      // On later focus changes, skip the re-frame when the target is already
+      // fully on screen — avoids zooming out just to "fit" what you can see.
+      // `force` opts out of this (explicit state/municipality drill-down).
+      if (!isInitialFocus && !focus.force && map.getBounds().contains(target)) return
+      map.fitBounds(target, { padding: [24, 24], maxZoom: 13 })
+    }
+  }, [focus, map])
+
+  return null
+}
+
+function LocateControl({
+  location,
+  onClick,
+}: {
+  location: LatLngExpression | null
+  onClick?: () => void
+}) {
+  const map = useMap()
+
+  useEffect(() => {
+    const control = new L.Control({ position: 'topright' })
+    control.onAdd = () => {
+      const container = L.DomUtil.create('div', 'litrito-map-control')
+      const button = L.DomUtil.create(
+        'button',
+        'litrito-map-control__btn',
+        container,
+      ) as HTMLButtonElement
+      button.type = 'button'
+      button.title = 'Centrar en mi ubicación'
+      button.setAttribute('aria-label', 'Centrar en mi ubicación')
+      button.innerHTML =
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>'
+      L.DomEvent.disableClickPropagation(container)
+      L.DomEvent.on(button, 'click', (event) => {
+        L.DomEvent.stop(event)
+        if (location) {
+          map.flyTo(location, 14, { duration: 0.7 })
+        }
+        onClick?.()
+      })
+      return container
+    }
+    control.addTo(map)
+    return () => {
+      control.remove()
+    }
+  }, [map, location, onClick])
+
+  return null
+}
+
+
+function LegendControl({
+  primaryFuel,
+  hasFuelPrices,
+}: {
+  primaryFuel: FuelType
+  hasFuelPrices: boolean
+}) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!hasFuelPrices) return
+    const control = new L.Control({ position: 'bottomleft' })
+    control.onAdd = () => {
+      const container = L.DomUtil.create('div', 'litrito-legend')
+      L.DomEvent.disableClickPropagation(container)
+      container.innerHTML = `
+        <div class="litrito-legend__title">${FUEL_LABEL[primaryFuel]}</div>
+        <div class="litrito-legend__row">
+          <span class="litrito-legend__chip" style="background:#15803d"></span>
+          <span>Más barato</span>
+        </div>
+        <div class="litrito-legend__row">
+          <span class="litrito-legend__chip" style="background:#ca8a04"></span>
+          <span>Promedio</span>
+        </div>
+        <div class="litrito-legend__row">
+          <span class="litrito-legend__chip" style="background:#b91c1c"></span>
+          <span>Más caro</span>
+        </div>
+      `
+      return container
+    }
+    control.addTo(map)
+    return () => {
+      control.remove()
+    }
+  }, [map, primaryFuel, hasFuelPrices])
+
+  return null
 }
 
 function StationMapInner({
@@ -261,33 +388,17 @@ function StationMapInner({
   onMoveEnd,
   onLocateClick,
 }: Props) {
-  const [mapReady, setMapReady] = useState(false)
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<MapLibreMap | null>(null)
-  const mapLoadedRef = useRef(false)
-  const userMarkerRef = useRef<Marker | null>(null)
-  const popupRef = useRef<{ popup: Popup; root: Root } | null>(null)
-  const initialBoundsFittedRef = useRef(false)
-  const lastFocusKeyRef = useRef<string | null>(null)
-  const initialMoveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const moveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pointsCountRef = useRef(0)
-  const onMoveEndRef = useRef(onMoveEnd)
-  const pointsByPermitRef = useRef(new Map<string, MappedStationRow>())
-  const fuelTypesRef = useRef(fuelTypes)
-
-  const points = useMemo<MappedStationRow[]>(
+  const points = useMemo(
     () =>
       rows
         .filter(
-          (row) =>
-            typeof row.station.latitude === 'number' &&
-            typeof row.station.longitude === 'number',
+          (r) =>
+            typeof r.station.latitude === 'number' &&
+            typeof r.station.longitude === 'number',
         )
-        .map((row) => ({
-          ...row,
-          latitude: row.station.latitude as number,
-          longitude: row.station.longitude as number,
+        .map((r) => ({
+          ...r,
+          latLng: [r.station.latitude as number, r.station.longitude as number] as LatLngTuple,
         })),
     [rows],
   )
@@ -295,364 +406,152 @@ function StationMapInner({
   const allPrices = useMemo(
     () =>
       points
-        .map((point) => point.prices[primaryFuel])
-        .filter((price) => price?.isPlausible !== false)
-        .map((price) => price?.price)
-        .filter((price): price is number => typeof price === 'number'),
+        .map((p) => p.prices[primaryFuel])
+        .filter((p) => p?.isPlausible !== false)
+        .map((p) => p?.price)
+        .filter((p): p is number => typeof p === 'number'),
     [points, primaryFuel],
   )
 
-  const geoJson = useMemo(
-    () => toGeoJson(points, primaryFuel, allPrices, markerMode),
-    [allPrices, markerMode, points, primaryFuel],
-  )
-  const geoJsonRef = useRef(geoJson)
+  const bounds = useMemo<LatLngBoundsExpression | null>(() => {
+    if (!initialBounds) return null
+    return [
+      [initialBounds.swLat, initialBounds.swLon],
+      [initialBounds.neLat, initialBounds.neLon],
+    ] as LatLngBoundsExpression
+  }, [initialBounds])
 
-  const userLngLat = useMemo<[number, number] | null>(
-    () => (userLocation ? [userLocation.longitude, userLocation.latitude] : null),
-    [userLocation],
-  )
+  const userLatLng: LatLngTuple | null = userLocation
+    ? [userLocation.latitude, userLocation.longitude]
+    : null
 
-  const effectiveFocus = useMemo<MapFocus | null>(
-    () =>
-      focus ??
-      (autoCenterOnUserLocation && userLocation
-        ? {
-            key: `user:${userLocation.latitude.toFixed(3)},${userLocation.longitude.toFixed(3)}`,
-            type: 'point',
-            lat: userLocation.latitude,
-            lon: userLocation.longitude,
-          }
-        : null),
-    [autoCenterOnUserLocation, focus, userLocation],
-  )
-
-  useEffect(() => {
-    pointsCountRef.current = points.length
-    onMoveEndRef.current = onMoveEnd
-    fuelTypesRef.current = fuelTypes
-    pointsByPermitRef.current = new Map(
-      points.map((point) => [point.station.permitNumber, point]),
-    )
-  }, [fuelTypes, onMoveEnd, points])
-
-  const closePopup = useCallback(() => {
-    const activePopup = popupRef.current
-    if (!activePopup) return
-    popupRef.current = null
-    activePopup.popup.remove()
-    activePopup.root.unmount()
-  }, [])
-
-  const openStationPopup = useCallback(
-    (map: MapLibreMap, feature: MapGeoJSONFeature | undefined) => {
-      const permitNumber = featurePermitNumber(feature)
-      const row = permitNumber ? pointsByPermitRef.current.get(permitNumber) : undefined
-      if (!row) return
-
-      closePopup()
-      const content = document.createElement('div')
-      const root = createRoot(content)
-      root.render(<StationPopup row={row} fuelTypes={fuelTypesRef.current} />)
-      const popup = new Popup({ closeButton: true, maxWidth: '320px', offset: 22 })
-        .setLngLat([row.longitude, row.latitude])
-        .setDOMContent(content)
-        .addTo(map)
-      popupRef.current = { popup, root }
-      popup.once('close', () => {
-        if (popupRef.current?.popup !== popup) return
-        popupRef.current = null
-        root.unmount()
-      })
-    },
-    [closePopup],
-  )
-
-  useEffect(() => {
-    if (!containerRef.current) return
-
-    const map = new MapLibreMap({
-      center: MEXICO_CENTER,
-      container: containerRef.current,
-      maxBounds: MEXICO_BOUNDS,
-      maxZoom: 18,
-      minZoom: 4,
-      pitchWithRotate: false,
-      style: MAP_STYLE_URL,
-      zoom: 5,
-    })
-    map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
-    mapRef.current = map
-
-    const handleLoad = () => {
-      map.addSource(SOURCE_ID, {
-        type: 'geojson',
-        data: geoJsonRef.current,
-        cluster: true,
-        clusterMaxZoom: 14,
-        clusterRadius: 50,
-      })
-      map.addLayer({
-        id: CLUSTER_LAYER_ID,
-        type: 'circle',
-        source: SOURCE_ID,
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': '#25282b',
-          'circle-radius': ['step', ['get', 'point_count'], 20, 25, 24, 100, 29],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2,
-        },
-      })
-      map.addLayer({
-        id: CLUSTER_COUNT_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': ['get', 'point_count_abbreviated'],
-          'text-font': ['Noto Sans Bold'],
-          'text-size': 12,
-        },
-        paint: { 'text-color': '#ffffff' },
-      })
-      map.addLayer({
-        id: STATION_LAYER_ID,
-        type: 'circle',
-        source: SOURCE_ID,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-opacity': ['case', ['get', 'dimmed'], 0.58, 1],
-          'circle-radius': 21,
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2,
-        },
-      })
-      map.addLayer({
-        id: STATION_LABEL_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        filter: ['!', ['has', 'point_count']],
-        layout: {
-          'text-allow-overlap': true,
-          'text-field': ['get', 'label'],
-          'text-font': ['Noto Sans Bold'],
-          'text-size': 11,
-        },
-        paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': 'rgba(0, 0, 0, 0.15)',
-          'text-halo-width': 0.5,
-        },
-      })
-      mapLoadedRef.current = true
-      setMapReady(true)
-    }
-
-    const handleClusterClick = async (event: MapMouseEvent) => {
-      const feature = map.queryRenderedFeatures(event.point, { layers: [CLUSTER_LAYER_ID] })[0]
-      const clusterId = feature?.properties?.cluster_id
-      const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined
-      if (typeof clusterId !== 'number' || !source) return
-      const zoom = await source.getClusterExpansionZoom(clusterId)
-      const coordinates = feature.geometry.type === 'Point' ? feature.geometry.coordinates : null
-      if (!coordinates) return
-      map.easeTo({ center: [coordinates[0], coordinates[1]], zoom })
-    }
-
-    const handleStationClick = (event: MapMouseEvent) => {
-      const feature = map.queryRenderedFeatures(event.point, { layers: [STATION_LAYER_ID] })[0]
-      openStationPopup(map, feature)
-    }
-
-    const showPointer = () => {
-      map.getCanvas().style.cursor = 'pointer'
-    }
-    const hidePointer = () => {
-      map.getCanvas().style.cursor = ''
-    }
-    const handleMoveEnd = () => {
-      dropMapBreadcrumb(map, pointsCountRef.current, 'move')
-      if (initialMoveTimerRef.current) {
-        clearTimeout(initialMoveTimerRef.current)
-        initialMoveTimerRef.current = null
-      }
-      if (!onMoveEndRef.current) return
-      if (moveDebounceRef.current) clearTimeout(moveDebounceRef.current)
-      moveDebounceRef.current = setTimeout(() => {
-        const bounds = map.getBounds()
-        onMoveEndRef.current?.({
-          swLat: bounds.getSouth(),
-          swLon: bounds.getWest(),
-          neLat: bounds.getNorth(),
-          neLon: bounds.getEast(),
-        })
-      }, 250)
-    }
-    const handleZoomEnd = () => dropMapBreadcrumb(map, pointsCountRef.current, 'zoom')
-
-    map.on('load', handleLoad)
-    map.on('click', CLUSTER_LAYER_ID, handleClusterClick)
-    map.on('click', STATION_LAYER_ID, handleStationClick)
-    map.on('mouseenter', [CLUSTER_LAYER_ID, STATION_LAYER_ID], showPointer)
-    map.on('mouseleave', [CLUSTER_LAYER_ID, STATION_LAYER_ID], hidePointer)
-    map.on('moveend', handleMoveEnd)
-    map.on('zoomend', handleZoomEnd)
-
-    if (onMoveEndRef.current) {
-      initialMoveTimerRef.current = setTimeout(() => {
-        initialMoveTimerRef.current = null
-        const bounds = map.getBounds()
-        onMoveEndRef.current?.({
-          swLat: bounds.getSouth(),
-          swLon: bounds.getWest(),
-          neLat: bounds.getNorth(),
-          neLon: bounds.getEast(),
-        })
-      }, 700)
-    }
-
-    return () => {
-      if (initialMoveTimerRef.current) clearTimeout(initialMoveTimerRef.current)
-      if (moveDebounceRef.current) clearTimeout(moveDebounceRef.current)
-      closePopup()
-      userMarkerRef.current?.remove()
-      userMarkerRef.current = null
-      map.remove()
-      mapRef.current = null
-      mapLoadedRef.current = false
-    }
-    // The map instance owns its event lifecycle. Dynamic values flow through refs and effects.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    geoJsonRef.current = geoJson
-    const map = mapRef.current
-    if (!map || !mapLoadedRef.current) return
-    const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined
-    source?.setData(geoJson)
-    closePopup()
-  }, [closePopup, geoJson])
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    userMarkerRef.current?.remove()
-    userMarkerRef.current = null
-    if (!userLngLat) return
-    userMarkerRef.current = new Marker({ element: createUserMarker() })
-      .setLngLat(userLngLat)
-      .addTo(map)
-  }, [userLngLat])
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapReady) return
-
-    if (effectiveFocus && lastFocusKeyRef.current !== effectiveFocus.key) {
-      const isInitialFocus = lastFocusKeyRef.current === null
-      lastFocusKeyRef.current = effectiveFocus.key
-      if (effectiveFocus.type === 'point') {
-        map.flyTo({
-          center: [effectiveFocus.lon, effectiveFocus.lat],
-          duration: 700,
-          zoom: Math.max(map.getZoom(), 14),
-        })
-        return
-      }
-
-      const target: LngLatBoundsLike = [
-        [effectiveFocus.bounds.swLon, effectiveFocus.bounds.swLat],
-        [effectiveFocus.bounds.neLon, effectiveFocus.bounds.neLat],
-      ]
-      const currentBounds = map.getBounds()
-      const targetIsVisible =
-        currentBounds.contains([effectiveFocus.bounds.swLon, effectiveFocus.bounds.swLat]) &&
-        currentBounds.contains([effectiveFocus.bounds.neLon, effectiveFocus.bounds.neLat])
-      if (
-        !isInitialFocus &&
-        !effectiveFocus.force &&
-        targetIsVisible
-      )
-        return
-      map.fitBounds(target, { maxZoom: 13, padding: 24 })
-      return
-    }
-
-    if (initialBounds && !initialBoundsFittedRef.current) {
-      initialBoundsFittedRef.current = true
-      map.fitBounds(
-        [
-          [initialBounds.swLon, initialBounds.swLat],
-          [initialBounds.neLon, initialBounds.neLat],
-        ],
-        { maxZoom: 13, padding: 24 },
-      )
-    }
-  }, [effectiveFocus, initialBounds, mapReady])
-
-  const locateUser = () => {
-    if (userLngLat) {
-      mapRef.current?.flyTo({ center: userLngLat, duration: 700, zoom: 14 })
-    }
-    onLocateClick?.()
-  }
+  // An explicit `focus` wins; otherwise `autoCenterOnUserLocation` falls back to
+  // framing the user. The coordinate-derived key re-centers if the location
+  // sharpens (IP → precise) but ignores sub-100m GPS jitter.
+  const effectiveFocus: MapFocus | null =
+    focus ??
+    (autoCenterOnUserLocation && userLatLng
+      ? {
+          key: `user:${userLatLng[0].toFixed(3)},${userLatLng[1].toFixed(3)}`,
+          type: 'point',
+          lat: userLatLng[0],
+          lon: userLatLng[1],
+        }
+      : null)
 
   return (
     <div className="relative">
-      <div className="litrito-map-shell relative h-[55vh] min-h-[320px] max-h-[640px] overflow-hidden rounded-md border border-slate-200">
-        <div aria-label="Mapa de estaciones" className="h-full w-full" ref={containerRef} />
-        {(userLngLat || onLocateClick) && (
-          <button
-            aria-label="Centrar en mi ubicación"
-            className="litrito-map-control__btn absolute right-3 top-[92px] z-10"
-            onClick={locateUser}
-            title="Centrar en mi ubicación"
-            type="button"
+      <div className="h-[55vh] min-h-[320px] max-h-[640px] overflow-hidden rounded-md border border-slate-200">
+        <MapContainer
+          center={MEXICO_CENTER}
+          zoom={5}
+          minZoom={4}
+          maxZoom={18}
+          scrollWheelZoom
+          style={{ height: '100%', width: '100%' }}
+          maxBounds={MEXICO_BOUNDS}
+          maxBoundsViscosity={0.8}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          {bounds && !effectiveFocus && <FitInitialBounds bounds={bounds} />}
+          <FocusController focus={effectiveFocus} />
+          <MapBreadcrumbs points={points.length} />
+          {onMoveEnd && <MoveWatcher onMoveEnd={onMoveEnd} />}
+          {(userLatLng || onLocateClick) && (
+            <LocateControl location={userLatLng} onClick={onLocateClick} />
+          )}
+          <LegendControl primaryFuel={primaryFuel} hasFuelPrices={allPrices.length > 0} />
+          {userLatLng && <Marker position={userLatLng} icon={USER_ICON} />}
+          <MarkerClusterGroup
+            chunkedLoading
+            showCoverageOnHover={false}
+            spiderfyOnMaxZoom
+            maxClusterRadius={50}
           >
-            <svg
-              aria-hidden="true"
-              fill="none"
-              height="18"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2.4"
-              viewBox="0 0 24 24"
-              width="18"
-            >
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-            </svg>
-          </button>
-        )}
-        {allPrices.length > 0 && (
-          <div className="litrito-legend absolute bottom-6 left-0 z-10">
-            <div className="litrito-legend__title">{FUEL_LABEL[primaryFuel]}</div>
-            <div className="litrito-legend__row">
-              <span className="litrito-legend__chip bg-[#15803d]" />
-              <span>Más barato</span>
-            </div>
-            <div className="litrito-legend__row">
-              <span className="litrito-legend__chip bg-[#ca8a04]" />
-              <span>Promedio</span>
-            </div>
-            <div className="litrito-legend__row">
-              <span className="litrito-legend__chip bg-[#b91c1c]" />
-              <span>Más caro</span>
-            </div>
-          </div>
-        )}
+            {points.map((row) => {
+              const selectedPrice = row.prices[primaryFuel]
+              const fuelPrice = selectedPrice?.price
+              const hasFuelPrice =
+                typeof fuelPrice === 'number' && selectedPrice?.isPlausible !== false
+              const displayPrice = hasFuelPrice ? fuelPrice : row.highlightedPrice
+              const station = row.station
+              const directionsHref = `https://www.google.com/maps/dir/?api=1&destination=${row.latLng[0]},${row.latLng[1]}`
+              const detailHref = `/estacion/${encodeURIComponent(station.permitNumber)}`
+              const visibleFuels = fuelTypes.filter((ft) => row.prices[ft]?.price != null)
+              return (
+                <Marker
+                  key={station.permitNumber}
+                  position={row.latLng}
+                  icon={buildIcon({
+                    allPrices,
+                    dim: !hasFuelPrice,
+                    price: displayPrice,
+                    rank: markerMode === 'rank' ? row.rank : undefined,
+                  })}
+                >
+                  <Popup autoPanPadding={[28, 36]}>
+                    <div className="litrito-popup">
+                      <a className="litrito-popup__title" href={detailHref}>
+                        {station.name}
+                      </a>
+                      <div className="litrito-popup__addr">{station.address}</div>
+                      {(station.municipalityName || station.stateName) && (
+                        <div className="litrito-popup__loc">
+                          {[station.municipalityName, station.stateName]
+                            .filter(Boolean)
+                            .join(', ')}
+                        </div>
+                      )}
+                      {visibleFuels.length > 0 ? (
+                        <div className="litrito-popup__prices">
+                          {visibleFuels.map((ft) => (
+                            <div key={ft} className="litrito-popup__price">
+                              <span className="litrito-popup__fuel">
+                                {FUEL_LABEL[ft]}
+                              </span>
+                              <span className="litrito-popup__amount">
+                                <AnimatedPrice value={row.prices[ft]!.price} />
+                                {row.prices[ft]!.isPlausible === false ? ' ⚠' : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="litrito-popup__price litrito-popup__price--missing">
+                          <span className="litrito-popup__amount">Sin precios</span>
+                        </div>
+                      )}
+                      <div className="litrito-popup__actions">
+                        <a className="litrito-popup__cta litrito-popup__cta--ghost" href={detailHref}>
+                          Ver detalle
+                        </a>
+                        <a
+                          className="litrito-popup__cta"
+                          href={directionsHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Cómo llegar
+                        </a>
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+              )
+            })}
+          </MarkerClusterGroup>
+        </MapContainer>
       </div>
       {truncated && (
-        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-xs font-bold text-amber-800 shadow">
+        <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-xs font-bold text-amber-800 shadow">
           Mostrando {points.length} · acércate para ver más
         </div>
       )}
       {loading && (
-        <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-[1000] flex justify-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-700 shadow">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-brand" />
             Actualizando mapa
@@ -660,7 +559,7 @@ function StationMapInner({
         </div>
       )}
       {!loading && points.length === 0 && (
-        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-xs font-bold text-slate-500 shadow">
+        <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-xs font-bold text-slate-500 shadow">
           No hay estaciones en esta zona
         </div>
       )}
@@ -668,6 +567,10 @@ function StationMapInner({
   )
 }
 
+// Public component: isolates any map render failure to a local fallback (sized
+// like the map so layout doesn't jump) and reports it to Sentry with the row
+// count and fuel context. Async Leaflet errors that don't hit a React boundary
+// are still caught by Sentry's global handler, with the map breadcrumbs above.
 export function StationMap(props: Props) {
   return (
     <ComponentErrorBoundary
