@@ -433,14 +433,11 @@ export function StationTable({
   })
 
   const totalSize = rowVirtualizer.getTotalSize()
-  const columnWidths = useMemo(
-    () => table.getAllLeafColumns().map((c) => c.getSize()),
-    [table],
-  )
-  const minTableWidth = useMemo(
-    () => columnWidths.reduce((sum, w) => sum + w, 0),
-    [columnWidths],
-  )
+  // The table instance is stable even when its dynamic column definitions
+  // change, so memoizing by `table` leaves this list stale when the distance
+  // column appears after geolocation is enabled.
+  const columnWidths = table.getAllLeafColumns().map((c) => c.getSize())
+  const minTableWidth = columnWidths.reduce((sum, w) => sum + w, 0)
 
   useEffect(() => {
     rowVirtualizer.measure()
