@@ -69,6 +69,7 @@ const MEXICO_BOUNDS: LatLngBoundsExpression = [
   [14.5, -118.5],
   [32.7, -86.5],
 ]
+const USER_LOCATION_ZOOM = 13
 
 function priceColor(price: number, allPrices: number[]): string {
   if (allPrices.length === 0) return '#0f766e'
@@ -272,7 +273,7 @@ function FocusController({ focus }: { focus: MapFocus | null }) {
     const isInitialFocus = lastKeyRef.current === null
     lastKeyRef.current = focus.key
     if (focus.type === 'point') {
-      map.flyTo([focus.lat, focus.lon], Math.max(map.getZoom(), 14), {
+      map.flyTo([focus.lat, focus.lon], Math.max(map.getZoom(), USER_LOCATION_ZOOM), {
         duration: 0.7,
       })
     } else {
@@ -318,7 +319,7 @@ function LocateControl({
       L.DomEvent.on(button, 'click', (event) => {
         L.DomEvent.stop(event)
         if (location) {
-          map.flyTo(location, 14, { duration: 0.7 })
+          map.flyTo(location, USER_LOCATION_ZOOM, { duration: 0.7 })
         }
         onClick?.()
       })
