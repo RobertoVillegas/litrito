@@ -234,7 +234,7 @@ code {
 }
 
 /* ------------------------------------------------------------------ */
-/* Leaflet map — recolored to the brand (ink chrome, red accents)     */
+/* MapLibre map — OpenFreeMap Liberty with Litrito chrome and accents */
 /* ------------------------------------------------------------------ */
 
 .litrito-marker {
@@ -287,8 +287,51 @@ code {
   background: #bebebe;
 }
 
-.leaflet-container {
+.litrito-marker__pin--station {
+  min-width: 44px;
+  width: 44px;
+  padding: 0;
+  background: var(--color-brand);
+}
+
+.litrito-map-shell .maplibregl-map {
   font-family: var(--font-sans);
+}
+
+.litrito-map-shell .maplibregl-canvas:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-brand) 55%, white);
+  outline-offset: -3px;
+}
+
+.litrito-map-shell .maplibregl-ctrl-group {
+  border: 0;
+  box-shadow: 0 2px 8px rgba(37, 40, 43, 0.15);
+}
+
+.litrito-map-shell .maplibregl-ctrl-group button {
+  width: 36px;
+  height: 36px;
+  background-color: #ffffff;
+}
+
+.litrito-map-shell .maplibregl-ctrl-attrib {
+  border-top-left-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--color-mute);
+}
+
+.litrito-map-shell .maplibregl-popup-content {
+  padding: 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(37, 40, 43, 0.18);
+}
+
+.litrito-map-shell .maplibregl-popup-close-button {
+  width: 28px;
+  height: 28px;
+  color: var(--color-body);
+  font-size: 20px;
 }
 
 .litrito-popup {
@@ -300,14 +343,14 @@ code {
   gap: 6px;
 }
 
-.leaflet-container a.litrito-popup__title {
+.litrito-map-shell a.litrito-popup__title {
   font-weight: 800;
   font-size: 14px;
   line-height: 1.2;
   color: var(--color-ink);
   text-decoration: none;
 }
-.leaflet-container a.litrito-popup__title:hover {
+.litrito-map-shell a.litrito-popup__title:hover {
   color: var(--color-brand);
   text-decoration: underline;
 }
@@ -362,9 +405,8 @@ code {
   gap: 6px;
 }
 
-/* Scoped under .leaflet-container to beat Leaflet's `.leaflet-container a`
-   link color (specificity 0,1,1), which otherwise turns the CTA blue. */
-.leaflet-container a.litrito-popup__cta {
+/* Scoped to the map shell so the map library's default link color cannot win. */
+.litrito-map-shell a.litrito-popup__cta {
   flex: 1;
   display: inline-block;
   padding: 8px 12px;
@@ -376,16 +418,16 @@ code {
   font-size: 12px;
   text-align: center;
 }
-.leaflet-container a.litrito-popup__cta:hover {
+.litrito-map-shell a.litrito-popup__cta:hover {
   background: var(--color-brand-dark);
   color: #ffffff;
 }
-.leaflet-container a.litrito-popup__cta--ghost {
+.litrito-map-shell a.litrito-popup__cta--ghost {
   background: #ffffff;
   color: var(--color-ink);
   border: 1px solid var(--color-line);
 }
-.leaflet-container a.litrito-popup__cta--ghost:hover {
+.litrito-map-shell a.litrito-popup__cta--ghost:hover {
   background: var(--color-canvas-soft);
   color: var(--color-ink);
   border-color: var(--color-ink);

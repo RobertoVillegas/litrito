@@ -1,6 +1,6 @@
-// Leaflet-free map geometry helpers and types. Kept separate from StationMap so
-// routes can statically import these without dragging leaflet (which touches
-// `window` at module load) into the SSR bundle.
+// Map-library-free geometry helpers and types. Kept separate from StationMap so
+// routes can statically import these without dragging the browser-only renderer
+// into the SSR bundle.
 
 export type MapBounds = {
   swLat: number

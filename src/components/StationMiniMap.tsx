@@ -1,13 +1,18 @@
-import { MapContainer, Marker, TileLayer } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { useEffect, useRef } from 'react'
+import { Map as MapLibreMap, Marker, NavigationControl } from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 
-const STATION_ICON = L.divIcon({
-  className: 'litrito-marker',
-  html: '<div class="litrito-marker__pin" style="background:#e60000"><span>⛽</span></div>',
-  iconSize: [44, 28],
-  iconAnchor: [22, 14],
-})
+const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
+
+function createStationMarker(): HTMLDivElement {
+  const marker = document.createElement('div')
+  marker.className = 'litrito-marker'
+  marker.setAttribute('aria-label', 'Ubicación de la estación')
+  marker.setAttribute('role', 'img')
+  marker.innerHTML =
+    '<div class="litrito-marker__pin litrito-marker__pin--station"><span>⛽</span></div>'
+  return marker
+}
 
 export function StationMiniMap({
   latitude,
@@ -16,21 +21,39 @@ export function StationMiniMap({
   latitude: number
   longitude: number
 }) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const map = new MapLibreMap({
+      center: [longitude, latitude],
+      container: containerRef.current,
+      cooperativeGestures: true,
+      pitchWithRotate: false,
+      scrollZoom: false,
+      style: MAP_STYLE_URL,
+      zoom: 15,
+    })
+    map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+
+    const marker = new Marker({ element: createStationMarker() })
+      .setLngLat([longitude, latitude])
+      .addTo(map)
+
+    return () => {
+      marker.remove()
+      map.remove()
+    }
+  }, [latitude, longitude])
+
   return (
-    <div className="h-[320px] overflow-hidden rounded-[6px] border border-line">
-      <MapContainer
-        center={[latitude, longitude]}
-        zoom={15}
-        scrollWheelZoom={false}
-        style={{ height: '100%', width: '100%' }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          subdomains={['a', 'b', 'c', 'd']}
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        />
-        <Marker position={[latitude, longitude]} icon={STATION_ICON} />
-      </MapContainer>
+    <div className="litrito-map-shell h-[320px] overflow-hidden rounded-[6px] border border-line">
+      <div
+        aria-label="Mapa de ubicación de la estación"
+        className="h-full w-full"
+        ref={containerRef}
+      />
     </div>
   )
 }
